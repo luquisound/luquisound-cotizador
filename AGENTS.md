@@ -9,10 +9,11 @@ non-trivial work. The local context routes external sources and is never staged
 or committed; listed paths do not expand authorization.
 
 The current V1 includes an editable graphic quotation template, manual rows,
-optional personal catalogue, calculations, local drafts, backups, and PNG
-download or file sharing. Implement future features only within the next agreed
-scope. Supabase, AI, CRM, inventory management, invoicing, and a backend remain
-outside this stage.
+an optional personal catalogue, a private common catalogue loaded through a
+read-only endpoint, calculations, local drafts, backups, and PNG download or file
+sharing. The common catalogue is the only authorized server-side feature;
+quotation and manual-price synchronization, accounts, Supabase, AI, CRM,
+inventory management, invoicing, and a general backend remain outside this stage.
 
 ## Technical conventions
 

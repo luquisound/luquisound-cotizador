@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent } from 'react'
 import { calculateQuotation } from './calculation'
 import { createQuotation, createRow, createWorkspace, duplicateQuotation, ensureBlankQuotation, hasQuotationContent, prepareWorkspaceForStorage, type Quotation, type RowSection, type Workspace } from './model'
 import { loadWorkspace, parseWorkspace, saveWorkspace, serializeWorkspace, STORAGE_KEY } from './persistence'
@@ -6,6 +6,8 @@ import { createQuotationFile, downloadQuotationFile, shareQuotationFile } from '
 import { QuotationPreview } from './QuotationPreview'
 import { HeaderEditor, RowEditor } from './QuotationDialogs'
 import { CatalogEditor } from './CatalogTools'
+import type { CatalogImportDocument } from './catalog'
+import { loadSharedCatalog, mergeSharedCatalog } from './shared-catalog'
 
 interface InitialWorkspace { workspace: Workspace; error: string | null; stored: boolean; persistedIds: string[] }
 
@@ -31,6 +33,8 @@ export default function QuotationApp() {
   const [prepared, setPrepared] = useState<{ file: File; quotation: Quotation } | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [sharing, setSharing] = useState(false)
+  const [sharedCatalogStatus, setSharedCatalogStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
+  const [sharedCatalogAttempt, setSharedCatalogAttempt] = useState(0)
   const importInput = useRef<HTMLInputElement>(null)
   const generation = useRef(0)
   const pausedByAnotherTab = useRef(false)
@@ -61,6 +65,43 @@ export default function QuotationApp() {
   useEffect(() => {
     generation.current += 1
   }, [quotation])
+
+  const applySharedCatalog = useEffectEvent((document: CatalogImportDocument) => {
+    if (!storageEnabled || pausedByAnotherTab.current) {
+      setSharedCatalogStatus('error')
+      return
+    }
+    try {
+      const catalog = mergeSharedCatalog(workspace.catalog, document)
+      if (catalog !== workspace.catalog) {
+        const next = { ...workspace, catalog }
+        serializeWorkspace(next)
+        setWorkspace(next)
+      }
+      setSharedCatalogStatus('ready')
+    } catch {
+      setSharedCatalogStatus('error')
+    }
+  })
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => {
+      controller.abort()
+      setSharedCatalogStatus('error')
+    }, 15000)
+    void loadSharedCatalog(controller.signal).then((document) => {
+      if (controller.signal.aborted) return
+      if (document === null) setSharedCatalogStatus('unavailable')
+      else applySharedCatalog(document)
+    }).catch(() => {
+      if (!controller.signal.aborted) setSharedCatalogStatus('error')
+    }).finally(() => window.clearTimeout(timeout))
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [sharedCatalogAttempt])
 
   useEffect(() => {
     if (!storageEnabled) return
@@ -197,13 +238,23 @@ export default function QuotationApp() {
             <details className="workspace-menu"><summary>Más opciones</summary><div><button type="button" onClick={exportBackup}>Descargar respaldo</button><button type="button" onClick={() => importInput.current?.click()}>Importar respaldo</button><button type="button" className="danger" onClick={removeQuotation}>Eliminar borrador</button></div></details>
           </div>
         </div>
-        <div className="workspace-status"><span role="status">{saveStatus}</span><span>Datos en este navegador · Sin sincronización</span></div>
+        <div className="workspace-status"><span role="status">{saveStatus}</span><span>Presupuestos y precios en este navegador</span></div>
+        <div className={`notice${sharedCatalogStatus === 'error' ? ' error' : ''}`} role="status" aria-live="polite">
+          <p>{sharedCatalogStatus === 'loading' ? 'Cargando catálogo compartido…'
+            : sharedCatalogStatus === 'ready' ? 'Catálogo compartido disponible. Se conservan tus precios de venta y presupuestos de este navegador.'
+              : sharedCatalogStatus === 'unavailable' ? 'El catálogo compartido todavía no está disponible. Podés usar tu catálogo local o escribir los conceptos manualmente.'
+                : 'No se pudo actualizar el catálogo compartido. Se conserva tu catálogo guardado y podés seguir cotizando.'}</p>
+          {(sharedCatalogStatus === 'error' || sharedCatalogStatus === 'unavailable') && <button type="button" className="button secondary" onClick={() => {
+            setSharedCatalogStatus('loading')
+            setSharedCatalogAttempt((attempt) => attempt + 1)
+          }}>Reintentar carga del catálogo</button>}
+        </div>
         {storedEmptyCount > 0 && <div className="notice"><p>Se conservaron {storedEmptyCount} borradores vacíos que ya estaban guardados. Podés eliminarlos después de confirmarlo.</p><button type="button" className="button secondary" onClick={removeStoredEmptyQuotations}>Eliminar vacíos guardados</button></div>}
         {storageError && <div className="notice error" role="alert"><p>{storageError}</p><button className="button secondary" onClick={exportBackup}>Descargar respaldo</button>{!storageEnabled && <button className="button secondary" onClick={() => { if (window.confirm('Habilitar el guardado puede reemplazar datos locales que no pudieron recuperarse. ¿Continuar?')) { pausedByAnotherTab.current = false; setStorageEnabled(true) } }}>Habilitar guardado</button>}</div>}
         <p className="editing-hint">Tocá el título o un concepto para editarlo. Podés escribir libremente, elegir del catálogo o dejar un campo vacío.</p>
         <div id="quotation"><QuotationPreview quotation={quotation} onEditHeader={() => setDialog('header')} onEditRow={setEditingRowId} onAddRow={addRow} /></div>
         {!calculation.canExport && <div className="notice pending"><strong>El presupuesto todavía tiene datos pendientes.</strong><ul>{calculation.issues.map((issue, index) => <li key={`${index}-${issue}`}>{issue}</li>)}</ul>{!calculation.conversion.ok && <button type="button" className="button secondary" onClick={() => setDialog('header')}>Cargar valor USD / peso</button>}<p>Podés seguir editándolo; la imagen final se habilita cuando esté completo.</p></div>}
-        <div className="local-data-note"><strong>Tu información se guarda en este navegador.</strong> No se envían presupuestos ni catálogo a un servidor. Borrar los datos del navegador puede eliminar tus borradores. Usá respaldos para conservarlos o llevarlos a otro dispositivo.</div>
+        <div className="local-data-note"><strong>Tus presupuestos y precios se guardan en este navegador.</strong> El catálogo común se consulta al abrir la app. Tus presupuestos y cambios de precio no se envían al servidor. Borrar los datos del navegador puede eliminar tus borradores. Usá respaldos para conservarlos o llevarlos a otro dispositivo.</div>
         <input ref={importInput} type="file" accept=".json,application/json" hidden onChange={(event) => { void importBackup(event) }} />
       </main>
       <footer className="export-bar"><div><strong>{preparedFile ? 'Imagen lista para compartir' : 'Compartí tu presupuesto'}</strong><p role="status" aria-live="polite">{message || 'La imagen incluye solo la plantilla, sin controles.'}</p></div><div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={() => downloadQuotationFile(preparedFile)}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !calculation.canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div></footer>

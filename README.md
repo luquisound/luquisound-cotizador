@@ -4,7 +4,10 @@ Mobile-first graphic quotation editor for Luquisound. V1 provides manual concept
 and editable prices, an optional personal catalogue, automatic ARS/USD totals, local
 drafts and JSON backups, plus PNG download and file sharing.
 
-The app starts with a blank quotation and an empty catalogue. No customer data,
+The app starts with a blank quotation and loads the private common catalogue
+automatically when its protected endpoint is configured. Local catalogue prices
+and quotations are preserved. Without that service, a new browser starts with
+an empty catalogue and can still import a private file. No customer data,
 supplier lists, historical quotations, or commercial prices are bundled. See
 [the product scope and calculation rules](docs/PRODUCTO.md).
 
@@ -45,7 +48,8 @@ npm run preview
 
 - `typecheck`: TypeScript application and test checks.
 - `lint`: Oxlint with warnings treated as errors.
-- `test`: Node.js tests for calculations, persistence, and export/share helpers.
+- `test`: Node.js tests for calculations, persistence, catalogue loading/API, and
+  export/share helpers.
 - `build`: TypeScript checks followed by a Vite production build in `dist/`.
 - `preview`: Local preview of the existing production build.
 
@@ -75,6 +79,8 @@ src/
 docs/
   PRODUCTO.md
 public/brand/
+api/
+  catalog.ts
 tests/
 AGENTS.md
 vercel.json
@@ -90,8 +96,11 @@ that library; do not commit the local routing file.
 
 ## Data and backups
 
-Drafts and personal catalogue entries stay in localStorage in the current browser
-and origin. They are not synchronized, encrypted by the app, or sent to a server.
+Drafts, approved sale prices, and the local catalogue copy stay in localStorage in
+the current browser and origin. They are not uploaded, synchronized between
+devices, or encrypted by the app. The common product catalogue is fetched from a
+private server endpoint on startup; it is available without manually importing
+on each device once that service is activated.
 Clearing browser data, private browsing, device loss, or changing the app origin
 can make them unavailable. Download a JSON backup from "Mas opciones" and keep
 it privately. Import replaces the current workspace after confirmation.
@@ -108,6 +117,7 @@ Catalogue selections copy values into a quotation; later catalogue edits preserv
 the quotation's stored prices.
 
 Import a private catalogue JSON from "Mi catalogo" after reviewing its summary.
+Manual file import remains available alongside automatic common catalogue loading.
 Filter by product category and search by SKU, brand, or name at the same time.
 Categories come from imported data; "Todas" clears the filter and "Sin clasificar"
 groups entries without a category. Manual concepts remain available.
@@ -150,8 +160,11 @@ diff and verification evidence before publishing. The prepared build settings ar
 | Build command | `npm run build` |
 | Output directory | `dist` |
 
-These build settings are prepared in `vercel.json`. No environment variables or
-backend services are required at this stage. Importing or linking a Vercel
+These build settings are prepared in `vercel.json`. The local-only editor needs
+no backend configuration. Automatic common catalogue loading requires a private
+Blob source and server-only configuration; see [shared catalogue setup](docs/SHARED-CATALOG.md).
+Activation also requires Vercel Authentication for All Deployments, with no
+public exception for the API. Importing or linking a Vercel
 project can trigger a deployment; perform those steps only after authorization.
 Review automatic deployment behavior before pushing changes.
 

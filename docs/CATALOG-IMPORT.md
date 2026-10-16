@@ -5,6 +5,11 @@ browser catalogue. The JSON file, extracted source material, and commercial data
 must remain outside the public repository and client bundle. This document uses
 synthetic examples only. No network request or price lookup is part of import.
 
+This document describes manual file import. The same schema also supplies the
+automatic common catalogue through a protected endpoint. That service requires
+complete, unique supplier and SKU keys and applies common updates automatically
+while preserving local sale prices. See [shared catalogue setup](SHARED-CATALOG.md).
+
 ## Version 1 document
 
 ```json

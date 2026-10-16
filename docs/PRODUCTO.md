@@ -11,14 +11,16 @@ also part of hands-on acceptance.
 
 - Editable title, optional subtitle, notes, and manual quotation rows.
 - Equipment and installation/accessory sections, including arbitrary work.
-- Optional personal catalogue; every selected description and price remains
+- Private common catalogue loaded automatically on each device when configured,
+  plus optional personal entries; every selected description and price remains
   editable. A field may be left blank without requiring a catalogue selection.
 - Explicit quantity, unit price, pending price, and included-without-charge state.
 - Automatic ARS and USD totals using a manually entered rate per quotation.
 - Local drafts, duplicate, reopen, and explicit JSON backup/import.
 - PNG image with only the graphic quotation, plus browser file sharing or download.
 
-The catalogue starts empty. No supplier information, historical quotations,
+Without the configured common catalogue service, a new browser starts empty.
+No supplier information, historical quotations,
 customer details, costs, or commercial prices are published in source or bundle.
 Tests use synthetic data only. Internal cost and suggested catalogue price are
 not substituted for the actual sale price of a quotation.
@@ -75,8 +77,17 @@ is inserted; a plus sign explicitly typed as part of the title is retained.
 The versioned workspace contains quotation snapshots, the personal catalogue,
 and the active draft. Persistence is isolated behind an adapter in persistence.ts
 so a later authorized storage decision does not require rewriting the editor.
-The current implementation stores data only in localStorage in the current
-browser and origin, with no backend, analytics, or data synchronization.
+The implementation stores quotation snapshots, approved prices, and a local
+catalogue copy in localStorage in the current browser and origin. A read-only
+server endpoint supplies the private common catalogue on startup. There is no
+quotation upload, analytics, or synchronization of locally approved prices.
+
+Automatic loading combines the common catalogue with the latest local state by
+supplier and SKU. It updates common metadata and historical references while
+preserving approved prices, currencies, identities, personal entries, and quotation
+snapshots. Invalid keys, conflicts, limits, and network failures leave local data
+unchanged and show a retry action. A paused or unreadable workspace is never
+overwritten by the common catalogue. See `SHARED-CATALOG.md` for activation.
 
 An untouched blank proposal remains in memory. Default headings, currency, and
 placeholder rows do not create persistent drafts. New and duplicate actions reuse
@@ -110,8 +121,9 @@ separately; the application does not add a frontend PIN or claim one is security
 
 ## Optional private catalogue
 
-The initial catalogue remains empty in the public application. A private JSON
-file can be imported after a summary and explicit confirmation. The catalogue
+No catalogue data is embedded in the public application. A configured private
+endpoint loads the common catalogue automatically. A private JSON file can also
+be imported after a summary and explicit confirmation. The catalogue
 combines a category filter with SKU, brand, and name search and limits rendered
 results for mobile use. Both the catalogue editor and quotation product picker
 derive category options from their available data. "Todas" clears the filter;
@@ -148,8 +160,9 @@ input, invalid values, duplication, reload, backups, and share cancellation.
 Browser emulation is useful evidence but does not replace physical Android and
 iPhone checks for PNG saving, Web Share, WhatsApp, and deployment access.
 
-Remaining product decisions are shared versus individual storage, backup
-retention, approval of historical reference use, and physical-device acceptance. A shared
-backend, accounts, CRM, inventory, invoicing, AI, and automatic commercial rules
-remain outside V1. Publishing requires the final authorized review; local checks
+Remaining acceptance includes activation of the private catalogue service, backup
+retention, approval of historical reference use, and physical-device checks.
+Shared quotation storage, synchronized manual prices, accounts, CRM, inventory,
+invoicing, AI, and automatic commercial rules remain outside V1.
+Publishing requires the final authorized review; local checks
 do not establish remote publication or production deployment.
