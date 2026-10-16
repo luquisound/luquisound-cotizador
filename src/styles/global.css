@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-yellow: #ffda00;
+}
+
+@layer base {
+  :root {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #fff;
+    background-color: #000;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  ::selection {
+    color: #000;
+    background-color: var(--color-brand-yellow);
+  }
+}
+
+@layer components {
+  .page-shell {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+  }
+
+  @media (min-width: 40rem) {
+    .page-shell {
+      padding-right: max(2.5rem, env(safe-area-inset-right, 0px));
+      padding-left: max(2.5rem, env(safe-area-inset-left, 0px));
+    }
+  }
+}
