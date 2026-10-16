@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  createQuotationFile, quotationFileName, shareQuotationFile, wrapText,
+  createQuotationFile, quotationFileName, renderQuotationCanvas, shareQuotationFile, wrapText,
 } from '../src/features/quotation/export.ts'
+import { exchangeRateDescription } from '../src/features/quotation/exchange-quote.ts'
 import type { Quotation } from '../src/features/quotation/model.ts'
 
 const measure = (text: string): number => Array.from(text).length
@@ -140,4 +141,96 @@ test('preserves synchronous sharing and capability errors', async () => {
   assert.equal(await shareQuotationFile(file, {
     canShare: () => true, share: () => { throw new DOMException('Closed', 'AbortError') },
   }), 'cancelled')
+})
+
+interface CanvasText {
+  text: string
+  x: number
+  y: number
+  width: number
+}
+
+function renderWithRecordedCanvas(quotation: Quotation): {
+  height: number
+  texts: CanvasText[]
+  footerY: number
+} {
+  const texts: CanvasText[] = []
+  const rectangles: { y: number; height: number }[] = []
+  const noop = () => {}
+  const context = {
+    font: '', fillStyle: '', strokeStyle: '', textAlign: '', textBaseline: '', lineWidth: 0,
+    measureText(text: string) {
+      const size = Number(/([0-9]+)px/.exec(this.font)?.[1] ?? '24')
+      return { width: Array.from(text).length * size * 0.75 }
+    },
+    fillText(text: string, x: number, y: number) {
+      texts.push({ text, x, y, width: this.measureText(text).width })
+    },
+    fillRect(_x: number, y: number, _width: number, height: number) {
+      rectangles.push({ y, height })
+    },
+    beginPath: noop, moveTo: noop, lineTo: noop, quadraticCurveTo: noop,
+    stroke: noop, arc: noop, fill: noop, bezierCurveTo: noop, closePath: noop,
+    drawImage: noop, save: noop, translate: noop, scale: noop, restore: noop,
+  }
+  const canvas = { width: 0, height: 0, getContext: () => context }
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'document')
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: () => canvas },
+  })
+  try {
+    const result = renderQuotationCanvas(quotation, {} as CanvasImageSource)
+    const footer = rectangles.at(-1)
+    assert.ok(footer)
+    return { height: result.height, texts, footerY: footer.y }
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'document', previous)
+    else Reflect.deleteProperty(globalThis, 'document')
+  }
+}
+
+function exportableQuotation(): Quotation {
+  return {
+    id: 'synthetic-export', title: 'PRESUPUESTO', subtitle: '', currency: 'ARS', notes: '',
+    exchangeRate: '1.234,56',
+    exchangeRateQuote: {
+      rate: '1.234,56', source: 'DolarAPI', market: 'blue', side: 'sell',
+      updatedAt: '2026-10-16T13:30:00.000Z', fetchedAt: '2026-10-16T13:31:00.000Z',
+    },
+    createdAt: '2026-10-16T13:31:00.000Z', updatedAt: '2026-10-16T13:31:00.000Z',
+    rows: [{
+      id: 'synthetic-row', section: 'equipment', concept: 'Equipo de prueba', detail: '',
+      quantity: '1', unitPrice: '2400', priceState: 'priced',
+    }],
+  }
+}
+
+test('renders the stored source and date completely between the rate and footer', () => {
+  const quotation = exportableQuotation()
+  const result = renderWithRecordedCanvas(quotation)
+  const rate = result.texts.find((entry) => entry.text === '1 USD = 1.234,56 ARS')
+  assert.ok(rate)
+  const sourceLines = result.texts.filter((entry) => entry.y > rate.y && entry.y < result.footerY)
+  assert.equal(sourceLines.map((entry) => entry.text).join(' '), exchangeRateDescription(quotation))
+  assert.ok(sourceLines.length > 1)
+  assert.ok(sourceLines.every((entry) => entry.x + entry.width <= 1016 && entry.y + 30 <= result.footerY))
+  assert.ok(!result.texts.some((entry) => /Actualizar|Consultando|Error/.test(entry.text)))
+})
+
+test('grows a long quotation image to reserve every wrapped source line above the footer', () => {
+  const quotation = exportableQuotation()
+  quotation.rows = Array.from({ length: 30 }, (_, index) => ({
+    ...quotation.rows[0], id: `synthetic-row-${index}`,
+  }))
+  const automatic = renderWithRecordedCanvas(quotation)
+  const legacy = renderWithRecordedCanvas({ ...quotation, exchangeRateQuote: undefined })
+  assert.ok(automatic.height > legacy.height)
+  const rate = automatic.texts.find((entry) => entry.text === '1 USD = 1.234,56 ARS')
+  assert.ok(rate)
+  const sourceLines = automatic.texts.filter((entry) => entry.y > rate.y && entry.y < automatic.footerY)
+  assert.equal(sourceLines.map((entry) => entry.text).join(' '), exchangeRateDescription(quotation))
+  assert.ok(sourceLines.every((entry) => entry.y + 30 <= automatic.footerY))
+  assert.ok(legacy.texts.some((entry) => entry.text.includes('Cotización manual')))
 })

@@ -11,7 +11,8 @@ or committed; listed paths do not expand authorization.
 The current V1 includes an editable graphic quotation template, manual rows,
 an optional personal catalogue, a private common catalogue loaded through a
 read-only endpoint, calculations, local drafts, backups, and PNG download or file
-sharing. The common catalogue is the only authorized server-side feature;
+sharing. Read-only common catalogue and DolarAPI blue-sale lookup are the
+authorized server-side features;
 quotation and manual-price synchronization, accounts, Supabase, AI, CRM,
 inventory management, invoicing, and a general backend remain outside this stage.
 
@@ -52,9 +53,11 @@ inventory management, invoicing, and a general backend remain outside this stage
 - Represent an included, no-charge concept explicitly; do not infer it from a
   blank amount or collapse it into an ordinary zero-priced row.
 - V1 uses one explicit currency for quotation rows (ARS or USD), safe integer
-  cents, and quantity times unit price rounded half up per row. A manual positive
+  cents, and quantity times unit price rounded half up per row. A positive
   ARS-per-USD rate is saved per quotation and converts only the final total, with
-  half-up rounding to cents. Never infer or fetch a rate. Discounts
+  half-up rounding to cents. New quotations use DolarAPI blue sale automatically;
+  stored quotations and duplicates retain their rate until an explicit update.
+  Preserve source/date metadata and legacy manual rates. Discounts
   and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
   calculation contract and remaining decisions.
 - Preserve the approved graphic composition and official brand assets. Private

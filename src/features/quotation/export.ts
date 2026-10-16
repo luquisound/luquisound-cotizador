@@ -1,6 +1,7 @@
 import { calculateQuotation, formatMoney, parseMoney, parseQuantity } from './calculation.ts'
 import type { Quotation, QuotationRow, RowSection } from './model.ts'
 import { BODY_FONT, HEADING_FONT, loadQuotationFonts } from './typography.ts'
+import { exchangeRateDescription } from './exchange-quote.ts'
 
 const WIDTH = 1080
 const MARGIN = 64
@@ -223,7 +224,9 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   })
   setFont(context, 24, BODY_FONT)
   const rateLines = measureLines(context, calculation.conversion.rateLabel, CONTENT_WIDTH)
-  const totalHeight = 76 + totalRows.reduce((sum, row) => sum + row.height, 0) + 18 + rateLines.length * 30 + 28
+  const rateSourceLines = measureLines(context, exchangeRateDescription(quotation), CONTENT_WIDTH)
+  const rateHeight = rateLines.length * 30 + 8 + rateSourceLines.length * 30
+  const totalHeight = 76 + totalRows.reduce((sum, row) => sum + row.height, 0) + 18 + rateHeight + 28
   const bodyHeight = Math.max(contentHeight, 1320 - headerHeight - 5 - totalHeight - FOOTER_HEIGHT)
   const height = Math.ceil(headerHeight + 5 + bodyHeight + totalHeight + FOOTER_HEIGHT)
   if (WIDTH * height > MAX_CANVAS_PIXELS) {
@@ -316,6 +319,7 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   context.fillStyle = '#626262'
   setFont(context, 24, BODY_FONT)
   drawLines(context, rateLines, MARGIN, totalRowY + 18, 30)
+  drawLines(context, rateSourceLines, MARGIN, totalRowY + 18 + rateLines.length * 30 + 8, 30)
 
   const footerY = height - FOOTER_HEIGHT
   context.fillStyle = BLACK

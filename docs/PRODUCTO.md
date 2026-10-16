@@ -15,7 +15,8 @@ also part of hands-on acceptance.
   plus optional personal entries; every selected description and price remains
   editable. A field may be left blank without requiring a catalogue selection.
 - Explicit quantity, unit price, pending price, and included-without-charge state.
-- Automatic ARS and USD totals using a manually entered rate per quotation.
+- Automatic ARS and USD totals using a saved rate per quotation, with automatic
+  DolarAPI blue sale lookup for new quotations and explicit updates for saved ones.
 - Local drafts, duplicate, reopen, and explicit JSON backup/import.
 - PNG image with only the graphic quotation, plus browser file sharing or download.
 
@@ -56,9 +57,12 @@ is inserted; a plus sign explicitly typed as part of the title is retained.
   cent, then sum the rounded complete lines.
 - One explicit currency applies to every row of a quotation. Changing that base
   currency requires confirmation and preserves the entered row values.
-- The user enters how many ARS equal one USD. Accept Argentine separators, a
-  positive rate, and up to six decimal places. Store the raw rate in each draft;
-  no online lookup, automatic refresh, or global rate changes existing quotations.
+- The rate states how many ARS equal one USD, using Argentine separators, a
+  positive value, and up to six decimal places. New quotations request DolarAPI
+  blue sale through the server. Save the value and source timestamp together.
+  Stored quotations, imported backups, and duplicates keep their snapshots;
+  only an explicit update replaces their rate. Legacy manual rates remain valid
+  without inventing provenance. See `EXCHANGE-RATE.md` for lookup and failure rules.
 - Sum the rounded base lines first. Convert that final total once using exact
   integer/rational arithmetic, rounding the equivalent half up to cents. Preserve
   the base total exactly. Both ARS and USD totals and the explicit rate appear in
@@ -90,7 +94,7 @@ unchanged and show a retry action. A paused or unreadable workspace is never
 overwritten by the common catalogue. See `SHARED-CATALOG.md` for activation.
 
 An untouched blank proposal remains in memory. Default headings, currency, and
-placeholder rows do not create persistent drafts. New and duplicate actions reuse
+placeholder rows and an automatically attached rate do not create persistent drafts. New and duplicate actions reuse
 a blank proposal while it remains empty. Partial concepts with pending prices
 are saved, and repeated saves keep the current quotation ID. A stored workspace
 may contain no quotations and a null active quotation ID; the editor then opens

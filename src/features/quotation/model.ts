@@ -1,4 +1,5 @@
 import type { CatalogReferencePrice, CatalogSource } from './catalog.ts'
+import type { BlueDollarQuote } from './exchange-quote.ts'
 
 export type { CatalogReferencePrice, CatalogSource } from './catalog.ts'
 
@@ -22,6 +23,7 @@ export interface Quotation {
   subtitle: string
   currency: Currency
   exchangeRate?: string
+  exchangeRateQuote?: BlueDollarQuote
   rows: QuotationRow[]
   notes: string
   createdAt: string
@@ -76,7 +78,7 @@ export function hasQuotationContent(quotation: Quotation): boolean {
   const title = quotation.title.trim()
   if (title && !/^presupuesto(?:\s*\(copia\))*$/i.test(title)) return true
   if (quotation.subtitle.trim() || quotation.notes.trim()) return true
-  if (quotation.exchangeRate?.trim()) return true
+  if (quotation.exchangeRate?.trim() && !quotation.exchangeRateQuote) return true
   return quotation.rows.some((row) => (
     row.concept.trim() !== ''
     || row.detail.trim() !== ''
@@ -111,6 +113,7 @@ export function duplicateQuotation(quotation: Quotation): Quotation {
   return {
     ...quotation, id: crypto.randomUUID(), title: `${(quotation.title || 'PRESUPUESTO').slice(0, 492)} (copia)`,
     rows: quotation.rows.map((row) => ({ ...row, id: crypto.randomUUID() })),
+    ...(quotation.exchangeRateQuote ? { exchangeRateQuote: { ...quotation.exchangeRateQuote } } : {}),
     createdAt: now, updatedAt: now,
   }
 }

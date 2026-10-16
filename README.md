@@ -126,10 +126,15 @@ historical references remain separate. Reimporting matches supplier and SKU,
 preserving existing manually approved prices and quotation snapshots. See the
 [private import contract](docs/CATALOG-IMPORT.md). Keep catalogue files private.
 
-Each quotation has one currency for its concepts and a manually entered value of
-one USD in ARS. Both totals and that rate appear in the preview and PNG. The rate
-is stored with the draft; it is never fetched or automatically refreshed. Earlier
-drafts without a rate remain editable and require one before image preparation.
+Each quotation has one currency for its concepts. New quotations automatically
+request the DolarAPI blue sale rate through a same-origin server endpoint.
+Both totals, the rate, its source, and the source date appear in the preview and
+PNG. Stored quotations and duplicates keep their saved rate until the user
+chooses "Actualizar cotizacion". Legacy manual rates are preserved and labelled
+without inventing source dates. A lookup failure keeps the existing rate; a draft
+without one remains editable and requires a successful update before export.
+Automatic rates alone do not create saved blank drafts. See
+[exchange-rate behavior](docs/EXCHANGE-RATE.md).
 Changing the concepts' currency preserves the entered prices after confirmation.
 
 Prepare an image after completing pending rows, then download or share it. File
@@ -160,8 +165,8 @@ diff and verification evidence before publishing. The prepared build settings ar
 | Build command | `npm run build` |
 | Output directory | `dist` |
 
-These build settings are prepared in `vercel.json`. The local-only editor needs
-no backend configuration. Automatic common catalogue loading requires a private
+These build settings are prepared in `vercel.json`. DolarAPI lookup needs no
+additional environment variables. Automatic common catalogue loading requires a private
 Blob source and server-only configuration; see [shared catalogue setup](docs/SHARED-CATALOG.md).
 Activation also requires Vercel Authentication for All Deployments, with no
 public exception for the API. Importing or linking a Vercel

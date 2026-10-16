@@ -4,6 +4,7 @@ import { createQuotation, duplicateQuotation, hasQuotationContent, prepareWorksp
 import type { CatalogItem, Quotation, QuotationRow, Workspace } from '../src/features/quotation/model.ts'
 import { loadWorkspace, parseWorkspace, saveWorkspace, serializeWorkspace, STORAGE_KEY } from '../src/features/quotation/persistence.ts'
 import type { StorageAdapter } from '../src/features/quotation/persistence.ts'
+import type { BlueDollarQuote } from '../src/features/quotation/exchange-quote.ts'
 
 function createFixture(): Workspace {
   return {
@@ -76,6 +77,74 @@ test('exchange-rate input must be an optional bounded string', () => {
   for (const exchangeRate of [null, 0, {}, [], '1'.repeat(65)]) {
     rejectBackup({ ...workspace, quotations: [{ ...workspace.quotations[0]!, exchangeRate }] })
   }
+})
+
+function historicalQuote(): BlueDollarQuote {
+  return {
+    rate: '1.234,56', source: 'DolarAPI', market: 'blue', side: 'sell',
+    updatedAt: '2023-01-10T15:00:00.000Z', fetchedAt: '2023-01-10T15:01:00.000Z',
+  }
+}
+
+test('historical automatic quotes roundtrip storage and backups without refreshing or expiring', () => {
+  const workspace = createFixture()
+  workspace.quotations[0]!.exchangeRate = '1234,560000'
+  workspace.quotations[0]!.exchangeRateQuote = historicalQuote()
+  const snapshot = structuredClone(workspace)
+  assert.deepEqual(parseWorkspace(serializeWorkspace(workspace)), snapshot)
+  const storage = createMemoryStorage()
+  assert.equal(saveWorkspace(storage, workspace).ok, true)
+  assert.deepEqual(loadWorkspace(storage).workspace, snapshot)
+  assert.deepEqual(workspace, snapshot)
+})
+
+test('quote provenance is rejected when absent, invalid or inconsistent with its actual rate', () => {
+  const workspace = createFixture()
+  const quotation = { ...workspace.quotations[0]!, exchangeRate: '1.234,56', exchangeRateQuote: historicalQuote() }
+  for (const exchangeRate of [undefined, '', '0', 'invalid', '1.234,57']) {
+    rejectBackup({ ...workspace, quotations: [{ ...quotation, exchangeRate }] })
+  }
+  for (const exchangeRateQuote of [null, {}, [], { ...historicalQuote(), source: 'Unknown' },
+    { ...historicalQuote(), updatedAt: '2023-02-30T15:00:00.000Z' }]) {
+    rejectBackup({ ...workspace, quotations: [{ ...quotation, exchangeRateQuote }] })
+  }
+  const invalid = { ...workspace, quotations: [{ ...quotation, exchangeRate: '9.999' }] }
+  const original = serializeWorkspace(workspace)
+  const storage = createMemoryStorage(original)
+  assert.equal(saveWorkspace(storage, invalid).ok, false)
+  assert.equal(storage.current(), original)
+})
+
+test('automatic exchange metadata strips unknown properties and duplicates independent fixed snapshots', () => {
+  const workspace = createFixture()
+  const quote = historicalQuote()
+  workspace.quotations[0] = { ...workspace.quotations[0]!, exchangeRate: quote.rate, exchangeRateQuote: quote }
+  const expanded = {
+    ...workspace, quotations: [{ ...workspace.quotations[0]!, exchangeRateQuote: { ...quote, unrecognized: 'discard' } }],
+  }
+  assert.deepEqual(parseWorkspace(JSON.stringify(expanded)), workspace)
+  const duplicate = duplicateQuotation(workspace.quotations[0]!)
+  assert.deepEqual(duplicate.exchangeRateQuote, quote)
+  assert.notEqual(duplicate.exchangeRateQuote, quote)
+  duplicate.exchangeRateQuote!.rate = '9.999'
+  assert.equal(workspace.quotations[0]!.exchangeRateQuote!.rate, '1.234,56')
+})
+
+test('an automatic rate alone leaves a new proposal blank while manual rates remain meaningful', () => {
+  const quotation = createQuotation()
+  quotation.exchangeRateQuote = historicalQuote()
+  quotation.exchangeRate = quotation.exchangeRateQuote.rate
+  assert.equal(hasQuotationContent(quotation), false)
+  const workspace: Workspace = { version: 1, activeQuotationId: quotation.id, quotations: [quotation], catalog: [] }
+  assert.deepEqual(prepareWorkspaceForStorage(workspace, new Set()), {
+    version: 1, activeQuotationId: null, quotations: [], catalog: [],
+  })
+  assert.deepEqual(prepareWorkspaceForStorage(workspace, new Set([quotation.id])), workspace)
+  quotation.rows[0]!.concept = 'Partial concept'
+  assert.equal(hasQuotationContent(quotation), true)
+  quotation.rows[0]!.concept = ''
+  delete quotation.exchangeRateQuote
+  assert.equal(hasQuotationContent(quotation), true)
 })
 
 test('catalogue metadata and independent historical price sources roundtrip exactly', () => {

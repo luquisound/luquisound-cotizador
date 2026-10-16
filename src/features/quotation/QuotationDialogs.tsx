@@ -1,18 +1,28 @@
 import { useState, type FormEvent } from 'react'
 import { calculateQuotation } from './calculation'
 import { parseExchangeRate } from './exchange'
+import { exchangeRateDescription } from './exchange-quote'
 import { CatalogPicker } from './CatalogTools'
 import { Dialog } from './QuotationDialog'
 import type { CatalogItem, Currency, Quotation, QuotationRow } from './model'
 
-interface HeaderEditorProps { quotation: Quotation; onSave: (quotation: Quotation) => void; onClose: () => void }
+interface HeaderEditorProps {
+  quotation: Quotation
+  onSave: (quotation: Quotation) => void
+  onClose: () => void
+  onUpdateRate: () => void
+  rateLoading: boolean
+  rateError: string | null
+}
 
-export function HeaderEditor({ quotation, onSave, onClose }: HeaderEditorProps) {
+export function HeaderEditor({ quotation, onSave, onClose, onUpdateRate, rateLoading, rateError }: HeaderEditorProps) {
   const [draft, setDraft] = useState(quotation)
+  const rate = parseExchangeRate(quotation.exchangeRate ?? '')
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (draft.currency !== quotation.currency && !window.confirm('Cambiar la moneda no convierte los importes. Todos los precios quedarán expresados en la nueva moneda. ¿Continuar?')) return
-    onSave(draft)
+    // The rate may finish loading while this form keeps unsaved header edits.
+    onSave({ ...draft, exchangeRate: quotation.exchangeRate, exchangeRateQuote: quotation.exchangeRateQuote })
   }
   return (
     <Dialog title="Datos del presupuesto" onClose={onClose}>
@@ -21,9 +31,16 @@ export function HeaderEditor({ quotation, onSave, onClose }: HeaderEditorProps) 
         <label>Subtítulo <span>(opcional)</span><input value={draft.subtitle} maxLength={300} onChange={(event) => setDraft({ ...draft, subtitle: event.target.value })} placeholder="Vehículo o descripción" /></label>
         <label>Moneda de los conceptos<select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as Currency })}><option value="ARS">ARS · Pesos argentinos</option><option value="USD">USD · Dólares estadounidenses</option></select></label>
         <p className="field-help">Los precios de cada concepto usan esta moneda. Cambiarla conserva los importes escritos.</p>
-        <label>Valor de 1 USD en pesos<input inputMode="decimal" value={draft.exchangeRate ?? ''} maxLength={64} placeholder="Cargar cotización manual" onChange={(event) => setDraft({ ...draft, exchangeRate: event.target.value })} /></label>
-        <p className="field-help">Usá coma para decimales. Esta cotización queda guardada con el presupuesto y calcula ambos totales; no se consulta ningún valor en línea.</p>
-        {draft.exchangeRate?.trim() && !parseExchangeRate(draft.exchangeRate).ok && <p className="field-errors">Ingresá un valor positivo con hasta seis decimales.</p>}
+        <fieldset className="exchange-rate-editor">
+          <legend>Cotización del dólar</legend>
+          <p className="exchange-rate-value">{rate.ok ? rate.rateLabel : 'Cotización pendiente'}</p>
+          <p className="field-help">{exchangeRateDescription(quotation)}</p>
+          <p className="field-help">Queda fija en este presupuesto. Al actualizar usamos dólar blue, punta venta.</p>
+          <button type="button" className="button secondary" onClick={onUpdateRate} disabled={rateLoading}>
+            {rateLoading ? 'Consultando cotización…' : 'Actualizar cotización'}
+          </button>
+          {rateError && <p className="field-errors" role="status">{rateError}</p>}
+        </fieldset>
         <label>Notas para el cliente <span>(opcional)</span><textarea rows={3} value={draft.notes} maxLength={4000} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>
         <div className="dialog-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" type="submit">Aplicar cambios</button></div>
       </form>

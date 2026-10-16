@@ -1,5 +1,7 @@
 import { createWorkspace } from './model.ts'
 import { CATALOG_REFERENCE_MAX_PRICES } from './catalog.ts'
+import { parseExchangeRate } from './exchange.ts'
+import { readStoredBlueDollarQuote } from './exchange-quote.ts'
 import type { CatalogItem, CatalogReferencePrice, CatalogSource, Currency, PriceState, Quotation, QuotationRow, RowSection, Workspace } from './model.ts'
 
 export interface StorageAdapter {
@@ -88,12 +90,26 @@ function readRow(value: unknown, identifiers: Set<string>): QuotationRow {
 
 function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
   const quotation = readRecord(value)
+  let exchangeRateQuote: Quotation['exchangeRateQuote']
+  if (quotation.exchangeRateQuote !== undefined) {
+    try {
+      exchangeRateQuote = readStoredBlueDollarQuote(quotation.exchangeRateQuote)
+    } catch {
+      invalidBackup()
+    }
+    if (typeof quotation.exchangeRate !== 'string') invalidBackup()
+    const rate = parseExchangeRate(quotation.exchangeRate)
+    const sourceRate = parseExchangeRate(exchangeRateQuote.rate)
+    if (!rate.ok || !sourceRate.ok
+      || rate.numerator * sourceRate.denominator !== sourceRate.numerator * rate.denominator) invalidBackup()
+  }
   return {
     id: readIdentifier(quotation.id, identifiers),
     title: readString(quotation.title, 500),
     subtitle: readString(quotation.subtitle, 1000),
     currency: readCurrency(quotation.currency),
     ...(quotation.exchangeRate === undefined ? {} : { exchangeRate: readString(quotation.exchangeRate, 64) }),
+    ...(exchangeRateQuote === undefined ? {} : { exchangeRateQuote }),
     rows: readArray(quotation.rows, 1000).map((row) => readRow(row, identifiers)),
     notes: readString(quotation.notes, 10000),
     createdAt: readTimestamp(quotation.createdAt),

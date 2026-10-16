@@ -7,6 +7,7 @@ import {
 } from './calculation.ts'
 import type { CalculatedRow } from './calculation.ts'
 import type { Currency, Quotation, QuotationRow, RowSection } from './model.ts'
+import { exchangeRateDescription } from './exchange-quote'
 import './preview.css'
 import './exchange-ui.css'
 
@@ -195,9 +196,10 @@ export function QuotationPreview({
               </div>
             )
           })}
-          <button type="button" className="quotation-rate" onClick={onEditHeader} aria-label="Editar valor de 1 USD en pesos">
-            {calculation.conversion.ok ? calculation.conversion.rateLabel : 'Cargar valor USD / peso'}
+          <button type="button" className="quotation-rate" onClick={onEditHeader} aria-label="Ver o actualizar cotización del dólar">
+            {calculation.conversion.ok ? calculation.conversion.rateLabel : 'Consultar cotización del dólar'}
           </button>
+          <p className="quotation-rate-source">{exchangeRateDescription(quotation)}</p>
         </div>
 
         <footer className="quotation-footer">
