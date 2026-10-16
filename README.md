@@ -1,12 +1,12 @@
 # Luquisound Cotizador
 
-Mobile-first web app foundation for personalized automotive audio quotations at
-Luquisound. The current screen displays "Cotizador Luquisound" with provisional
-black, white, and yellow (`#FFDA00`) styling.
+Mobile-first graphic quotation editor for Luquisound. V1 provides manual concepts
+and editable prices, an optional personal catalogue, automatic totals, local
+drafts and JSON backups, plus PNG download and file sharing.
 
-This stage provides the application shell only. The quotation editor,
-calculations, catalogue, saving, and PNG export are future work. See
-[the product scope](docs/PRODUCTO.md).
+The app starts with a blank quotation and an empty catalogue. No customer data,
+supplier lists, historical quotations, or commercial prices are bundled. See
+[the product scope and calculation rules](docs/PRODUCTO.md).
 
 ## Requirements
 
@@ -38,12 +38,14 @@ Android testing does not replace eventual iPhone verification.
 ```sh
 npm run typecheck
 npm run lint
+npm test
 npm run build
 npm run preview
 ```
 
-- `typecheck`: TypeScript project checks.
+- `typecheck`: TypeScript application and test checks.
 - `lint`: Oxlint with warnings treated as errors.
+- `test`: Node.js tests for calculations, persistence, and export/share helpers.
 - `build`: TypeScript checks followed by a Vite production build in `dist/`.
 - `preview`: Local preview of the existing production build.
 
@@ -57,12 +59,20 @@ src/
   app/
     App.tsx
   features/
-    home/
-      HomePage.tsx
+    quotation/
+      QuotationApp.tsx
+      QuotationPreview.tsx
+      QuotationDialogs.tsx
+      model.ts
+      calculation.ts
+      persistence.ts
+      export.ts
   styles/
     global.css
 docs/
   PRODUCTO.md
+public/brand/
+tests/
 AGENTS.md
 vercel.json
 ```
@@ -75,14 +85,34 @@ when a concrete feature needs them.
 paired document library. Keep external source documents and original assets in
 that library; do not commit the local routing file.
 
-## Future GitHub and Vercel setup
+## Data and backups
 
-The repository is initialized locally. Creating a remote, staging, committing,
-pushing, publishing, or deploying requires separate user authorization.
+Drafts and personal catalogue entries stay in localStorage in the current browser
+and origin. They are not synchronized, encrypted by the app, or sent to a server.
+Clearing browser data, private browsing, device loss, or changing the app origin
+can make them unavailable. Download a JSON backup from "Mas opciones" and keep
+it privately. Import replaces the current workspace after confirmation.
 
-After authorization, create or select the intended GitHub repository, review the
-files, make the approved commit, and publish it to that remote. Then import the
-repository into Vercel using:
+Corrupt stored data is not automatically overwritten. Failed saves show an error.
+Concurrent changes from another tab pause saving until the user resolves them.
+Catalogue selections copy values into a quotation; later catalogue edits preserve
+the quotation's stored prices.
+
+Prepare an image after completing pending rows, then download or share it. File
+sharing depends on browser support and requires the user's action. Unsupported
+browsers download the PNG; cancelling sharing does not send or download anything.
+The app cannot confirm delivery to a recipient.
+
+## GitHub and Vercel
+
+The code repository is public. Never commit private business data, secrets, local
+backups, or original customer quotations. Deployment access restrictions are
+configured separately in Vercel and must be verified against each relevant URL;
+they do not make repository contents private. No client-side PIN is provided.
+
+Git publication and deployment require explicit authorization. A push to a
+Git-connected production branch can deploy automatically. Review the complete
+diff and verification evidence before publishing. The prepared build settings are:
 
 | Setting | Value |
 | --- | --- |
@@ -95,14 +125,14 @@ repository into Vercel using:
 These build settings are prepared in `vercel.json`. No environment variables or
 backend services are required at this stage. Importing or linking a Vercel
 project can trigger a deployment; perform those steps only after authorization.
-Review the deployment behavior for later pushes when connecting GitHub.
+Review automatic deployment behavior before pushing changes.
 
 ## Handoff to Dot and Codex
 
 Read `AGENTS.md`, this README, `docs/PRODUCTO.md`, and the local project context
-before planning the next bounded feature. Confirm the source quotations and
-visual identity before building the editor. Historical prices are reference
-material, never approved current prices.
+before planning the next bounded feature. Preserve the approved visual
+composition and keep commercial source material outside the public repository.
+Historical prices are reference material, never approved current prices.
 
 Official references: [Vite](https://vite.dev/guide/),
 [Tailwind with Vite](https://tailwindcss.com/docs/installation/using-vite), and

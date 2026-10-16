@@ -8,10 +8,11 @@ quotation app. Dot coordinates later development through Codex. Read `README.md`
 non-trivial work. The local context routes external sources and is never staged
 or committed; listed paths do not expand authorization.
 
-The current stage includes a responsive initial screen and build tooling. Do not
-automatically start the quotation editor, catalogue, calculations, saving, or PNG
-export. Implement future features only within the next agreed scope. Supabase,
-AI, CRM, inventory management, invoicing, and a backend are outside this stage.
+The current V1 includes an editable graphic quotation template, manual rows,
+optional personal catalogue, calculations, local drafts, backups, and PNG
+download or file sharing. Implement future features only within the next agreed
+scope. Supabase, AI, CRM, inventory management, invoicing, and a backend remain
+outside this stage.
 
 ## Technical conventions
 
@@ -49,10 +50,13 @@ AI, CRM, inventory management, invoicing, and a backend are outside this stage.
 - Preserve the difference between a missing amount and an explicit zero.
 - Represent an included, no-charge concept explicitly; do not infer it from a
   blank amount or collapse it into an ordinary zero-priced row.
-- Agree on quantities, currency, rounding, discounts, totals, and exported fields
-  before implementing calculation or export behavior.
-- Review and approve the source quotations and fixed visual template before
-  building the editor. See `docs/PRODUCTO.md` for remaining decisions.
+- V1 uses one explicit currency per quotation (ARS or USD), no conversion, safe
+  integer cents, and quantity times unit price rounded half up per row. Discounts
+  and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
+  calculation contract and remaining decisions.
+- Preserve the approved graphic composition and official brand assets. Private
+  source quotations and commercial data must never enter the public repository
+  or client bundle, including when deployment access is restricted.
 
 ## Git, local files, and external effects
 

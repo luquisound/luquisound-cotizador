@@ -1,5 +1,5 @@
-import HomePage from '../features/home/HomePage'
+import QuotationApp from '../features/quotation/QuotationApp'
 
 export default function App() {
-  return <HomePage />
+  return <QuotationApp />
 }
