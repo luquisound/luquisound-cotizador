@@ -134,7 +134,6 @@ export function QuotationPreview({
               title="Tocá para editar el encabezado"
             >
               <span className="quotation-title">
-                <span className="quotation-title-plus" aria-hidden="true">+</span>
                 <span className={quotation.title.trim() ? undefined : 'quotation-title-placeholder'}>
                   {quotation.title.trim() || 'AGREGAR TÍTULO'}
                 </span>

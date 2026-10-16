@@ -93,6 +93,12 @@ Clearing browser data, private browsing, device loss, or changing the app origin
 can make them unavailable. Download a JSON backup from "Mas opciones" and keep
 it privately. Import replaces the current workspace after confirmation.
 
+An untouched quotation stays in memory and is not saved as a draft. Repeated
+"Nuevo" or duplicating an empty quotation reuses that blank proposal. A partial
+concept with a pending price is meaningful content and is saved with the same
+quotation ID. Existing empty drafts are preserved; removing them requires the
+visible cleanup action and confirmation.
+
 Corrupt stored data is not automatically overwritten. Failed saves show an error.
 Concurrent changes from another tab pause saving until the user resolves them.
 Catalogue selections copy values into a quotation; later catalogue edits preserve

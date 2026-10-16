@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { calculateQuotation } from './calculation'
-import { createQuotation, createRow, createWorkspace, duplicateQuotation, type Quotation, type RowSection, type Workspace } from './model'
+import { createQuotation, createRow, createWorkspace, duplicateQuotation, ensureBlankQuotation, hasQuotationContent, prepareWorkspaceForStorage, type Quotation, type RowSection, type Workspace } from './model'
 import { loadWorkspace, parseWorkspace, saveWorkspace, serializeWorkspace, STORAGE_KEY } from './persistence'
 import { createQuotationFile, downloadQuotationFile, shareQuotationFile } from './export'
 import { QuotationPreview } from './QuotationPreview'
 import { CatalogEditor, HeaderEditor, RowEditor } from './QuotationDialogs'
 
-function initialWorkspace(): { workspace: Workspace; error: string | null } {
-  try { return loadWorkspace(window.localStorage) }
-  catch { return { workspace: createWorkspace(), error: 'El almacenamiento de este navegador no está disponible. Podés trabajar y descargar un respaldo.' } }
+interface InitialWorkspace { workspace: Workspace; error: string | null; stored: boolean; persistedIds: string[] }
+
+function initialWorkspace(): InitialWorkspace {
+  try {
+    const loaded = loadWorkspace(window.localStorage)
+    const persistedIds = loaded.stored ? loaded.workspace.quotations.map((entry) => entry.id) : []
+    return { ...loaded, persistedIds, workspace: loaded.workspace.quotations.length ? loaded.workspace : ensureBlankQuotation(loaded.workspace) }
+  }
+  catch { return { workspace: createWorkspace(), error: 'El almacenamiento de este navegador no está disponible. Podés trabajar y descargar un respaldo.', stored: false, persistedIds: [] } }
 }
 
 export default function QuotationApp() {
@@ -17,6 +23,7 @@ export default function QuotationApp() {
   const [storageEnabled, setStorageEnabled] = useState(!initial.error)
   const [storageError, setStorageError] = useState(initial.error)
   const [savedWorkspace, setSavedWorkspace] = useState<Workspace | null>(null)
+  const [savedIds, setSavedIds] = useState(initial.persistedIds)
   const [dialog, setDialog] = useState<'header' | 'catalog' | null>(null)
   const [editingRowId, setEditingRowId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
@@ -26,11 +33,28 @@ export default function QuotationApp() {
   const importInput = useRef<HTMLInputElement>(null)
   const generation = useRef(0)
   const pausedByAnotherTab = useRef(false)
+  const persistedIds = useRef(new Set(initial.persistedIds))
+  const storageExists = useRef(initial.stored)
   const quotation = workspace.quotations.find((entry) => entry.id === workspace.activeQuotationId) ?? workspace.quotations[0]!
   const preparedFile = prepared?.quotation === quotation ? prepared.file : null
-  const saveStatus = !storageEnabled ? 'Guardado local desactivado' : storageError ? 'No se pudo guardar' : savedWorkspace === workspace ? 'Guardado en este navegador' : 'Guardando…'
+  const emptyInMemory = !hasQuotationContent(quotation) && !savedIds.includes(quotation.id)
+  const saveStatus = !storageEnabled ? 'Guardado local desactivado' : storageError ? 'No se pudo guardar' : emptyInMemory ? 'Nuevo presupuesto · sin guardar' : savedWorkspace === workspace ? 'Guardado en este navegador' : 'Guardando…'
+  const storedEmptyCount = workspace.quotations.filter((entry) => savedIds.includes(entry.id) && !hasQuotationContent(entry)).length
   const calculation = calculateQuotation(quotation)
   const editingRow = quotation.rows.find((row) => row.id === editingRowId)
+
+  function persistSnapshot(next: Workspace) {
+    const snapshot = prepareWorkspaceForStorage(next, persistedIds.current)
+    if (!storageExists.current && snapshot.quotations.length === 0 && snapshot.catalog.length === 0) return { ok: true, error: null }
+    const result = saveWorkspace(window.localStorage, snapshot)
+    if (result.ok) {
+      storageExists.current = true
+      const nextIds = snapshot.quotations.map((entry) => entry.id)
+      persistedIds.current = new Set(nextIds)
+      setSavedIds(nextIds)
+    }
+    return result
+  }
 
   useEffect(() => {
     generation.current += 1
@@ -41,7 +65,7 @@ export default function QuotationApp() {
     const timer = window.setTimeout(() => {
       if (pausedByAnotherTab.current) return
       try {
-        const result = saveWorkspace(window.localStorage, workspace)
+        const result = persistSnapshot(workspace)
         if (result.ok) { setStorageError(null); setSavedWorkspace(workspace) }
         else setStorageError(result.error)
       } catch { setStorageError('No se pudo acceder al almacenamiento. Descargá un respaldo para conservar tu trabajo.') }
@@ -58,7 +82,7 @@ export default function QuotationApp() {
     }
     function flush() {
       if (!storageEnabled || pausedByAnotherTab.current) return
-      try { saveWorkspace(window.localStorage, workspace) } catch { /* The visible save status remains authoritative. */ }
+      try { persistSnapshot(workspace) } catch { /* The visible save status remains authoritative. */ }
     }
     window.addEventListener('storage', handleStorage)
     window.addEventListener('pagehide', flush)
@@ -79,9 +103,15 @@ export default function QuotationApp() {
     return commitWorkspace({ ...workspace, quotations: workspace.quotations.map((entry) => entry.id === next.id ? { ...next, updatedAt: new Date().toISOString() } : entry) })
   }
   function addQuotation(duplicate = false) {
+    if (!duplicate || !hasQuotationContent(quotation)) {
+      const next = ensureBlankQuotation(workspace)
+      if (next.quotations.length <= 500) commitWorkspace(next)
+      else setMessage('Llegaste al máximo de 500 borradores. Descargá un respaldo y eliminá los que ya no necesitás.')
+      return
+    }
     if (workspace.quotations.length >= 500) { setMessage('Llegaste al máximo de 500 borradores. Descargá un respaldo y eliminá los que ya no necesitás.'); return }
     setMessage('')
-    const next = duplicate ? duplicateQuotation(quotation) : createQuotation()
+    const next = duplicateQuotation(quotation)
     commitWorkspace({ ...workspace, activeQuotationId: next.id, quotations: [...workspace.quotations, next] })
   }
   function addRow(section: RowSection) {
@@ -95,9 +125,21 @@ export default function QuotationApp() {
     const next = remaining.length ? remaining : [createQuotation()]
     setWorkspace({ ...workspace, quotations: next, activeQuotationId: next[0]!.id })
   }
+  function removeStoredEmptyQuotations() {
+    if (!window.confirm(`¿Eliminar ${storedEmptyCount} borradores guardados sin contenido? Los presupuestos con contenido se conservarán.`)) return
+    const remaining = workspace.quotations.filter((entry) => !savedIds.includes(entry.id) || hasQuotationContent(entry))
+    const activeQuotationId = remaining.some((entry) => entry.id === workspace.activeQuotationId) ? workspace.activeQuotationId : remaining[0]?.id ?? null
+    const next = { ...workspace, quotations: remaining, activeQuotationId }
+    commitWorkspace(remaining.length ? next : ensureBlankQuotation(next))
+  }
+  function quotationLabel(entry: Quotation): string {
+    if (!hasQuotationContent(entry)) return savedIds.includes(entry.id) ? `${entry.title || 'Sin título'} · vacío guardado` : 'Nuevo presupuesto · sin guardar'
+    const detail = entry.subtitle.trim() || entry.rows.find((row) => row.concept.trim())?.concept.trim() || ''
+    return `${entry.title || 'Sin título'}${detail ? ` · ${detail}` : ''}`
+  }
   function exportBackup() {
     try {
-      const file = new File([serializeWorkspace(workspace)], `luquisound-respaldo-${new Date().toISOString().slice(0, 10)}.json`, { type: 'application/json' })
+      const file = new File([serializeWorkspace(prepareWorkspaceForStorage(workspace, persistedIds.current))], `luquisound-respaldo-${new Date().toISOString().slice(0, 10)}.json`, { type: 'application/json' })
       downloadQuotationFile(file); setMessage('Respaldo descargado. Puede contener información de tus presupuestos: guardalo en un lugar privado.')
     } catch { setMessage('No se pudo crear el respaldo: los datos superan el tamaño permitido de 5 MB. Reducí la cantidad de borradores o el contenido antes de reintentar.') }
   }
@@ -109,7 +151,9 @@ export default function QuotationApp() {
       const next = parseWorkspace(await file.text())
       if (!window.confirm('Importar reemplaza los borradores y el catálogo de este navegador. ¿Continuar?')) return
       pausedByAnotherTab.current = false
-      setWorkspace(next); setStorageEnabled(true); setMessage('Respaldo importado.'); setStorageError(null)
+      const nextIds = next.quotations.map((entry) => entry.id)
+      persistedIds.current = new Set(nextIds); storageExists.current = true; setSavedIds(nextIds)
+      setWorkspace(next.quotations.length ? next : ensureBlankQuotation(next)); setStorageEnabled(true); setMessage('Respaldo importado.'); setStorageError(null)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo importar el respaldo.') }
   }
   async function prepareImage() {
@@ -139,8 +183,20 @@ export default function QuotationApp() {
       <a className="skip-link" href="#quotation">Ir al presupuesto</a>
       <header className="workspace-header"><div className="workspace-brand"><img src="/brand/luquisound-horizontal.svg" alt="Luquisound" width="176" height="20" /><div><h1>Cotizador Luquisound</h1><p>Tu plantilla. Cada proyecto.</p></div></div><button className="button primary" type="button" onClick={() => addQuotation()}>+ Nuevo</button></header>
       <main className="workspace-main">
-        <div className="workspace-toolbar"><label className="draft-selector">Borrador<select aria-label="Elegir borrador" value={quotation.id} onChange={(event) => setWorkspace({ ...workspace, activeQuotationId: event.target.value })}>{workspace.quotations.map((entry) => <option key={entry.id} value={entry.id}>{entry.title || 'Sin título'}{entry.subtitle ? ` · ${entry.subtitle}` : ''}</option>)}</select></label><div className="toolbar-actions"><button className="button secondary" onClick={() => addQuotation(true)}>Duplicar</button><button className="button secondary" onClick={() => setDialog('catalog')}>Mi catálogo</button><details className="workspace-menu"><summary>Más opciones</summary><div><button type="button" onClick={exportBackup}>Descargar respaldo</button><button type="button" onClick={() => importInput.current?.click()}>Importar respaldo</button><button type="button" className="danger" onClick={removeQuotation}>Eliminar borrador</button></div></details></div></div>
+        <div className="workspace-toolbar">
+          <label className="draft-selector">Borrador
+            <select aria-label="Elegir borrador" value={quotation.id} onChange={(event) => setWorkspace({ ...workspace, activeQuotationId: event.target.value })}>
+              {workspace.quotations.map((entry) => <option key={entry.id} value={entry.id}>{quotationLabel(entry)}</option>)}
+            </select>
+          </label>
+          <div className="toolbar-actions">
+            <button className="button secondary" onClick={() => addQuotation(true)}>Duplicar</button>
+            <button className="button secondary" onClick={() => setDialog('catalog')}>Mi catálogo</button>
+            <details className="workspace-menu"><summary>Más opciones</summary><div><button type="button" onClick={exportBackup}>Descargar respaldo</button><button type="button" onClick={() => importInput.current?.click()}>Importar respaldo</button><button type="button" className="danger" onClick={removeQuotation}>Eliminar borrador</button></div></details>
+          </div>
+        </div>
         <div className="workspace-status"><span role="status">{saveStatus}</span><span>Datos en este navegador · Sin sincronización</span></div>
+        {storedEmptyCount > 0 && <div className="notice"><p>Se conservaron {storedEmptyCount} borradores vacíos que ya estaban guardados. Podés eliminarlos después de confirmarlo.</p><button type="button" className="button secondary" onClick={removeStoredEmptyQuotations}>Eliminar vacíos guardados</button></div>}
         {storageError && <div className="notice error" role="alert"><p>{storageError}</p><button className="button secondary" onClick={exportBackup}>Descargar respaldo</button>{!storageEnabled && <button className="button secondary" onClick={() => { if (window.confirm('Habilitar el guardado puede reemplazar datos locales que no pudieron recuperarse. ¿Continuar?')) { pausedByAnotherTab.current = false; setStorageEnabled(true) } }}>Habilitar guardado</button>}</div>}
         <p className="editing-hint">Tocá el título o un concepto para editarlo. Podés escribir libremente, elegir del catálogo o dejar un campo vacío.</p>
         <div id="quotation"><QuotationPreview quotation={quotation} onEditHeader={() => setDialog('header')} onEditRow={setEditingRowId} onAddRow={addRow} /></div>

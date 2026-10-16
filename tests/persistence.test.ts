@@ -62,6 +62,7 @@ test('an empty storage starts a blank workspace without writing', () => {
   const storage = createMemoryStorage()
   const result = loadWorkspace(storage)
   assert.equal(result.error, null)
+  assert.equal(result.stored, false)
   assert.equal(result.workspace.quotations.length, 1)
   assert.equal(result.workspace.activeQuotationId, result.workspace.quotations[0].id)
   assert.deepEqual(result.workspace.catalog, [])
@@ -76,6 +77,7 @@ test('saving and loading retains drafts, explicit zero, included and pending amo
   assert.equal(storage.writeCount(), 1)
   const loaded = loadWorkspace(storage)
   assert.equal(loaded.error, null)
+  assert.equal(loaded.stored, true)
   assert.deepEqual(loaded.workspace, workspace)
   assert.notEqual(loaded.workspace, workspace)
   assert.notEqual(loaded.workspace.quotations[0].rows, workspace.quotations[0].rows)
@@ -119,6 +121,7 @@ test('corrupted stored data remains untouched and yields a visible safe error', 
   const storage = createMemoryStorage(corruptText)
   const loaded = loadWorkspace(storage)
   assert.match(loaded.error ?? '', /No se pudieron leer/)
+  assert.equal(loaded.stored, false)
   assert.doesNotMatch(loaded.error ?? '', /do-not-echo/)
   assert.equal(loaded.workspace.quotations.length, 1)
   assert.equal(storage.current(), corruptText)
@@ -128,7 +131,9 @@ test('corrupted stored data remains untouched and yields a visible safe error', 
 test('an empty or unsupported stored backup is not silently treated as a new workspace', () => {
   for (const text of ['', 'null', JSON.stringify({ version: 9 })]) {
     const storage = createMemoryStorage(text)
-    assert.notEqual(loadWorkspace(storage).error, null)
+    const loaded = loadWorkspace(storage)
+    assert.notEqual(loaded.error, null)
+    assert.equal(loaded.stored, false)
     assert.equal(storage.current(), text)
     assert.equal(storage.writeCount(), 0)
   }
@@ -141,6 +146,7 @@ test('storage access failure does not crash or expose the thrown error', () => {
   }
   const loaded = loadWorkspace(storage)
   assert.match(loaded.error ?? '', /No se pudo acceder/)
+  assert.equal(loaded.stored, false)
   assert.doesNotMatch(loaded.error ?? '', /private browser diagnostic/)
   assert.equal(loaded.workspace.quotations.length, 1)
 })
@@ -181,10 +187,26 @@ test('import rejects invalid top-level shapes and absent active references', () 
     null, [], 1, true, 'workspace', {},
     { ...workspace, version: '1' }, { ...workspace, version: 2 },
     { ...workspace, activeQuotationId: 'absent' },
+    { ...workspace, activeQuotationId: null },
     { ...workspace, quotations: [] }, { ...workspace, quotations: null },
     { ...workspace, catalog: {} }, { ...workspace, activeQuotationId: '' },
   ]
   invalids.forEach(rejectBackup)
+})
+
+test('a stored empty workspace roundtrips without creating phantom quotation IDs', () => {
+  const workspace: Workspace = { version: 1, activeQuotationId: null, quotations: [], catalog: createFixture().catalog }
+  const serialized = serializeWorkspace(workspace)
+  assert.deepEqual(parseWorkspace(serialized), workspace)
+  const storage = createMemoryStorage(serialized)
+  const loaded = loadWorkspace(storage)
+  assert.equal(loaded.error, null)
+  assert.equal(loaded.stored, true)
+  assert.deepEqual(loaded.workspace, workspace)
+  assert.equal(storage.writeCount(), 0)
+  assert.equal(storage.current(), serialized)
+  assert.deepEqual(saveWorkspace(storage, loaded.workspace), { ok: true, error: null })
+  assert.deepEqual(parseWorkspace(storage.current() ?? ''), workspace)
 })
 
 test('import rejects invalid row, catalogue, currency and price-state shapes', () => {

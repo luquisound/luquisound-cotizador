@@ -190,7 +190,7 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   if (!context) throw new Error('El navegador no pudo crear la imagen.')
 
   setFont(context, 84)
-  const titleLines = measureLines(context, quotation.title.trim().toLocaleUpperCase('es-AR'), CONTENT_WIDTH - 60)
+  const titleLines = measureLines(context, quotation.title.trim(), CONTENT_WIDTH)
   setFont(context, 30, false, BODY_FONT)
   const subtitleLines = quotation.subtitle.trim()
     ? measureLines(context, quotation.subtitle.trim(), CONTENT_WIDTH) : []
@@ -236,12 +236,9 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   setFont(context, 20, true, BODY_FONT)
   drawLines(context, ['PRESUPUESTO', 'DE AUDIO'], WIDTH - MARGIN, 45, 25)
   context.textAlign = 'left'
-  setFont(context, 84, true, BODY_FONT)
-  context.fillStyle = YELLOW
-  context.fillText('+', MARGIN, 174)
   setFont(context, 84)
   context.fillStyle = '#FFFFFF'
-  drawLines(context, titleLines, MARGIN + 60, 174, 92)
+  drawLines(context, titleLines, MARGIN, 174, 92)
   context.fillStyle = '#B3B3B3'
   setFont(context, 30, false, BODY_FONT)
   drawLines(context, subtitleLines, MARGIN, subtitleY, 38)

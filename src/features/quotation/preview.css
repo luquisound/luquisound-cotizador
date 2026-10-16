@@ -112,7 +112,6 @@
   line-height: 1.08;
   letter-spacing: 0.005em;
   overflow-wrap: anywhere;
-  text-transform: uppercase;
 }
 
 .quotation-title > :last-child {

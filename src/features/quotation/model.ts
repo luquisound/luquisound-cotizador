@@ -34,7 +34,7 @@ export interface CatalogItem {
 
 export interface Workspace {
   version: 1
-  activeQuotationId: string
+  activeQuotationId: string | null
   quotations: Quotation[]
   catalog: CatalogItem[]
 }
@@ -57,6 +57,39 @@ export function createQuotation(): Quotation {
 export function createWorkspace(): Workspace {
   const quotation = createQuotation()
   return { version: 1, activeQuotationId: quotation.id, quotations: [quotation], catalog: [] }
+}
+
+export function hasQuotationContent(quotation: Quotation): boolean {
+  const title = quotation.title.trim()
+  if (title && !/^presupuesto(?:\s*\(copia\))*$/i.test(title)) return true
+  if (quotation.subtitle.trim() || quotation.notes.trim()) return true
+  return quotation.rows.some((row) => (
+    row.concept.trim() !== ''
+    || row.detail.trim() !== ''
+    || row.unitPrice.trim() !== ''
+    || row.priceState === 'included'
+    || row.quantity.trim() !== '1'
+  ))
+}
+
+export function ensureBlankQuotation(workspace: Workspace): Workspace {
+  const active = workspace.quotations.find((quotation) => quotation.id === workspace.activeQuotationId)
+  const blank = active && !hasQuotationContent(active)
+    ? active
+    : workspace.quotations.find((quotation) => !hasQuotationContent(quotation))
+  if (blank) {
+    return workspace.activeQuotationId === blank.id ? workspace : { ...workspace, activeQuotationId: blank.id }
+  }
+  const quotation = createQuotation()
+  return { ...workspace, activeQuotationId: quotation.id, quotations: [...workspace.quotations, quotation] }
+}
+
+export function prepareWorkspaceForStorage(workspace: Workspace, persistedIds: ReadonlySet<string>): Workspace {
+  const quotations = workspace.quotations.filter((quotation) => persistedIds.has(quotation.id) || hasQuotationContent(quotation))
+  const activeQuotationId = quotations.some((quotation) => quotation.id === workspace.activeQuotationId)
+    ? workspace.activeQuotationId
+    : quotations[0]?.id ?? null
+  return { ...workspace, activeQuotationId, quotations }
 }
 
 export function duplicateQuotation(quotation: Quotation): Quotation {

@@ -36,6 +36,8 @@ blank details do not reserve a line. Controls, pending validation, and editing
 hints never appear in the image. The implementation uses local system fonts as a
 fallback; the exact reference typography has not been confirmed or bundled.
 The source quotation examples remain private and are not copied into the repo.
+The displayed/exported title preserves the entered text. No decorative plus sign
+is inserted; a plus sign explicitly typed as part of the title is retained.
 
 ## Calculation contract
 
@@ -63,6 +65,14 @@ and the active draft. Persistence is isolated behind an adapter in persistence.t
 so a later authorized storage decision does not require rewriting the editor.
 The current implementation stores data only in localStorage in the current
 browser and origin, with no backend, analytics, or data synchronization.
+
+An untouched blank proposal remains in memory. Default headings, currency, and
+placeholder rows do not create persistent drafts. New and duplicate actions reuse
+a blank proposal while it remains empty. Partial concepts with pending prices
+are saved, and repeated saves keep the current quotation ID. A stored workspace
+may contain no quotations and a null active quotation ID; the editor then opens
+one blank proposal in memory without persisting it. Existing empty quotations
+are retained, with a visible, confirmed cleanup action rather than silent removal.
 
 This is individual browser storage, not shared or access-controlled cloud storage.
 Browser clearing, private mode, device loss, or origin changes can remove access.

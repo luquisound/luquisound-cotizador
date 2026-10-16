@@ -9,6 +9,7 @@ export interface StorageAdapter {
 export interface WorkspaceLoadResult {
   workspace: Workspace
   error: string | null
+  stored: boolean
 }
 
 export interface WorkspaceSaveResult {
@@ -115,8 +116,9 @@ function readWorkspace(value: unknown): Workspace {
   if (workspace.version !== 1) invalidBackup()
   const identifiers = new Set<string>()
   const quotations = readArray(workspace.quotations, 500).map((quotation) => readQuotation(quotation, identifiers))
-  const activeQuotationId = readIdentifier(workspace.activeQuotationId)
-  if (!quotations.some((quotation) => quotation.id === activeQuotationId)) invalidBackup()
+  const activeQuotationId = workspace.activeQuotationId === null ? null : readIdentifier(workspace.activeQuotationId)
+  if (quotations.length === 0 && activeQuotationId !== null) invalidBackup()
+  if (quotations.length > 0 && !quotations.some((quotation) => quotation.id === activeQuotationId)) invalidBackup()
   return {
     version: 1,
     activeQuotationId,
@@ -155,15 +157,17 @@ export function loadWorkspace(storage: StorageAdapter): WorkspaceLoadResult {
   } catch {
     return {
       workspace: createWorkspace(),
+      stored: false,
       error: 'No se pudo acceder al guardado de este navegador. Conservá un respaldo de tus cambios.',
     }
   }
-  if (text === null) return { workspace: createWorkspace(), error: null }
+  if (text === null) return { workspace: createWorkspace(), error: null, stored: false }
   try {
-    return { workspace: parseWorkspace(text), error: null }
+    return { workspace: parseWorkspace(text), error: null, stored: true }
   } catch {
     return {
       workspace: createWorkspace(),
+      stored: false,
       error: 'No se pudieron leer los datos guardados. No se modificaron. Podés recuperar un respaldo o iniciar un espacio nuevo.',
     }
   }
