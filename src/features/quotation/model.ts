@@ -1,3 +1,7 @@
+import type { CatalogReferencePrice, CatalogSource } from './catalog.ts'
+
+export type { CatalogReferencePrice, CatalogSource } from './catalog.ts'
+
 export type Currency = 'ARS' | 'USD'
 export type RowSection = 'equipment' | 'extras'
 export type PriceState = 'pending' | 'priced' | 'included'
@@ -17,6 +21,7 @@ export interface Quotation {
   title: string
   subtitle: string
   currency: Currency
+  exchangeRate?: string
   rows: QuotationRow[]
   notes: string
   createdAt: string
@@ -30,6 +35,14 @@ export interface CatalogItem {
   section: RowSection
   currency: Currency
   unitPrice: string
+  supplier?: string
+  sku?: string
+  brand?: string
+  category?: string
+  unit?: string
+  presentation?: string
+  source?: CatalogSource
+  referencePrices?: CatalogReferencePrice[]
 }
 
 export interface Workspace {
@@ -49,7 +62,7 @@ export function createRow(section: RowSection = 'equipment'): QuotationRow {
 export function createQuotation(): Quotation {
   const now = new Date().toISOString()
   return {
-    id: crypto.randomUUID(), title: 'PRESUPUESTO', subtitle: '', currency: 'ARS',
+    id: crypto.randomUUID(), title: 'PRESUPUESTO', subtitle: '', currency: 'ARS', exchangeRate: '',
     rows: [createRow(), createRow('extras')], notes: '', createdAt: now, updatedAt: now,
   }
 }
@@ -63,6 +76,7 @@ export function hasQuotationContent(quotation: Quotation): boolean {
   const title = quotation.title.trim()
   if (title && !/^presupuesto(?:\s*\(copia\))*$/i.test(title)) return true
   if (quotation.subtitle.trim() || quotation.notes.trim()) return true
+  if (quotation.exchangeRate?.trim()) return true
   return quotation.rows.some((row) => (
     row.concept.trim() !== ''
     || row.detail.trim() !== ''

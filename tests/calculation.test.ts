@@ -18,7 +18,7 @@ function row(overrides: Partial<QuotationRow> = {}): QuotationRow {
 
 function quotation(rows: QuotationRow[], overrides: Partial<Quotation> = {}): Quotation {
   return {
-    id: 'synthetic-quotation', title: 'PRUEBA', subtitle: '', currency: 'ARS', rows, notes: '',
+    id: 'synthetic-quotation', title: 'PRUEBA', subtitle: '', currency: 'ARS', exchangeRate: '1', rows, notes: '',
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   }
@@ -97,6 +97,7 @@ test('quantity times unit price rounds each line half up before summing', () => 
   ]))
   assert.deepEqual(result.rows.map((item) => item.lineTotalCents), [2, 0, 2894, 1])
   assert.equal(result.totalCents, 2897)
+  assert.equal(result.itemsComplete, true)
   assert.equal(result.canExport, true)
   assert.deepEqual(result.issues, [])
 })
@@ -120,6 +121,7 @@ test('pending, explicit zero, and included retain distinct meanings', () => {
   assert.equal(result.rows[1].row.priceState, 'priced')
   assert.equal(result.rows[2].row.priceState, 'included')
   assert.equal(result.totalCents, 0)
+  assert.equal(result.itemsComplete, false)
   assert.equal(result.canExport, false)
   assert.match(result.issues[0], /pendiente/)
   assert.equal(calculateQuotation(quotation(result.rows.slice(1).map((item) => item.row))).canExport, true)
@@ -143,6 +145,7 @@ test('incomplete or invalid rows block export and do not silently change the sub
   ]) {
     const result = calculateQuotation(quotation([row(), row({ id: 'invalid', ...override })]))
     assert.equal(result.canExport, false, JSON.stringify(override))
+    assert.equal(result.itemsComplete, false)
     assert.equal(result.totalCents, 1000)
     assert.equal(result.rows[1].lineTotalCents, null)
     assert.ok(result.rows[1].errors.length > 0)
@@ -151,10 +154,13 @@ test('incomplete or invalid rows block export and do not silently change the sub
 })
 
 test('a blank title or no nonempty rows blocks export', () => {
-  assert.equal(calculateQuotation(quotation([row()], { title: '   ' })).canExport, false)
+  const untitled = calculateQuotation(quotation([row()], { title: '   ' }))
+  assert.equal(untitled.canExport, false)
+  assert.equal(untitled.itemsComplete, true)
   for (const rows of [[], [row({ concept: '', unitPrice: '', priceState: 'pending' })]]) {
     const result = calculateQuotation(quotation(rows))
     assert.equal(result.canExport, false)
+    assert.equal(result.itemsComplete, false)
     assert.equal(result.rows.length, 0)
     assert.equal(result.totalCents, 0)
     assert.ok(result.issues.length > 0)
@@ -177,6 +183,7 @@ test('line overflow is rejected even when both parsed inputs are safe', () => {
   ]))
   assert.equal(result.totalCents, 0)
   assert.equal(result.rows[0].lineTotalCents, null)
+  assert.equal(result.itemsComplete, false)
   assert.equal(result.canExport, false)
   assert.match(result.rows[0].errors[0], /límite/)
 })
@@ -198,6 +205,7 @@ test('total overflow blocks export and never returns an unsafe integer', () => {
   assert.equal(result.rows[1].lineTotalCents, 1)
   assert.equal(result.totalCents, 0)
   assert.equal(Number.isSafeInteger(result.totalCents), true)
+  assert.equal(result.itemsComplete, false)
   assert.equal(result.canExport, false)
   assert.match(result.issues[0], /total.*límite/)
 })
@@ -214,4 +222,95 @@ test('many rows, long descriptions, and USD use the same arithmetic without muta
   assert.equal(result.rows.length, 200)
   assert.equal(result.canExport, true)
   assert.deepEqual(input, snapshot)
+})
+
+test('complete items retain their base total while a manual exchange rate is pending', () => {
+  for (const exchangeRate of ['', '   ', undefined]) {
+    const result = calculateQuotation(quotation([row()], { exchangeRate }))
+    assert.equal(result.totalCents, 1000)
+    assert.equal(result.itemsComplete, true)
+    assert.equal(result.canExport, false)
+    assert.equal(result.conversion.ok, false)
+    assert.equal(result.issues.length, 1)
+    assert.match(result.issues[0], /tipo de cambio/)
+  }
+})
+
+test('legacy quotations without an exchange rate never receive an invented rate', () => {
+  const input = quotation([row()])
+  delete input.exchangeRate
+  const result = calculateQuotation(input)
+  assert.equal(result.itemsComplete, true)
+  assert.equal(result.conversion.ok, false)
+  assert.equal(result.canExport, false)
+  assert.equal(Object.hasOwn(input, 'exchangeRate'), false)
+})
+
+test('invalid manual rates block final export without invalidating completed items', () => {
+  for (const exchangeRate of ['0', '-1', '1.25', '1,2345678', 'Infinity', 'incorrecta']) {
+    const result = calculateQuotation(quotation([row()], { exchangeRate }))
+    assert.equal(result.totalCents, 1000)
+    assert.equal(result.itemsComplete, true)
+    assert.equal(result.conversion.ok, false)
+    assert.equal(result.canExport, false)
+    assert.equal(result.issues.length, 1)
+  }
+})
+
+test('manual conversion preserves ARS and USD base cents in both directions', () => {
+  const ars = calculateQuotation(quotation([row({ unitPrice: '0,03' })], { exchangeRate: '2' }))
+  assert.equal(ars.totalCents, 3)
+  assert.equal(ars.canExport, true)
+  assert.deepEqual(ars.conversion, { ok: true, arsCents: 3, usdCents: 2, rateLabel: '1 USD = 2 ARS' })
+
+  const usd = calculateQuotation(quotation([row({ unitPrice: '0,01' })], { currency: 'USD', exchangeRate: '1,5' }))
+  assert.equal(usd.totalCents, 1)
+  assert.equal(usd.canExport, true)
+  assert.deepEqual(usd.conversion, { ok: true, arsCents: 2, usdCents: 1, rateLabel: '1 USD = 1,5 ARS' })
+})
+
+test('conversion rounds the final total after rounding and summing the original rows', () => {
+  const result = calculateQuotation(quotation([
+    row({ id: 'a', quantity: '0,5', unitPrice: '0,01' }),
+    row({ id: 'b', quantity: '0,5', unitPrice: '0,01' }),
+  ], { exchangeRate: '2' }))
+  assert.equal(result.totalCents, 2)
+  assert.deepEqual(result.conversion, { ok: true, arsCents: 2, usdCents: 1, rateLabel: '1 USD = 2 ARS' })
+})
+
+test('equivalent-total overflow blocks export while preserving the complete base total', () => {
+  for (const [currency, exchangeRate] of [['USD', '2'], ['ARS', '0,000001']] as const) {
+    const result = calculateQuotation(quotation([
+      row({ unitPrice: '90.071.992.547.409,91' }),
+    ], { currency, exchangeRate }))
+    assert.equal(result.totalCents, Number.MAX_SAFE_INTEGER)
+    assert.equal(result.itemsComplete, true)
+    assert.equal(result.conversion.ok, false)
+    assert.equal(result.canExport, false)
+    assert.match(result.issues[0], /equivalente.*límite/)
+  }
+})
+
+test('item completeness stays independent of title and exchange-rate validation', () => {
+  const result = calculateQuotation(quotation([row()], { title: '', exchangeRate: '' }))
+  assert.equal(result.itemsComplete, true)
+  assert.equal(result.canExport, false)
+  assert.equal(result.totalCents, 1000)
+  assert.equal(result.issues.length, 2)
+  assert.match(result.issues[0], /título/)
+  assert.match(result.issues[1], /tipo de cambio/)
+})
+
+test('zero and included rows still require a deliberate manual rate for both totals', () => {
+  const rows = [row({ id: 'zero', unitPrice: '0' }), row({ id: 'included', priceState: 'included', unitPrice: '' })]
+  const pending = calculateQuotation(quotation(rows, { exchangeRate: '' }))
+  assert.equal(pending.itemsComplete, true)
+  assert.equal(pending.totalCents, 0)
+  assert.equal(pending.canExport, false)
+  assert.equal(pending.conversion.ok, false)
+
+  const complete = calculateQuotation(quotation(rows, { exchangeRate: '2' }))
+  assert.equal(complete.itemsComplete, true)
+  assert.equal(complete.canExport, true)
+  assert.deepEqual(complete.conversion, { ok: true, arsCents: 0, usdCents: 0, rateLabel: '1 USD = 2 ARS' })
 })

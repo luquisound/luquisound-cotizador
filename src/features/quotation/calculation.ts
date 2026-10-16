@@ -1,4 +1,5 @@
 import type { Currency, Quotation, QuotationRow } from './model.ts'
+import { convertTotals, type ConvertedTotalsResult } from './exchange.ts'
 
 type ParseFailure = { ok: false; reason: string }
 export type MoneyResult = { ok: true; cents: number } | ParseFailure
@@ -13,6 +14,8 @@ export interface CalculatedRow {
 export interface QuotationCalculation {
   totalCents: number
   rows: CalculatedRow[]
+  itemsComplete: boolean
+  conversion: ConvertedTotalsResult
   canExport: boolean
   issues: string[]
 }
@@ -104,10 +107,6 @@ function calculateRow(row: QuotationRow): CalculatedRow {
 export function calculateQuotation(quotation: Quotation): QuotationCalculation {
   const issues: string[] = []
   if (!quotation.title.trim()) issues.push('Ingresá un título para el presupuesto.')
-  if (quotation.currency !== 'ARS' && quotation.currency !== 'USD') {
-    issues.push('Seleccioná una moneda válida: ARS o USD.')
-  }
-
   const rows: CalculatedRow[] = []
   let total = 0n
   for (const [index, row] of quotation.rows.entries()) {
@@ -123,5 +122,11 @@ export function calculateQuotation(quotation: Quotation): QuotationCalculation {
   if (totalOverflow) issues.push('El total supera el límite de cálculo seguro.')
   // An overflowing total is unavailable; canExport and issues must be checked.
   const totalCents = totalOverflow ? 0 : Number(total)
-  return { totalCents, rows, canExport: issues.length === 0, issues }
+  const itemsComplete = rows.length > 0
+    && rows.every((row) => row.errors.length === 0 && row.lineTotalCents !== null)
+    && !totalOverflow
+  const conversion = convertTotals(totalCents, quotation.currency, quotation.exchangeRate ?? '')
+  if (!conversion.ok) issues.push(conversion.reason)
+  const canExport = quotation.title.trim().length > 0 && itemsComplete && conversion.ok
+  return { totalCents, rows, itemsComplete, conversion, canExport, issues }
 }

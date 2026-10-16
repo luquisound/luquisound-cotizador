@@ -50,8 +50,10 @@ outside this stage.
 - Preserve the difference between a missing amount and an explicit zero.
 - Represent an included, no-charge concept explicitly; do not infer it from a
   blank amount or collapse it into an ordinary zero-priced row.
-- V1 uses one explicit currency per quotation (ARS or USD), no conversion, safe
-  integer cents, and quantity times unit price rounded half up per row. Discounts
+- V1 uses one explicit currency for quotation rows (ARS or USD), safe integer
+  cents, and quantity times unit price rounded half up per row. A manual positive
+  ARS-per-USD rate is saved per quotation and converts only the final total, with
+  half-up rounding to cents. Never infer or fetch a rate. Discounts
   and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
   calculation contract and remaining decisions.
 - Preserve the approved graphic composition and official brand assets. Private

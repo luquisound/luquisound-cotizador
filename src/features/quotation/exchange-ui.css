@@ -1,0 +1,41 @@
+.quotation-total-dual {
+  display: grid;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: max(8px, 1.1111cqw);
+  padding-block: 2.963cqw;
+}
+
+.quotation-converted-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: max(12px, 2.2222cqw);
+  min-width: 0;
+}
+
+.quotation-total-dual .quotation-total-amount {
+  min-width: 0;
+  font-size: clamp(1.625rem, 7.4074cqw, 5rem);
+  text-align: right;
+}
+
+.quotation-total-dual .quotation-total-pending {
+  min-width: 0;
+  font-size: clamp(1.25rem, 5.5556cqw, 3.75rem);
+  overflow-wrap: anywhere;
+}
+
+.quotation-total-dual .quotation-total-currency {
+  flex-shrink: 0;
+  font-size: clamp(0.875rem, 2.7778cqw, 1.875rem);
+}
+
+.quotation-rate {
+  min-height: 44px;
+  padding: 8px 0;
+  color: var(--quotation-muted);
+  font-size: clamp(0.75rem, 2.2222cqw, 1.5rem);
+  text-align: left;
+  overflow-wrap: anywhere;
+}

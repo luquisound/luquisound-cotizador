@@ -1,5 +1,6 @@
 import { createWorkspace } from './model.ts'
-import type { CatalogItem, Currency, PriceState, Quotation, QuotationRow, RowSection, Workspace } from './model.ts'
+import { CATALOG_REFERENCE_MAX_PRICES } from './catalog.ts'
+import type { CatalogItem, CatalogReferencePrice, CatalogSource, Currency, PriceState, Quotation, QuotationRow, RowSection, Workspace } from './model.ts'
 
 export interface StorageAdapter {
   getItem(key: string): string | null
@@ -92,10 +93,56 @@ function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
     title: readString(quotation.title, 500),
     subtitle: readString(quotation.subtitle, 1000),
     currency: readCurrency(quotation.currency),
+    ...(quotation.exchangeRate === undefined ? {} : { exchangeRate: readString(quotation.exchangeRate, 64) }),
     rows: readArray(quotation.rows, 1000).map((row) => readRow(row, identifiers)),
     notes: readString(quotation.notes, 10000),
     createdAt: readTimestamp(quotation.createdAt),
     updatedAt: readTimestamp(quotation.updatedAt),
+  }
+}
+
+function readCatalogDate(value: unknown): string | null {
+  if (value === null) return null
+  const date = readString(value, 10)
+  if (!/^\d{4}-\d{2}(?:-\d{2})?$/.test(date)) invalidBackup()
+  const fullDate = date.length === 7 ? `${date}-01` : date
+  const parsed = new Date(`${fullDate}T00:00:00.000Z`)
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== fullDate) invalidBackup()
+  return date
+}
+
+function readSourcePosition(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 1000000) invalidBackup()
+  return value
+}
+
+function readCatalogSource(value: unknown): CatalogSource {
+  const source = readRecord(value)
+  const document = readString(source.document, 500)
+  if (!document.trim()) invalidBackup()
+  return {
+    document,
+    ...(source.page === undefined ? {} : { page: readSourcePosition(source.page) }),
+    ...(source.sheet === undefined ? {} : { sheet: readString(source.sheet, 128) }),
+    ...(source.row === undefined ? {} : { row: readSourcePosition(source.row) }),
+    date: readCatalogDate(source.date),
+  }
+}
+
+function readReferencePrice(value: unknown): CatalogReferencePrice {
+  const reference = readRecord(value)
+  if (reference.amount !== null && (
+    typeof reference.amount !== 'string' || !/^(?:0|[1-9]\d{0,17})(?:\.\d{1,6})?$/.test(reference.amount)
+  )) invalidBackup()
+  if (reference.role !== 'cost' && reference.role !== 'list' && reference.role !== 'sale' && reference.role !== 'unknown') invalidBackup()
+  if (reference.historical !== true) invalidBackup()
+  return {
+    amount: reference.amount,
+    currency: reference.currency === null ? null : readCurrency(reference.currency),
+    role: reference.role,
+    date: readCatalogDate(reference.date),
+    historical: true,
+    ...(reference.source === undefined ? {} : { source: readCatalogSource(reference.source) }),
   }
 }
 
@@ -108,6 +155,16 @@ function readCatalogItem(value: unknown, identifiers: Set<string>): CatalogItem 
     section: readSection(item.section),
     currency: readCurrency(item.currency),
     unitPrice: readString(item.unitPrice, 64),
+    ...(item.supplier === undefined ? {} : { supplier: readString(item.supplier, 200) }),
+    ...(item.sku === undefined ? {} : { sku: readString(item.sku, 128) }),
+    ...(item.brand === undefined ? {} : { brand: readString(item.brand, 200) }),
+    ...(item.category === undefined ? {} : { category: readString(item.category, 200) }),
+    ...(item.unit === undefined ? {} : { unit: readString(item.unit, 200) }),
+    ...(item.presentation === undefined ? {} : { presentation: readString(item.presentation, 200) }),
+    ...(item.source === undefined ? {} : { source: readCatalogSource(item.source) }),
+    ...(item.referencePrices === undefined ? {} : {
+      referencePrices: readArray(item.referencePrices, CATALOG_REFERENCE_MAX_PRICES).map(readReferencePrice),
+    }),
   }
 }
 

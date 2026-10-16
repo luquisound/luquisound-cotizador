@@ -4,7 +4,8 @@ import { createQuotation, createRow, createWorkspace, duplicateQuotation, ensure
 import { loadWorkspace, parseWorkspace, saveWorkspace, serializeWorkspace, STORAGE_KEY } from './persistence'
 import { createQuotationFile, downloadQuotationFile, shareQuotationFile } from './export'
 import { QuotationPreview } from './QuotationPreview'
-import { CatalogEditor, HeaderEditor, RowEditor } from './QuotationDialogs'
+import { HeaderEditor, RowEditor } from './QuotationDialogs'
+import { CatalogEditor } from './CatalogTools'
 
 interface InitialWorkspace { workspace: Workspace; error: string | null; stored: boolean; persistedIds: string[] }
 
@@ -39,6 +40,7 @@ export default function QuotationApp() {
   const preparedFile = prepared?.quotation === quotation ? prepared.file : null
   const emptyInMemory = !hasQuotationContent(quotation) && !savedIds.includes(quotation.id)
   const saveStatus = !storageEnabled ? 'Guardado local desactivado' : storageError ? 'No se pudo guardar' : emptyInMemory ? 'Nuevo presupuesto · sin guardar' : savedWorkspace === workspace ? 'Guardado en este navegador' : 'Guardando…'
+  const catalogSaveStatus = !storageEnabled ? 'Guardado local pausado' : storageError ? 'No se pudo guardar el catálogo' : savedWorkspace === workspace ? 'Guardado en este navegador' : 'Guardando catálogo…'
   const storedEmptyCount = workspace.quotations.filter((entry) => savedIds.includes(entry.id) && !hasQuotationContent(entry)).length
   const calculation = calculateQuotation(quotation)
   const editingRow = quotation.rows.find((row) => row.id === editingRowId)
@@ -157,7 +159,7 @@ export default function QuotationApp() {
     } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo importar el respaldo.') }
   }
   async function prepareImage() {
-    if (!calculation.canExport) { setMessage('Completá los conceptos y precios pendientes antes de preparar la imagen.'); return }
+    if (!calculation.canExport) { setMessage('Completá los conceptos, precios y la cotización USD / peso antes de preparar la imagen.'); return }
     const request = ++generation.current
     setPreparing(true); setMessage('Preparando imagen…')
     try {
@@ -200,13 +202,13 @@ export default function QuotationApp() {
         {storageError && <div className="notice error" role="alert"><p>{storageError}</p><button className="button secondary" onClick={exportBackup}>Descargar respaldo</button>{!storageEnabled && <button className="button secondary" onClick={() => { if (window.confirm('Habilitar el guardado puede reemplazar datos locales que no pudieron recuperarse. ¿Continuar?')) { pausedByAnotherTab.current = false; setStorageEnabled(true) } }}>Habilitar guardado</button>}</div>}
         <p className="editing-hint">Tocá el título o un concepto para editarlo. Podés escribir libremente, elegir del catálogo o dejar un campo vacío.</p>
         <div id="quotation"><QuotationPreview quotation={quotation} onEditHeader={() => setDialog('header')} onEditRow={setEditingRowId} onAddRow={addRow} /></div>
-        {!calculation.canExport && <div className="notice pending"><strong>El presupuesto todavía tiene datos pendientes.</strong><ul>{calculation.issues.map((issue, index) => <li key={`${index}-${issue}`}>{issue}</li>)}</ul><p>Podés seguir editándolo; la imagen final se habilita cuando esté completo.</p></div>}
+        {!calculation.canExport && <div className="notice pending"><strong>El presupuesto todavía tiene datos pendientes.</strong><ul>{calculation.issues.map((issue, index) => <li key={`${index}-${issue}`}>{issue}</li>)}</ul>{!calculation.conversion.ok && <button type="button" className="button secondary" onClick={() => setDialog('header')}>Cargar valor USD / peso</button>}<p>Podés seguir editándolo; la imagen final se habilita cuando esté completo.</p></div>}
         <div className="local-data-note"><strong>Tu información se guarda en este navegador.</strong> No se envían presupuestos ni catálogo a un servidor. Borrar los datos del navegador puede eliminar tus borradores. Usá respaldos para conservarlos o llevarlos a otro dispositivo.</div>
         <input ref={importInput} type="file" accept=".json,application/json" hidden onChange={(event) => { void importBackup(event) }} />
       </main>
       <footer className="export-bar"><div><strong>{preparedFile ? 'Imagen lista para compartir' : 'Compartí tu presupuesto'}</strong><p role="status" aria-live="polite">{message || 'La imagen incluye solo la plantilla, sin controles.'}</p></div><div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={() => downloadQuotationFile(preparedFile)}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !calculation.canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div></footer>
       {dialog === 'header' && <HeaderEditor quotation={quotation} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
-      {dialog === 'catalog' && <CatalogEditor catalog={workspace.catalog} onClose={() => setDialog(null)} onSave={(catalog) => commitWorkspace({ ...workspace, catalog })} />}
+      {dialog === 'catalog' && <CatalogEditor catalog={workspace.catalog} saveStatus={catalogSaveStatus} saveError={storageError} onClose={() => setDialog(null)} onSave={(catalog) => commitWorkspace({ ...workspace, catalog })} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={workspace.catalog} onClose={() => setEditingRowId(null)} onSave={(row) => { if (updateQuotation({ ...quotation, rows: quotation.rows.map((entry) => entry.id === row.id ? row : entry) })) setEditingRowId(null) }} onRemove={() => { if (updateQuotation({ ...quotation, rows: quotation.rows.filter((entry) => entry.id !== editingRow.id) })) setEditingRowId(null) }} />}
     </div>
   )

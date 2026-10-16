@@ -14,7 +14,7 @@ also part of hands-on acceptance.
 - Optional personal catalogue; every selected description and price remains
   editable. A field may be left blank without requiring a catalogue selection.
 - Explicit quantity, unit price, pending price, and included-without-charge state.
-- Automatic totals in one currency per quotation, ARS or USD.
+- Automatic ARS and USD totals using a manually entered rate per quotation.
 - Local drafts, duplicate, reopen, and explicit JSON backup/import.
 - PNG image with only the graphic quotation, plus browser file sharing or download.
 
@@ -33,8 +33,12 @@ official yellow #FFDA00. The approved public contact footer is 11 7358-1958 and
 
 PNG width is 1080 pixels. Height grows with content; long descriptions wrap and
 blank details do not reserve a line. Controls, pending validation, and editing
-hints never appear in the image. The implementation uses local system fonts as a
-fallback; the exact reference typography has not been confirmed or bundled.
+hints never appear in the image. The approved brand guide provides Pliant Bold
+Expanded (700, real width axis 125%) for titles and totals, and Barlow Regular
+(400) for body text. A licensed static Pliant instance at those exact axes and
+the original Barlow Regular are self-hosted; this does not
+identify the condensed font in older private quotation examples. PNG preparation
+requires both actual faces to load and reports an error when they are unavailable.
 The source quotation examples remain private and are not copied into the repo.
 The displayed/exported title preserves the entered text. No decorative plus sign
 is inserted; a plus sign explicitly typed as part of the title is retained.
@@ -48,8 +52,16 @@ is inserted; a plus sign explicitly typed as part of the title is retained.
 - Represent prices and totals as safe integer cents. Compute quantity times
   unit price using integer arithmetic, round each line half up to the nearest
   cent, then sum the rounded complete lines.
-- One explicit currency applies to every row of a quotation. There is no currency
-  conversion. Changing currency requires confirmation and does not convert values.
+- One explicit currency applies to every row of a quotation. Changing that base
+  currency requires confirmation and preserves the entered row values.
+- The user enters how many ARS equal one USD. Accept Argentine separators, a
+  positive rate, and up to six decimal places. Store the raw rate in each draft;
+  no online lookup, automatic refresh, or global rate changes existing quotations.
+- Sum the rounded base lines first. Convert that final total once using exact
+  integer/rational arithmetic, rounding the equivalent half up to cents. Preserve
+  the base total exactly. Both ARS and USD totals and the explicit rate appear in
+  the preview and exported image. An absent, invalid, zero, or overflowing rate
+  blocks image preparation; legacy drafts remain editable without an invented rate.
 - A blank amount is pending, not zero. An explicit zero is valid. Included without
   charge is a separate state with a zero subtotal, labelled as included.
 - Completely empty rows are omitted from export. A concept with a pending price,
@@ -96,6 +108,22 @@ commit supplier lists, discounts, internal costs, customers, real quotations, or
 secrets. Deployment protection and access for intended users must be checked
 separately; the application does not add a frontend PIN or claim one is security.
 
+## Optional private catalogue
+
+The initial catalogue remains empty in the public application. A private JSON
+file can be imported after a summary and explicit confirmation. The catalogue
+searches SKU, brand, and name and limits rendered results for mobile use. Import
+matches normalized supplier and SKU, preserves approved manual prices, and does
+not change quotation snapshots. Conflicts and records without a complete key are
+reported before applying changes. See `CATALOG-IMPORT.md` for the schema.
+
+Imported products start without an approved sale price. Supplier cost, historical
+list/sale reference, missing currency, zero, and unknown dates remain distinct.
+Only an explicitly confirmed list/sale reference in the quotation currency with
+at most two decimals may be copied into an editable price. Costs and unknown
+roles/currencies require manual pricing. Provenance remains in the private
+catalogue UI and backup, never in customer-facing descriptions or images.
+
 ## Image download and sharing
 
 Complete the quotation, prepare a PNG, then choose download or share. The share
@@ -113,7 +141,7 @@ Browser emulation is useful evidence but does not replace physical Android and
 iPhone checks for PNG saving, Web Share, WhatsApp, and deployment access.
 
 Remaining product decisions are shared versus individual storage, backup
-retention, exact licensed typography, and physical-device acceptance. A shared
+retention, approval of historical reference use, and physical-device acceptance. A shared
 backend, accounts, CRM, inventory, invoicing, AI, and automatic commercial rules
 remain outside V1. Publishing requires the final authorized review; local checks
 do not establish remote publication or production deployment.

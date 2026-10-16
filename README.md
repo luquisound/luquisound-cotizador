@@ -1,7 +1,7 @@
 # Luquisound Cotizador
 
 Mobile-first graphic quotation editor for Luquisound. V1 provides manual concepts
-and editable prices, an optional personal catalogue, automatic totals, local
+and editable prices, an optional personal catalogue, automatic ARS/USD totals, local
 drafts and JSON backups, plus PNG download and file sharing.
 
 The app starts with a blank quotation and an empty catalogue. No customer data,
@@ -48,6 +48,9 @@ npm run preview
 - `test`: Node.js tests for calculations, persistence, and export/share helpers.
 - `build`: TypeScript checks followed by a Vite production build in `dist/`.
 - `preview`: Local preview of the existing production build.
+
+GitHub Actions runs the same checks and a clean `npm ci` on pushes to `main` and
+pull requests. The workflow uses read-only repository permissions.
 
 Run `build` before `preview`. The preview server is for local verification.
 
@@ -104,10 +107,26 @@ Concurrent changes from another tab pause saving until the user resolves them.
 Catalogue selections copy values into a quotation; later catalogue edits preserve
 the quotation's stored prices.
 
+Import a private catalogue JSON from "Mi catalogo" after reviewing its summary.
+Search by SKU, brand, or name. New imported products have no approved sale price;
+historical references remain separate. Reimporting matches supplier and SKU,
+preserving existing manually approved prices and quotation snapshots. See the
+[private import contract](docs/CATALOG-IMPORT.md). Keep catalogue files private.
+
+Each quotation has one currency for its concepts and a manually entered value of
+one USD in ARS. Both totals and that rate appear in the preview and PNG. The rate
+is stored with the draft; it is never fetched or automatically refreshed. Earlier
+drafts without a rate remain editable and require one before image preparation.
+Changing the concepts' currency preserves the entered prices after confirmation.
+
 Prepare an image after completing pending rows, then download or share it. File
 sharing depends on browser support and requires the user's action. Unsupported
 browsers download the PNG; cancelling sharing does not send or download anything.
 The app cannot confirm delivery to a recipient.
+
+The approved Pliant Bold Expanded and Barlow Regular fonts are self-hosted with
+their OFL licenses. PNG preparation loads both faces explicitly and reports a
+failure instead of exporting fallback typography. See [font provenance](public/fonts/README.md).
 
 ## GitHub and Vercel
 

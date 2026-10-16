@@ -9,7 +9,7 @@
   min-width: 0;
   margin-inline: auto;
   color: var(--quotation-black);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Luquisound Barlow", Arial, sans-serif;
 }
 
 .quotation-preview *,
@@ -84,7 +84,7 @@
   margin: 0;
   color: #d1d1d1;
   font-size: clamp(0.5rem, 1.8519cqw, 1.25rem);
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.25;
   letter-spacing: 0.04em;
   text-align: right;
@@ -106,11 +106,12 @@
   display: flex;
   align-items: baseline;
   gap: 1.1111cqw;
-  font-family: Impact, "Arial Narrow", Arial, sans-serif;
+  font-family: "Luquisound Pliant Static Expanded", Arial, sans-serif;
   font-size: clamp(1.625rem, 7.7778cqw, 5.25rem);
-  font-weight: 400;
+  font-weight: 700;
+  font-stretch: 125%;
   line-height: 1.08;
-  letter-spacing: 0.005em;
+  letter-spacing: normal;
   overflow-wrap: anywhere;
 }
 
@@ -121,8 +122,8 @@
 .quotation-title-plus {
   flex-shrink: 0;
   color: var(--quotation-yellow);
-  font-family: Arial, Helvetica, sans-serif;
-  font-weight: 700;
+  font-family: "Luquisound Barlow", Arial, sans-serif;
+  font-weight: 400;
 }
 
 .quotation-title-placeholder {
@@ -152,7 +153,7 @@
   margin: 0 0 1.4815cqw;
   color: var(--quotation-muted);
   font-size: clamp(0.6875rem, 2.2222cqw, 1.5rem);
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1.35;
   letter-spacing: 0.045em;
   overflow-wrap: anywhere;
@@ -185,7 +186,7 @@
 
 .quotation-row-concept {
   font-size: clamp(0.875rem, 3.2407cqw, 2.1875rem);
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.25;
 }
 
@@ -206,7 +207,7 @@
   max-width: 40cqw;
   color: var(--quotation-black);
   font-size: clamp(0.875rem, 3.5185cqw, 2.375rem);
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.25;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -226,7 +227,7 @@
   min-height: 44px;
   padding: 8px 0;
   color: #5c5c5c;
-  font: 500 clamp(0.8125rem, 1.8519cqw, 1.25rem)/1.3 system-ui, sans-serif;
+  font: 400 clamp(0.8125rem, 1.8519cqw, 1.25rem)/1.3 "Luquisound Barlow", Arial, sans-serif;
 }
 
 .quotation-empty-row {
@@ -261,7 +262,7 @@
 
 .quotation-notes-label {
   font-size: 0.85em;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.045em;
 }
 
@@ -285,14 +286,14 @@
 
 .quotation-total-label {
   font-size: clamp(0.8125rem, 2.7778cqw, 1.875rem);
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1.2;
 }
 
 .quotation-total-currency {
   color: var(--quotation-muted);
   font-size: clamp(0.6875rem, 1.8519cqw, 1.25rem);
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.3;
 }
 
@@ -305,9 +306,10 @@
 }
 
 .quotation-total-amount {
-  font-family: Impact, "Arial Narrow", Arial, sans-serif;
+  font-family: "Luquisound Pliant Static Expanded", Arial, sans-serif;
   font-size: clamp(1.875rem, 10.3704cqw, 7rem);
-  font-weight: 400;
+  font-weight: 700;
+  font-stretch: 125%;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -315,9 +317,10 @@
 
 .quotation-total-pending {
   color: #805200;
-  font-family: Impact, "Arial Narrow", Arial, sans-serif;
+  font-family: "Luquisound Pliant Static Expanded", Arial, sans-serif;
   font-size: clamp(1.625rem, 6.4815cqw, 4.375rem);
-  font-weight: 400;
+  font-weight: 700;
+  font-stretch: 125%;
   line-height: 1.15;
 }
 
@@ -346,7 +349,7 @@
   align-items: center;
   gap: 1.1111cqw;
   font-size: clamp(0.75rem, 2.7778cqw, 1.875rem);
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.3;
   white-space: nowrap;
 }

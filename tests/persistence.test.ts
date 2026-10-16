@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { duplicateQuotation } from '../src/features/quotation/model.ts'
+import { createQuotation, duplicateQuotation, hasQuotationContent, prepareWorkspaceForStorage } from '../src/features/quotation/model.ts'
 import type { CatalogItem, Quotation, QuotationRow, Workspace } from '../src/features/quotation/model.ts'
 import { loadWorkspace, parseWorkspace, saveWorkspace, serializeWorkspace, STORAGE_KEY } from '../src/features/quotation/persistence.ts'
 import type { StorageAdapter } from '../src/features/quotation/persistence.ts'
@@ -23,6 +23,179 @@ function createFixture(): Workspace {
     catalog: [{ id: 'catalog-1', section: 'equipment', concept: 'Equipo de prueba', detail: 'Descripción actualizada', currency: 'ARS', unitPrice: '91,25' }],
   }
 }
+
+function createMetadataFixture(): Workspace {
+  const workspace = createFixture()
+  workspace.quotations[0]!.exchangeRate = '1.234,567890'
+  workspace.catalog[0] = {
+    ...workspace.catalog[0]!, unitPrice: '0', supplier: ' Synthetic supplier ', sku: '0007-A',
+    brand: 'Synthetic brand', category: 'Synthetic category', unit: 'pair', presentation: 'Two test units',
+    source: { document: 'synthetic-current.pdf', page: 3, sheet: ' Example ', row: 17, date: null },
+    referencePrices: [
+      { amount: '0', currency: 'USD', role: 'cost', date: '2024-02', historical: true,
+        source: { document: 'synthetic-history.xlsx', sheet: 'Original', row: 12, date: '2024-02-29' } },
+      { amount: null, currency: null, role: 'unknown', date: null, historical: true },
+      { amount: '123.450000', currency: 'ARS', role: 'list', date: '2025-11-30', historical: true,
+        source: { document: 'synthetic-other.pdf', page: 2, date: '2025-11' } },
+      { amount: '2', currency: 'USD', role: 'sale', date: '2026-01', historical: true },
+    ],
+  }
+  return workspace
+}
+
+test('new quotations have an empty exchange rate while legacy backups keep the field absent', () => {
+  assert.equal(createQuotation().exchangeRate, '')
+  const legacy = createFixture()
+  assert.equal(Object.hasOwn(legacy.quotations[0]!, 'exchangeRate'), false)
+  const restored = parseWorkspace(serializeWorkspace(legacy))
+  assert.deepEqual(restored, legacy)
+  assert.equal(Object.hasOwn(restored.quotations[0]!, 'exchangeRate'), false)
+  assert.equal(Object.hasOwn(restored.catalog[0]!, 'source'), false)
+  assert.equal(Object.hasOwn(restored.catalog[0]!, 'referencePrices'), false)
+})
+
+test('raw exchange-rate draft strings survive backup, storage and duplication without coercion', () => {
+  for (const exchangeRate of ['', '0', '1.234,567890', 'tasa pendiente', ' 1,25 ']) {
+    const workspace = createFixture()
+    workspace.quotations[0]!.exchangeRate = exchangeRate
+    assert.deepEqual(parseWorkspace(serializeWorkspace(workspace)), workspace)
+    const storage = createMemoryStorage()
+    assert.equal(saveWorkspace(storage, workspace).ok, true)
+    assert.equal(loadWorkspace(storage).workspace.quotations[0]!.exchangeRate, exchangeRate)
+    assert.equal(duplicateQuotation(workspace.quotations[0]!).exchangeRate, exchangeRate)
+  }
+  const quotation = createQuotation()
+  quotation.exchangeRate = '0'
+  assert.equal(hasQuotationContent(quotation), true)
+  const workspace: Workspace = { version: 1, activeQuotationId: quotation.id, quotations: [quotation], catalog: [] }
+  assert.deepEqual(prepareWorkspaceForStorage(workspace, new Set()), workspace)
+})
+
+test('exchange-rate input must be an optional bounded string', () => {
+  const workspace = createFixture()
+  for (const exchangeRate of [null, 0, {}, [], '1'.repeat(65)]) {
+    rejectBackup({ ...workspace, quotations: [{ ...workspace.quotations[0]!, exchangeRate }] })
+  }
+})
+
+test('catalogue metadata and independent historical price sources roundtrip exactly', () => {
+  const workspace = createMetadataFixture()
+  const original = structuredClone(workspace)
+  const restored = parseWorkspace(serializeWorkspace(workspace))
+  assert.deepEqual(restored, original)
+  assert.notEqual(restored.catalog[0]!.source, workspace.catalog[0]!.source)
+  assert.notEqual(restored.catalog[0]!.referencePrices, workspace.catalog[0]!.referencePrices)
+  assert.notEqual(restored.catalog[0]!.referencePrices![0]!.source, workspace.catalog[0]!.referencePrices![0]!.source)
+  assert.equal(restored.catalog[0]!.referencePrices![1]!.source, undefined)
+  assert.equal(restored.catalog[0]!.referencePrices![1]!.amount, null)
+  assert.equal(restored.catalog[0]!.referencePrices![1]!.currency, null)
+  assert.equal(restored.catalog[0]!.referencePrices![1]!.date, null)
+  assert.equal(restored.catalog[0]!.referencePrices![0]!.amount, '0')
+  assert.equal(restored.catalog[0]!.unitPrice, '0')
+  restored.catalog[0]!.source!.document = 'synthetic-edited.pdf'
+  restored.catalog[0]!.referencePrices![0]!.source!.sheet = 'Edited reference'
+  assert.deepEqual(workspace, original)
+  const storage = createMemoryStorage()
+  assert.equal(saveWorkspace(storage, workspace).ok, true)
+  assert.deepEqual(loadWorkspace(storage).workspace, original)
+})
+
+test('restoring old historical prices never assigns the current item source retroactively', () => {
+  const workspace = createMetadataFixture()
+  const oldReference = workspace.catalog[0]!.referencePrices![1]!
+  assert.equal(Object.hasOwn(oldReference, 'source'), false)
+  let restored = workspace
+  for (let index = 0; index < 3; index += 1) restored = parseWorkspace(serializeWorkspace(restored))
+  assert.deepEqual(restored.catalog[0]!.source, workspace.catalog[0]!.source)
+  assert.deepEqual(restored.catalog[0]!.referencePrices![0]!.source, workspace.catalog[0]!.referencePrices![0]!.source)
+  assert.deepEqual(restored.catalog[0]!.referencePrices![1], oldReference)
+  assert.equal(Object.hasOwn(restored.catalog[0]!.referencePrices![1]!, 'source'), false)
+})
+
+test('source and historical reference whitelists discard unknown properties independently', () => {
+  const workspace = createMetadataFixture()
+  const item = workspace.catalog[0]!
+  const expanded = {
+    ...workspace,
+    catalog: [{
+      ...item, unrecognized: 'discard', source: { ...item.source!, unrecognized: 'discard' },
+      referencePrices: item.referencePrices!.map((reference) => ({
+        ...reference, unrecognized: 'discard',
+        ...(reference.source === undefined ? {} : { source: { ...reference.source, unrecognized: 'discard' } }),
+      })),
+    }],
+  }
+  assert.deepEqual(parseWorkspace(JSON.stringify(expanded)), workspace)
+  assert.deepEqual(JSON.parse(serializeWorkspace(expanded)), workspace)
+})
+
+test('catalogue metadata text fields remain raw bounded strings', () => {
+  const workspace = createMetadataFixture()
+  const item = workspace.catalog[0]!
+  for (const [field, limit] of [
+    ['supplier', 200], ['sku', 128], ['brand', 200], ['category', 200], ['unit', 200], ['presentation', 200],
+  ] as const) {
+    for (const invalid of [null, 0, {}, 'X'.repeat(limit + 1)]) {
+      rejectBackup({ ...workspace, catalog: [{ ...item, [field]: invalid }] })
+    }
+    const valid = { ...workspace, catalog: [{ ...item, [field]: 'X'.repeat(limit) }] }
+    assert.deepEqual(parseWorkspace(serializeWorkspace(valid)), valid)
+  }
+})
+
+test('item and individual reference sources require valid dates, document names and locations', () => {
+  const workspace = createMetadataFixture()
+  const item = workspace.catalog[0]!
+  const reference = item.referencePrices![0]!
+  const invalidSources: unknown[] = [
+    null, [], {}, { document: '', date: null }, { document: '   ', date: null },
+    { document: 'X'.repeat(501), date: null }, { document: 'synthetic.pdf' },
+    { document: 'synthetic.xlsx', sheet: null, date: null },
+    { document: 'synthetic.xlsx', sheet: 'X'.repeat(129), date: null },
+  ]
+  for (const field of ['page', 'row']) {
+    for (const position of [null, '1', 0, -1, 1.5, 1000001]) {
+      invalidSources.push({ document: 'synthetic.pdf', [field]: position, date: null })
+    }
+  }
+  for (const date of [undefined, '', 20240101, '2024-13', '2024-00', '2024-02-30', '2023-02-29', '2024-01-01T00:00:00Z']) {
+    invalidSources.push({ document: 'synthetic.pdf', date })
+  }
+  for (const source of invalidSources) {
+    rejectBackup({ ...workspace, catalog: [{ ...item, source }] })
+    rejectBackup({ ...workspace, catalog: [{ ...item, referencePrices: [{ ...reference, source }] }] })
+  }
+  const source = { document: 'synthetic.xlsx', page: 1000000, row: 1, sheet: '', date: '2024-02-29' }
+  const valid = { ...workspace, catalog: [{ ...item, source, referencePrices: [{ ...reference, source }] }] }
+  const restored = parseWorkspace(serializeWorkspace(valid))
+  assert.deepEqual(restored, valid)
+  assert.notEqual(restored.catalog[0]!.source, restored.catalog[0]!.referencePrices![0]!.source)
+})
+
+test('historical price references validate exact amounts, nullable currency/date, roles and historical true', () => {
+  const workspace = createMetadataFixture()
+  const item = workspace.catalog[0]!
+  const reference = item.referencePrices![0]!
+  const invalidChanges: Record<string, unknown>[] = [
+    ...[undefined, '', 0, '-1', '+1', '01', '1,25', '1.000,00', 'NaN', 'Infinity', '1e2', '1.1234567', '1000000000000000000'].map((amount) => ({ amount })),
+    ...[undefined, '', 'EUR', 0].map((currency) => ({ currency })),
+    ...[undefined, '', 'retail', null].map((role) => ({ role })),
+    ...[undefined, false, 'true', 1].map((historical) => ({ historical })),
+    ...[undefined, '', 0, '2024-13', '2024-02-30', '2023-02-29', '2024-01-01T00:00:00Z'].map((date) => ({ date })),
+  ]
+  for (const changes of invalidChanges) {
+    rejectBackup({ ...workspace, catalog: [{ ...item, referencePrices: [{ ...reference, ...changes }] }] })
+  }
+  for (const amount of [null, '0', '0.000001', '999999999999999999.999999']) {
+    const valid = { ...workspace, catalog: [{ ...item, referencePrices: [{ ...reference, amount, currency: null, date: null }] }] }
+    assert.deepEqual(parseWorkspace(serializeWorkspace(valid)), valid)
+  }
+  for (const referencePrices of [null, {}, [null], Array.from({ length: 51 }, () => reference)]) {
+    rejectBackup({ ...workspace, catalog: [{ ...item, referencePrices }] })
+  }
+  const valid = { ...workspace, catalog: [{ ...item, referencePrices: Array.from({ length: 50 }, () => reference) }] }
+  assert.equal(parseWorkspace(serializeWorkspace(valid)).catalog[0]!.referencePrices!.length, 50)
+})
 
 test('duplicating a maximum-length imported title remains recoverable', () => {
   const workspace = createFixture()

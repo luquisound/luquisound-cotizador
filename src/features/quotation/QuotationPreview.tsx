@@ -8,6 +8,7 @@ import {
 import type { CalculatedRow } from './calculation.ts'
 import type { Currency, Quotation, QuotationRow, RowSection } from './model.ts'
 import './preview.css'
+import './exchange-ui.css'
 
 export interface QuotationPreviewProps {
   quotation: Quotation
@@ -179,23 +180,24 @@ export function QuotationPreview({
           )}
         </div>
 
-        <div className="quotation-total" aria-live="polite" aria-atomic="true">
-          <div className="quotation-total-description">
-            <span className="quotation-total-label">TOTAL</span>
-            <span className="quotation-total-currency">{quotation.currency}</span>
-          </div>
-          <div className="quotation-total-value">
-            <span className={calculation.canExport ? 'quotation-total-amount' : 'quotation-total-pending'}>
-              {calculation.canExport
-                ? formatMoney(calculation.totalCents, quotation.currency).slice(quotation.currency.length + 1)
-                : 'Pendiente'}
-            </span>
-            {!calculation.canExport && (
-              <span className="quotation-total-hint">
-                {calculation.rows.length ? 'Completá los datos pendientes.' : 'Agregá un concepto para calcular el total.'}
-              </span>
-            )}
-          </div>
+        <div className="quotation-total quotation-total-dual" aria-live="polite" aria-atomic="true">
+          <span className="quotation-total-label">TOTAL</span>
+          {(['ARS', 'USD'] as const).map((currency) => {
+            const cents = !calculation.itemsComplete ? null
+              : calculation.conversion.ok ? currency === 'ARS' ? calculation.conversion.arsCents : calculation.conversion.usdCents
+                : quotation.currency === currency ? calculation.totalCents : null
+            return (
+              <div className="quotation-converted-total" key={currency}>
+                <span className="quotation-total-currency">{currency}</span>
+                <span className={cents === null ? 'quotation-total-pending' : 'quotation-total-amount'}>
+                  {cents === null ? 'Pendiente' : formatMoney(cents, currency).slice(currency.length + 1)}
+                </span>
+              </div>
+            )
+          })}
+          <button type="button" className="quotation-rate" onClick={onEditHeader} aria-label="Editar valor de 1 USD en pesos">
+            {calculation.conversion.ok ? calculation.conversion.rateLabel : 'Cargar valor USD / peso'}
+          </button>
         </div>
 
         <footer className="quotation-footer">

@@ -1,13 +1,12 @@
 import { calculateQuotation, formatMoney, parseMoney, parseQuantity } from './calculation.ts'
 import type { Quotation, QuotationRow, RowSection } from './model.ts'
+import { BODY_FONT, HEADING_FONT, loadQuotationFonts } from './typography.ts'
 
 const WIDTH = 1080
 const MARGIN = 64
 const CONTENT_WIDTH = WIDTH - MARGIN * 2
 const YELLOW = '#FFDA00'
 const BLACK = '#141414'
-const FONT = 'Impact, "Arial Narrow", Arial, sans-serif'
-const BODY_FONT = 'Arial, sans-serif'
 const FOOTER_HEIGHT = 84
 const MAX_CANVAS_PIXELS = 16_000_000
 
@@ -76,8 +75,8 @@ export function quotationFileName(quotation: Pick<Quotation, 'title'>): string {
   return `luquisound-${title || 'presupuesto'}.png`
 }
 
-function setFont(context: CanvasRenderingContext2D, size: number, bold = false, family = FONT): void {
-  context.font = `${bold ? '700 ' : ''}${size}px ${family}`
+function setFont(context: CanvasRenderingContext2D, size: number, family = HEADING_FONT): void {
+  context.font = `${family === HEADING_FONT ? 700 : 400} ${size}px "${family}"`
   context.textBaseline = 'top'
 }
 
@@ -116,15 +115,15 @@ function layoutRow(
   context: CanvasRenderingContext2D, result: CalculatedRow, currency: Quotation['currency'],
   conceptWidth: number, amountWidth: number,
 ): RowLayout {
-  setFont(context, 36, true, BODY_FONT)
+  setFont(context, 36, BODY_FONT)
   const conceptLines = measureLines(context, result.row.concept.trim(), conceptWidth)
-  setFont(context, 26, false, BODY_FONT)
+  setFont(context, 26, BODY_FONT)
   const detailLines = result.row.detail.trim()
     ? measureLines(context, result.row.detail.trim(), conceptWidth) : []
-  setFont(context, 24, false, BODY_FONT)
+  setFont(context, 24, BODY_FONT)
   const quantity = quantityLabel(result.row, currency)
   const quantityLines = quantity ? measureLines(context, quantity, conceptWidth) : []
-  setFont(context, 38, true, BODY_FONT)
+  setFont(context, 38, BODY_FONT)
   const amountLines = measureLines(context, amountLabel(result, currency), amountWidth)
   const textHeight = conceptLines.length * 44
     + (detailLines.length ? 8 + detailLines.length * 32 : 0)
@@ -182,7 +181,7 @@ function drawContactIcon(context: CanvasRenderingContext2D, x: number, y: number
 
 export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSource): HTMLCanvasElement {
   const calculation = calculateQuotation(quotation)
-  if (!calculation.canExport) {
+  if (!calculation.canExport || !calculation.conversion.ok) {
     throw new Error('Completá los campos pendientes antes de preparar la imagen.')
   }
   const canvas = document.createElement('canvas')
@@ -191,12 +190,12 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
 
   setFont(context, 84)
   const titleLines = measureLines(context, quotation.title.trim(), CONTENT_WIDTH)
-  setFont(context, 30, false, BODY_FONT)
+  setFont(context, 30, BODY_FONT)
   const subtitleLines = quotation.subtitle.trim()
     ? measureLines(context, quotation.subtitle.trim(), CONTENT_WIDTH) : []
   const subtitleY = 174 + titleLines.length * 92 + 12
   const headerHeight = Math.max(348, subtitleY + subtitleLines.length * 38 + 28)
-  setFont(context, 38, true, BODY_FONT)
+  setFont(context, 38, BODY_FONT)
   const amountWidth = Math.min(450, Math.max(260, ...calculation.rows.map(
     (row) => Math.ceil(context.measureText(amountLabel(row, quotation.currency)).width),
   )))
@@ -206,7 +205,7 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
     rows: calculation.rows.filter((result) => result.row.section === section)
       .map((result) => layoutRow(context, result, quotation.currency, conceptWidth, amountWidth)),
   })).filter((section) => section.rows.length > 0)
-  setFont(context, 30, false, BODY_FONT)
+  setFont(context, 30, BODY_FONT)
   const noteLines = quotation.notes.trim()
     ? measureLines(context, quotation.notes.trim(), CONTENT_WIDTH) : []
   const notesHeight = noteLines.length ? 68 + noteLines.length * 38 : 0
@@ -214,10 +213,17 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
     (height, section) => height + 60 + section.rows.reduce((sum, row) => sum + row.height, 0) + 36,
     0,
   ) + notesHeight + 12
-  setFont(context, 112)
-  const totalAmount = formatMoney(calculation.totalCents, quotation.currency).slice(quotation.currency.length + 1)
-  const totalLines = measureLines(context, totalAmount, CONTENT_WIDTH - 152)
-  const totalHeight = Math.max(184, totalLines.length * 118 + 48)
+  const conversion = calculation.conversion
+  setFont(context, 80)
+  const totalRows = (['ARS', 'USD'] as const).map((currency) => {
+    const cents = currency === 'ARS' ? conversion.arsCents : conversion.usdCents
+    const amount = formatMoney(cents, currency).slice(currency.length + 1)
+    const lines = measureLines(context, amount, CONTENT_WIDTH - 152)
+    return { currency, lines, height: Math.max(100, lines.length * 90 + 20) }
+  })
+  setFont(context, 24, BODY_FONT)
+  const rateLines = measureLines(context, calculation.conversion.rateLabel, CONTENT_WIDTH)
+  const totalHeight = 76 + totalRows.reduce((sum, row) => sum + row.height, 0) + 18 + rateLines.length * 30 + 28
   const bodyHeight = Math.max(contentHeight, 1320 - headerHeight - 5 - totalHeight - FOOTER_HEIGHT)
   const height = Math.ceil(headerHeight + 5 + bodyHeight + totalHeight + FOOTER_HEIGHT)
   if (WIDTH * height > MAX_CANVAS_PIXELS) {
@@ -233,14 +239,14 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   context.drawImage(logo, MARGIN, 40, 670, 670 * 393.05 / 3469.76)
   context.textAlign = 'right'
   context.fillStyle = '#A3A3A3'
-  setFont(context, 20, true, BODY_FONT)
+  setFont(context, 20, BODY_FONT)
   drawLines(context, ['PRESUPUESTO', 'DE AUDIO'], WIDTH - MARGIN, 45, 25)
   context.textAlign = 'left'
   setFont(context, 84)
   context.fillStyle = '#FFFFFF'
   drawLines(context, titleLines, MARGIN, 174, 92)
   context.fillStyle = '#B3B3B3'
-  setFont(context, 30, false, BODY_FONT)
+  setFont(context, 30, BODY_FONT)
   drawLines(context, subtitleLines, MARGIN, subtitleY, 38)
   context.fillStyle = YELLOW
   context.fillRect(0, headerHeight, WIDTH, 5)
@@ -248,30 +254,30 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   let y = headerHeight + 5 + 44
   for (const section of sections) {
     context.fillStyle = '#696969'
-    setFont(context, 24, true, BODY_FONT)
+    setFont(context, 24, BODY_FONT)
     context.fillText(section.section === 'equipment' ? 'EQUIPAMIENTO' : 'INSTALACIÓN Y ACCESORIOS', MARGIN, y)
     y += 60
     for (const row of section.rows) {
       const rowY = y + 22
       context.fillStyle = BLACK
-      setFont(context, 36, true, BODY_FONT)
+      setFont(context, 36, BODY_FONT)
       drawLines(context, row.conceptLines, MARGIN, rowY, 44)
       let detailY = rowY + row.conceptLines.length * 44
       if (row.detailLines.length) {
         detailY += 8
         context.fillStyle = '#565656'
-        setFont(context, 26, false, BODY_FONT)
+        setFont(context, 26, BODY_FONT)
         drawLines(context, row.detailLines, MARGIN, detailY, 32)
         detailY += row.detailLines.length * 32
       }
       if (row.quantityLines.length) {
         context.fillStyle = '#565656'
-        setFont(context, 24, false, BODY_FONT)
+        setFont(context, 24, BODY_FONT)
         drawLines(context, row.quantityLines, MARGIN, detailY + 8, 30)
       }
       context.fillStyle = BLACK
       context.textAlign = 'right'
-      setFont(context, 38, true, BODY_FONT)
+      setFont(context, 38, BODY_FONT)
       drawLines(context, row.amountLines, WIDTH - MARGIN, y + (row.height - row.amountLines.length * 46) / 2, 46)
       context.textAlign = 'left'
       y += row.height
@@ -282,10 +288,10 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   }
   if (noteLines.length) {
     context.fillStyle = '#696969'
-    setFont(context, 24, true, BODY_FONT)
+    setFont(context, 24, BODY_FONT)
     context.fillText('OBSERVACIONES', MARGIN, y)
     context.fillStyle = '#454545'
-    setFont(context, 30, false, BODY_FONT)
+    setFont(context, 30, BODY_FONT)
     drawLines(context, noteLines, MARGIN, y + 48, 38)
   }
 
@@ -293,22 +299,28 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   context.fillStyle = YELLOW
   context.fillRect(MARGIN, totalY, CONTENT_WIDTH, 2)
   context.fillStyle = BLACK
-  const totalLabelY = totalY + (totalHeight - 64) / 2
-  setFont(context, 30, true, BODY_FONT)
-  context.fillText('TOTAL', MARGIN, totalLabelY)
+  setFont(context, 30, BODY_FONT)
+  context.fillText('TOTAL', MARGIN, totalY + 28)
+  let totalRowY = totalY + 76
+  for (const row of totalRows) {
+    context.fillStyle = '#626262'
+    setFont(context, 30, BODY_FONT)
+    context.fillText(row.currency, MARGIN, totalRowY + (row.height - 36) / 2)
+    context.fillStyle = BLACK
+    context.textAlign = 'right'
+    setFont(context, 80)
+    drawLines(context, row.lines, WIDTH - MARGIN, totalRowY + (row.height - row.lines.length * 90) / 2, 90)
+    context.textAlign = 'left'
+    totalRowY += row.height
+  }
   context.fillStyle = '#626262'
-  setFont(context, 20, true, BODY_FONT)
-  context.fillText(quotation.currency, MARGIN, totalLabelY + 38)
-  context.fillStyle = BLACK
-  context.textAlign = 'right'
-  setFont(context, 112)
-  drawLines(context, totalLines, WIDTH - MARGIN, totalY + (totalHeight - totalLines.length * 118) / 2, 118)
-  context.textAlign = 'left'
+  setFont(context, 24, BODY_FONT)
+  drawLines(context, rateLines, MARGIN, totalRowY + 18, 30)
 
   const footerY = height - FOOTER_HEIGHT
   context.fillStyle = BLACK
   context.fillRect(0, footerY, WIDTH, FOOTER_HEIGHT)
-  setFont(context, 30, false, BODY_FONT)
+  setFont(context, 30, BODY_FONT)
   const contacts = [
     { text: '11 7358-1958', instagram: false },
     { text: '@luquisound.ok', instagram: true },
@@ -338,7 +350,7 @@ export async function createQuotationFile(quotation: Quotation): Promise<File> {
     image.onerror = () => reject(new Error('No se pudo cargar el logo. Intentá preparar la imagen nuevamente.'))
     image.src = '/brand/luquisound-horizontal.svg'
   })
-  await document.fonts.ready
+  await loadQuotationFonts()
   const canvas = renderQuotationCanvas(quotation, logo)
   try {
     const blob = await new Promise<Blob>((resolve, reject) => {
