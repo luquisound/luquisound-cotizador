@@ -49,6 +49,18 @@ and category may be omitted and default to empty strings. Optional `unit` and
 or the price basis. Strings are trimmed, not converted to numbers. In particular,
 SKU leading zeroes and punctuation remain intact.
 
+Both catalogue views derive category filters from imported `category` values and
+combine the selected category with text search. Labels normalize surrounding or
+repeated whitespace and keys ignore case; stored metadata is preserved. Empty or
+missing categories have a separate "Sin clasificar" option. "Todas" shows every
+available category. These controls never require a catalogue choice for manual
+quotation concepts and do not introduce a hardcoded commercial taxonomy.
+
+A catalogue item's `section` is a suggestion for ordering choices. Products can
+be chosen in either quotation section; choosing a cable or accessory preserves
+the row's selected section. Approved prices still require the quotation currency;
+products without an approved price remain available in either currency.
+
 `source` may be omitted when provenance is unavailable. If supplied, it requires
 a nonempty document name and an explicit `date`: a valid month in `YYYY-MM`
 form, a valid calendar date in `YYYY-MM-DD` form, or `null` when unknown. Optional

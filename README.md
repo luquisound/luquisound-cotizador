@@ -108,7 +108,10 @@ Catalogue selections copy values into a quotation; later catalogue edits preserv
 the quotation's stored prices.
 
 Import a private catalogue JSON from "Mi catalogo" after reviewing its summary.
-Search by SKU, brand, or name. New imported products have no approved sale price;
+Filter by product category and search by SKU, brand, or name at the same time.
+Categories come from imported data; "Todas" clears the filter and "Sin clasificar"
+groups entries without a category. Manual concepts remain available.
+New imported products have no approved sale price;
 historical references remain separate. Reimporting matches supplier and SKU,
 preserving existing manually approved prices and quotation snapshots. See the
 [private import contract](docs/CATALOG-IMPORT.md). Keep catalogue files private.

@@ -112,10 +112,18 @@ separately; the application does not add a frontend PIN or claim one is security
 
 The initial catalogue remains empty in the public application. A private JSON
 file can be imported after a summary and explicit confirmation. The catalogue
-searches SKU, brand, and name and limits rendered results for mobile use. Import
+combines a category filter with SKU, brand, and name search and limits rendered
+results for mobile use. Both the catalogue editor and quotation product picker
+derive category options from their available data. "Todas" clears the filter;
+missing categories appear as "Sin clasificar". No provider taxonomy or automatic
+category assignment is bundled. Manual concepts remain independent. Import
 matches normalized supplier and SKU, preserves approved manual prices, and does
 not change quotation snapshots. Conflicts and records without a complete key are
 reported before applying changes. See `CATALOG-IMPORT.md` for the schema.
+
+Catalogue sections suggest the ordering of choices. Equipment and extras can
+both choose a product, including cables imported as equipment; the quotation row
+keeps its selected section. Currency restrictions still apply to approved prices.
 
 Imported products start without an approved sale price. Supplier cost, historical
 list/sale reference, missing currency, zero, and unknown dates remain distinct.

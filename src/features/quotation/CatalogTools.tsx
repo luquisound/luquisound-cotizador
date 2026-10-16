@@ -2,9 +2,9 @@ import { useDeferredValue, useEffect, useId, useMemo, useRef, useState, type Cha
 import { parseMoney } from './calculation.ts'
 import {
   applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES, CATALOG_IMPORT_MAX_ITEMS,
-  parseCatalogImport, queryCatalog,
+  getCatalogCategories, getCatalogChoices, parseCatalogImport, queryCatalog,
 } from './catalog.ts'
-import type { CatalogImportDocument, CatalogImportPreview, CatalogReferencePrice, CatalogSource } from './catalog.ts'
+import type { CatalogCategoryOption, CatalogImportDocument, CatalogImportPreview, CatalogReferencePrice, CatalogSource } from './catalog.ts'
 import type { CatalogItem, Currency, RowSection } from './model.ts'
 import { Dialog } from './QuotationDialog.tsx'
 import './catalog-ui.css'
@@ -109,6 +109,27 @@ function HistoricalReferences({ item, currency, onUse }: HistoricalReferencesPro
   )
 }
 
+interface CatalogCategorySelectProps {
+  label: string
+  options: CatalogCategoryOption[]
+  value: string
+  onChange: (value: string) => void
+}
+
+function CatalogCategorySelect({ label, options, value, onChange }: CatalogCategorySelectProps) {
+  return (
+    <label className="catalog-search">{label}
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Todas</option>
+        {options.map((option) => <option key={option.key} value={option.key}>
+          {option.key === 'uncategorized' ? 'Sin clasificar'
+            : `${option.label}${option.key === 'category:sin clasificar' || option.key === 'category:todas' ? ' (categoría)' : ''}`}
+        </option>)}
+      </select>
+    </label>
+  )
+}
+
 interface CatalogPickerProps {
   catalog: CatalogItem[]
   currency: Currency
@@ -118,23 +139,27 @@ interface CatalogPickerProps {
 
 export function CatalogPicker({ catalog, currency, section, onChoose }: CatalogPickerProps) {
   const [query, setQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
   const deferredQuery = useDeferredValue(query)
   const searchId = useId()
-  const available = useMemo(() => catalog.filter((item) => (
-    item.section === section && (!item.unitPrice.trim() || item.currency === currency)
-  )), [catalog, currency, section])
-  const results = useMemo(() => queryCatalog(available, deferredQuery), [available, deferredQuery])
+  const available = useMemo(() => getCatalogChoices(catalog, currency, section), [catalog, currency, section])
+  const categories = useMemo(() => getCatalogCategories(available), [available])
+  const category = categories.some((option) => option.key === selectedCategory) ? selectedCategory : ''
+  const results = useMemo(() => queryCatalog(available, deferredQuery, category), [available, deferredQuery, category])
   return (
     <fieldset className="catalog-picker">
       <legend>Elegir del catálogo <span>(opcional)</span></legend>
       <details className="catalog-picker-search">
         <summary>Buscar en el catálogo ({available.length} opciones)</summary>
-      <label className="catalog-search" htmlFor={searchId}>Buscar por código, marca o nombre
-        <input id={searchId} type="search" autoComplete="off" maxLength={200} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar una opción" />
-      </label>
+      <div className="catalog-filters">
+        <label className="catalog-search" htmlFor={searchId}>Buscar por código, marca o nombre
+          <input id={searchId} type="search" autoComplete="off" maxLength={200} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar una opción" />
+        </label>
+        <CatalogCategorySelect label="Filtrar productos por categoría" options={categories} value={category} onChange={setSelectedCategory} />
+      </div>
       <p className="field-help">Podés escribir manualmente o dejar el campo vacío. Elegir un producto conserva su precio de venta; las referencias se revisan por separado.</p>
       <p className="catalog-count" aria-live="polite">{results.length === 0
-        ? 'No hay coincidencias para esta sección y moneda.'
+        ? 'No hay coincidencias para esta búsqueda y moneda.'
         : `${results.length} coincidencias${results.length > PICKER_LIMIT ? ` · Se muestran las primeras ${PICKER_LIMIT}; afiná la búsqueda.` : ''}`}</p>
       <ul className="catalog-picker-results" aria-busy={query !== deferredQuery}>
         {results.slice(0, PICKER_LIMIT).map((item) => (
@@ -168,7 +193,8 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
   const [query, setQuery] = useState('')
-  const [page, setPage] = useState(0)
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [page, setPage] = useState({ index: 0, category: '' })
   const [reading, setReading] = useState(false)
   const [importError, setImportError] = useState('')
   const [importDocument, setImportDocument] = useState<CatalogImportDocument | null>(null)
@@ -179,9 +205,11 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
   const readToken = useRef(0)
   const searchId = useId()
   const deferredQuery = useDeferredValue(query)
-  const results = useMemo(() => queryCatalog(catalog, deferredQuery), [catalog, deferredQuery])
+  const categories = useMemo(() => getCatalogCategories(catalog), [catalog])
+  const category = categories.some((option) => option.key === selectedCategory) ? selectedCategory : ''
+  const results = useMemo(() => queryCatalog(catalog, deferredQuery, category), [catalog, deferredQuery, category])
   const pageCount = Math.max(1, Math.ceil(results.length / PAGE_SIZE))
-  const visiblePage = Math.min(page, pageCount - 1)
+  const visiblePage = page.category === category ? Math.min(page.index, pageCount - 1) : 0
   const editingExisting = catalog.some((item) => item.id === draft.id)
   const dirty = editableSignature(draft) !== baseline
   useEffect(() => () => { readToken.current += 1 }, [])
@@ -191,6 +219,13 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
     setDraft(next)
     setBaseline(editableSignature(next))
     setError('')
+  }
+
+  function resetMissingCategory(nextCatalog: CatalogItem[]): void {
+    if (selectedCategory && !getCatalogCategories(nextCatalog).some((option) => option.key === selectedCategory)) {
+      setSelectedCategory('')
+      setPage({ index: 0, category: '' })
+    }
   }
 
   function discardDraftChanges(): boolean {
@@ -273,6 +308,7 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
         setImportError('No se guardó la importación. Revisá el aviso de guardado y conservá el archivo para volver a intentar.')
         return
       }
+      resetMissingCategory(next)
       setFeedback(`Importación aplicada al espacio actual: ${preview.additions.length} nuevas y ${updates} actualizadas. Los precios históricos siguen como referencias.`)
       clearPreview()
       resetDraft()
@@ -312,6 +348,7 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
       setError('No se guardó la opción. Revisá el aviso de guardado y volvé a intentar sin cerrar este formulario.')
       return
     }
+    resetMissingCategory(next)
     setFeedback(editingExisting ? 'Opción actualizada en el espacio actual. Los presupuestos existentes se conservan.' : 'Opción agregada al catálogo del espacio actual.')
     resetDraft()
     clearPreview()
@@ -319,10 +356,12 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
 
   function removeItem(item: CatalogItem): void {
     if (!window.confirm('¿Eliminar esta opción del catálogo? Los presupuestos existentes se conservan.')) return
-    if (!onSave(catalog.filter((entry) => entry.id !== item.id))) {
+    const next = catalog.filter((entry) => entry.id !== item.id)
+    if (!onSave(next)) {
       setError('No se pudo guardar la eliminación. La opción se conserva.')
       return
     }
+    resetMissingCategory(next)
     if (draft.id === item.id) resetDraft()
     setFeedback('Opción quitada del catálogo del espacio actual. Los presupuestos existentes se conservan.')
     clearPreview()
@@ -392,9 +431,15 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
               inputRef.current?.focus()
             }}>Crear opción manual</button>
           </div>
-          <label className="catalog-search" htmlFor={searchId}>Buscar en mi catálogo
-            <input id={searchId} type="search" autoComplete="off" maxLength={200} value={query} onChange={(event) => { setQuery(event.target.value); setPage(0) }} placeholder="Código, marca, nombre o proveedor" />
-          </label>
+          <div className="catalog-filters">
+            <label className="catalog-search" htmlFor={searchId}>Buscar en mi catálogo
+              <input id={searchId} type="search" autoComplete="off" maxLength={200} value={query} onChange={(event) => { setQuery(event.target.value); setPage({ index: 0, category }) }} placeholder="Código, marca, nombre o proveedor" />
+            </label>
+            <CatalogCategorySelect label="Filtrar catálogo por categoría" options={categories} value={category} onChange={(value) => {
+              setSelectedCategory(value)
+              setPage({ index: 0, category: value })
+            }} />
+          </div>
           <p className="catalog-count" aria-live="polite">{results.length} de {catalog.length} opciones{results.length ? ` · Mostrando ${resultStart + 1}–${Math.min(resultStart + PAGE_SIZE, results.length)}` : ''}</p>
           <ul className="catalog-results" aria-busy={query !== deferredQuery}>
             {results.slice(resultStart, resultStart + PAGE_SIZE).map((item) => <li className="catalog-result" key={item.id}>
@@ -414,9 +459,9 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
           </ul>
           {results.length === 0 && <p className="field-help">{catalog.length === 0 ? 'Todavía no agregaste opciones. Importá un catálogo o creá una opción abajo.' : 'No hay coincidencias. Probá con otro nombre o código.'}</p>}
           {pageCount > 1 && <nav className="catalog-pagination" aria-label="Páginas del catálogo">
-            <button type="button" className="button secondary" disabled={visiblePage === 0} onClick={() => setPage(visiblePage - 1)}>Anterior</button>
+            <button type="button" className="button secondary" disabled={visiblePage === 0} onClick={() => setPage({ index: visiblePage - 1, category })}>Anterior</button>
             <span>Página {visiblePage + 1} de {pageCount}</span>
-            <button type="button" className="button secondary" disabled={visiblePage + 1 >= pageCount} onClick={() => setPage(visiblePage + 1)}>Siguiente</button>
+            <button type="button" className="button secondary" disabled={visiblePage + 1 >= pageCount} onClick={() => setPage({ index: visiblePage + 1, category })}>Siguiente</button>
           </nav>}
         </section>
         <form className="form-stack catalog-edit-form" onSubmit={saveItem}>
@@ -424,7 +469,7 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
           <label>Concepto<input ref={inputRef} value={draft.concept} maxLength={500} onChange={(event) => setDraft({ ...draft, concept: event.target.value })} /></label>
           <label>Detalle para el cliente <span>(opcional)</span><textarea rows={2} value={draft.detail} maxLength={2000} onChange={(event) => setDraft({ ...draft, detail: event.target.value })} /></label>
           <div className="form-grid">
-            <label>Sección<select value={draft.section} onChange={(event) => setDraft({ ...draft, section: event.target.value as RowSection })}><option value="equipment">Equipamiento</option><option value="extras">Instalación y accesorios</option></select></label>
+            <label>Sección sugerida<select value={draft.section} onChange={(event) => setDraft({ ...draft, section: event.target.value as RowSection })}><option value="equipment">Equipamiento</option><option value="extras">Instalación y accesorios</option></select></label>
             <label>Moneda del precio<select value={draft.currency} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">ARS</option><option value="USD">USD</option></select></label>
           </div>
           <label>Precio de venta unitario · {draft.currency} <span>(opcional)</span><input inputMode="decimal" placeholder="Precio pendiente" value={draft.unitPrice} maxLength={64} onChange={(event) => setDraft({ ...draft, unitPrice: event.target.value })} /></label>

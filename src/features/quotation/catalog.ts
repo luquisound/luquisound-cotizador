@@ -378,10 +378,49 @@ function searchText(value: string): string {
   return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 }
 
-export function queryCatalog(items: readonly CatalogEntry[], query: string): CatalogEntry[] {
+export interface CatalogCategoryOption {
+  key: string
+  label: string
+}
+
+export function getCatalogChoices(
+  items: readonly CatalogEntry[], currency: Currency, preferredSection: RowSection,
+): CatalogEntry[] {
+  return items.filter((item) => !item.unitPrice.trim() || item.currency === currency)
+    .sort((first, second) => (first.section === preferredSection ? 0 : 1) - (second.section === preferredSection ? 0 : 1))
+}
+
+const categoryCollator = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
+
+function categoryLabel(value: string | undefined): string {
+  return (value ?? '').trim().replace(/\s+/g, ' ')
+}
+
+function categoryKey(value: string | undefined): string {
+  const label = categoryLabel(value)
+  return label ? `category:${label.toLowerCase()}` : 'uncategorized'
+}
+
+export function getCatalogCategories(items: readonly CatalogEntry[]): CatalogCategoryOption[] {
+  const options = new Map<string, CatalogCategoryOption>()
+  for (const item of items) {
+    const key = categoryKey(item.category)
+    if (!options.has(key)) options.set(key, { key, label: categoryLabel(item.category) })
+  }
+  return [...options.values()].sort((first, second) => {
+    if (first.key === second.key) return 0
+    if (first.key === 'uncategorized') return 1
+    if (second.key === 'uncategorized') return -1
+    return categoryCollator.compare(first.label, second.label)
+  })
+}
+
+export function queryCatalog(items: readonly CatalogEntry[], query: string, selectedCategory?: string): CatalogEntry[] {
   const terms = searchText(query).trim().split(/\s+/).filter(Boolean)
-  if (terms.length === 0) return [...items]
+  if (terms.length === 0 && !selectedCategory) return [...items]
   return items.filter((item) => {
+    if (selectedCategory && categoryKey(item.category) !== selectedCategory) return false
+    if (terms.length === 0) return true
     const searchable = searchText([
       item.supplier, item.sku, item.brand, item.concept, item.detail, item.category,
     ].filter((part) => typeof part === 'string').join(' '))

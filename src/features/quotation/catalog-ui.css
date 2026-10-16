@@ -63,6 +63,14 @@
   gap: 8px;
 }
 
+.catalog-filters {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 12px;
+}
+
 .catalog-results,
 .catalog-reference-list,
 .catalog-picker-results,
@@ -404,6 +412,10 @@
 }
 
 @media (min-width: 480px) {
+  .catalog-filters {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+
   .catalog-tools .form-grid,
   .catalog-picker .form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

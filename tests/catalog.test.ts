@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES,
-  parseCatalogImport, queryCatalog,
+  getCatalogCategories, getCatalogChoices, parseCatalogImport, queryCatalog,
 } from '../src/features/quotation/catalog.ts'
 import type {
   CatalogEntry, CatalogImportDocument, CatalogImportItem, CatalogReferencePrice,
@@ -455,4 +455,95 @@ test('catalogues of 500 and 1600 synthetic products remain searchable without ch
     assert.equal(existing[count - 1], last)
     assert.equal(new Set(existing.map((entry) => entry.id)).size, count)
   }
+})
+
+test('category options normalize whitespace and case without changing stored catalogue metadata', () => {
+  const existing = entries([
+    item({ sku: 'A', category: '  Example   speakers ' }),
+    item({ sku: 'B', category: 'EXAMPLE SPEAKERS' }),
+    item({ sku: 'C', category: 'Example amplifiers' }),
+    item({ sku: 'D', category: 'Example Áudio' }),
+    item({ sku: 'E', category: 'Example Audio' }),
+  ])
+  const original = structuredClone(existing)
+  const options = getCatalogCategories(existing)
+  assert.equal(options.length, 4)
+  assert.deepEqual(options.find((option) => option.key === 'category:example speakers'), {
+    key: 'category:example speakers', label: 'Example speakers',
+  })
+  assert.deepEqual(queryCatalog(existing, '', 'category:example speakers'), [existing[0], existing[1]])
+  assert.deepEqual(existing, original)
+})
+
+test('uncategorized entries have a distinct key from a real category named Sin clasificar', () => {
+  const existing = entries([
+    item({ sku: 'A', category: '' }), item({ sku: 'B', category: '   ' }),
+    item({ sku: 'C', category: 'Sin clasificar' }),
+    item({ sku: 'D', category: 'Todas' }),
+  ])
+  delete existing[1].category
+  assert.deepEqual(getCatalogCategories(existing), [
+    { key: 'category:sin clasificar', label: 'Sin clasificar' },
+    { key: 'category:todas', label: 'Todas' },
+    { key: 'uncategorized', label: '' },
+  ])
+  assert.deepEqual(queryCatalog(existing, '', 'uncategorized'), [existing[0], existing[1]])
+  assert.deepEqual(queryCatalog(existing, '', 'category:sin clasificar'), [existing[2]])
+  assert.deepEqual(queryCatalog(existing, '', 'category:todas'), [existing[3]])
+  assert.deepEqual(queryCatalog(existing, '', ''), existing)
+})
+
+test('category filters combine with SKU, brand and product search while options remain complete', () => {
+  const existing = entries([
+    item({ sku: 'SYN-001', brand: 'Example Brand', category: 'Example speakers' }),
+    item({ sku: 'SYN-002', brand: 'Other Brand', category: 'Example speakers' }),
+    item({ sku: 'SYN-003', name: 'Example amplifier', brand: 'Example Brand', category: 'Example amplifiers' }),
+  ])
+  const options = getCatalogCategories(existing)
+  assert.deepEqual(queryCatalog(existing, 'example brand syn-001', 'category:example speakers'), [existing[0]])
+  assert.deepEqual(queryCatalog(existing, 'syn-003', 'category:example speakers'), [])
+  assert.deepEqual(queryCatalog(existing, 'example amplifier', 'category:example amplifiers'), [existing[2]])
+  assert.equal(queryCatalog(existing, '', 'category:example speakers').length, 2)
+  assert.equal(queryCatalog(existing, '', 'category:example amplifiers').length, 1)
+  assert.deepEqual(getCatalogCategories(existing), options)
+  assert.equal(queryCatalog(existing, '').length, 3)
+  assert.deepEqual(queryCatalog(existing, '', 'category:removed'), [])
+})
+
+test('category options support empty catalogues and category removal without mutating previous results', () => {
+  assert.deepEqual(getCatalogCategories([]), [])
+  const existing = entries([
+    item({ sku: 'A', category: 'Example speakers' }), item({ sku: 'B', category: 'Example amplifiers' }),
+  ])
+  const options = getCatalogCategories(existing)
+  const remaining = existing.filter((entry) => entry.id !== existing[0].id)
+  assert.equal(getCatalogCategories(remaining).some((option) => option.key === 'category:example speakers'), false)
+  assert.equal(options.length, 2)
+  assert.equal(queryCatalog(remaining, '').length, 1)
+  assert.equal(existing.length, 2)
+})
+
+test('catalogue choices allow cables in extras and prefer the suggested section without changing source records', () => {
+  const existing = entries([
+    item({ sku: 'A', category: 'Synthetic cables', section: 'equipment' }),
+    item({ sku: 'B', section: 'extras' }),
+    item({ sku: 'C', section: 'equipment' }),
+    item({ sku: 'D', section: 'extras' }),
+  ])
+  const snapshot = structuredClone(existing)
+  assert.deepEqual(getCatalogChoices(existing, 'ARS', 'extras'), [existing[1], existing[3], existing[0], existing[2]])
+  assert.deepEqual(queryCatalog(getCatalogChoices(existing, 'ARS', 'extras'), 'A', 'category:synthetic cables'), [existing[0]])
+  assert.deepEqual(getCatalogChoices(existing, 'ARS', 'equipment'), [existing[0], existing[2], existing[1], existing[3]])
+  assert.deepEqual(existing, snapshot)
+})
+
+test('catalogue choices keep blank prices available across currencies but never mix approved zero prices', () => {
+  const existing = entries(['A', 'B', 'C', 'D'].map((sku) => item({ sku })))
+  existing[1].currency = 'USD'
+  existing[1].unitPrice = '   '
+  existing[2].currency = 'USD'
+  existing[2].unitPrice = '0'
+  existing[3].unitPrice = '0'
+  assert.deepEqual(getCatalogChoices(existing, 'ARS', 'equipment'), [existing[0], existing[1], existing[3]])
+  assert.deepEqual(getCatalogChoices(existing, 'USD', 'extras'), [existing[0], existing[1], existing[2]])
 })
