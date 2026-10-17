@@ -4,7 +4,7 @@ import catalogApi, { serveCatalog } from '../api/catalog.ts'
 import type { CatalogServerConfig } from '../api/catalog.ts'
 import { parseCatalogImport } from '../src/features/quotation/catalog.ts'
 import type { CatalogImportDocument, CatalogImportItem } from '../src/features/quotation/catalog.ts'
-import { SHARED_CATALOG_MAX_BYTES } from '../src/features/quotation/shared-catalog.ts'
+import { loadSharedCatalog, mergeSharedCatalog, SHARED_CATALOG_MAX_BYTES } from '../src/features/quotation/shared-catalog.ts'
 
 const CONFIG: CatalogServerConfig = {
   url: 'https://synthetic-store.private.blob.vercel-storage.com/catalog/latest.json',
@@ -51,6 +51,38 @@ test('the Node Web handler exports fetch and returns only sanitized catalogue fi
   assert.equal(response.status, 200)
   assertPrivate(response)
   assert.deepEqual(await response.json(), parseCatalogImport(JSON.stringify(document())))
+})
+
+test('source replacement survives the endpoint and client loader before reconciling saved entries', async () => {
+  const source = { document: 'synthetic-canonical.xlsx', sheet: 'Products', row: 2, date: null }
+  const replacement: CatalogImportDocument = {
+    ...document([item({ source })]),
+    replaceSourceDocuments: ['synthetic-old.xlsx', 'synthetic-retired.pdf', source.document],
+  }
+  const response = await serveCatalog(request(), CONFIG, fetchDocument(replacement))
+  assert.equal(response.status, 200)
+  assertPrivate(response)
+  const loaded = await loadSharedCatalog(new AbortController().signal, async () => response)
+  assert.ok(loaded)
+  assert.deepEqual(loaded.replaceSourceDocuments, replacement.replaceSourceDocuments)
+  const retained = {
+    id: 'retained', concept: 'Saved product', detail: '', section: 'equipment' as const,
+    currency: 'USD' as const, unitPrice: '0', supplier: item().supplier, sku: item().sku,
+    source: { ...source, document: 'synthetic-old.xlsx' },
+  }
+  const manual = {
+    id: 'manual', concept: 'Manual labour', detail: '', section: 'extras' as const,
+    currency: 'ARS' as const, unitPrice: '',
+  }
+  const result = mergeSharedCatalog([retained, {
+    ...retained, id: 'retired', sku: 'OLD-002',
+    source: { document: 'synthetic-retired.pdf', page: 1, date: null },
+  }, manual], loaded)
+  assert.deepEqual(result.map((entry) => entry.id), ['retained', 'manual'])
+  assert.equal(result[0]!.source?.document, source.document)
+  assert.equal(result[0]!.unitPrice, '0')
+  assert.equal(result[0]!.currency, 'USD')
+  assert.deepEqual(result[1], manual)
 })
 
 test('only the configured private Blob receives the server credential and cache bypass', async () => {

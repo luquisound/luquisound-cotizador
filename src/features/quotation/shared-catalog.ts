@@ -102,5 +102,5 @@ export function mergeSharedCatalog(existing: CatalogItem[], document: CatalogImp
     throw new Error('Hay productos en conflicto. El catálogo guardado no se modificó.')
   }
   const merged = applyCatalogImport(existing, preview, { allowUpdates: true })
-  return preview.additions.length === 0 && preview.updates.length === 0 ? existing : merged
+  return preview.additions.length === 0 && preview.updates.length === 0 && preview.removals.length === 0 ? existing : merged
 }

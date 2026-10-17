@@ -46,6 +46,7 @@ export interface CatalogImportDocument {
   format: 'luquisound.catalog'
   version: 1
   items: CatalogImportItem[]
+  replaceSourceDocuments?: string[]
 }
 
 export interface CatalogImportUpdate {
@@ -55,7 +56,7 @@ export interface CatalogImportUpdate {
 }
 
 export interface CatalogImportConflict {
-  reason: 'duplicate-import-key' | 'duplicate-existing-key' | 'reference-limit'
+  reason: 'duplicate-import-key' | 'duplicate-existing-key' | 'missing-existing-key' | 'reference-limit'
   itemIndexes: number[]
   existingIds: string[]
   message: string
@@ -64,12 +65,15 @@ export interface CatalogImportConflict {
 export interface CatalogImportPreview {
   additions: CatalogEntry[]
   updates: CatalogImportUpdate[]
+  removals: CatalogEntry[]
   unchanged: CatalogEntry[]
   conflicts: CatalogImportConflict[]
+  replacesSources: boolean
   summary: {
     received: number
     additions: number
     updates: number
+    removals: number
     unchanged: number
     conflicts: number
     duplicateRows: number
@@ -81,6 +85,7 @@ export interface CatalogImportPreview {
 export const CATALOG_IMPORT_MAX_BYTES = 5 * 1024 * 1024
 export const CATALOG_IMPORT_MAX_ITEMS = 2000
 export const CATALOG_REFERENCE_MAX_PRICES = 50
+export const CATALOG_REPLACEMENT_MAX_DOCUMENTS = 50
 
 const INVALID_IMPORT_MESSAGE = 'El catálogo no tiene un formato válido de Luquisound.'
 
@@ -182,6 +187,13 @@ function checkSize(value: string): void {
   }
 }
 
+function replacementDocuments(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > CATALOG_REPLACEMENT_MAX_DOCUMENTS) invalidImport()
+  const documents = value.map((document) => text(document, 500))
+  if (documents.some((document) => !document) || new Set(documents).size !== documents.length) invalidImport()
+  return documents
+}
+
 export function parseCatalogImport(value: string): CatalogImportDocument {
   checkSize(value)
   let input: unknown
@@ -193,7 +205,14 @@ export function parseCatalogImport(value: string): CatalogImportDocument {
   const document = record(input)
   if (document.format !== 'luquisound.catalog' || document.version !== 1 ||
     !Array.isArray(document.items) || document.items.length > CATALOG_IMPORT_MAX_ITEMS) invalidImport()
-  return { format: 'luquisound.catalog', version: 1, items: document.items.map(importItem) }
+  const replaceSourceDocuments = document.replaceSourceDocuments === undefined
+    ? undefined : replacementDocuments(document.replaceSourceDocuments)
+  const items = document.items.map(importItem)
+  if (replaceSourceDocuments && items.some((item) => !item.source || !itemKey(item))) invalidImport()
+  return {
+    format: 'luquisound.catalog', version: 1, items,
+    ...(replaceSourceDocuments === undefined ? {} : { replaceSourceDocuments }),
+  }
 }
 
 function normalizedKeyPart(value: string): string {
@@ -278,8 +297,11 @@ export function buildCatalogImportPreview(
 ): CatalogImportPreview {
   // Revalidate callers that construct an import document instead of parsing JSON.
   const validated = parseCatalogImport(JSON.stringify(document))
+  const replacementSources = new Set(validated.replaceSourceDocuments ?? [])
+  const replacesSources = validated.replaceSourceDocuments !== undefined
   const additions: CatalogEntry[] = []
   const updates: CatalogImportUpdate[] = []
+  const removals: CatalogEntry[] = []
   const unchanged: CatalogEntry[] = []
   const conflicts: CatalogImportConflict[] = []
   const existingByKey = new Map<string, CatalogEntry[]>()
@@ -292,6 +314,28 @@ export function buildCatalogImportPreview(
     const groupKey = itemKey(item) ?? `unkeyed:${itemSignature(item)}`
     groups.set(groupKey, [...(groups.get(groupKey) ?? []), { item, index }])
   })
+  const ambiguousRemovalKeys = new Set<string>()
+  for (const item of existing) {
+    if (!item.source || !replacementSources.has(item.source.document)) continue
+    const key = itemKey(item)
+    if (!key) {
+      conflicts.push({
+        reason: 'missing-existing-key', itemIndexes: [], existingIds: [item.id],
+        message: 'Una entrada de las fuentes a reemplazar no tiene proveedor y código completos. Revisala antes de reemplazar.',
+      })
+    } else if (!groups.has(key)) {
+      const matches = existingByKey.get(key)!
+      if (matches.length > 1) {
+        if (!ambiguousRemovalKeys.has(key)) {
+          ambiguousRemovalKeys.add(key)
+          conflicts.push({
+            reason: 'duplicate-existing-key', itemIndexes: [], existingIds: matches.map((entry) => entry.id),
+            message: 'El catálogo actual repite proveedor y código en una fuente a reemplazar. Revisalo antes de retirar entradas.',
+          })
+        }
+      } else removals.push(cloneEntry(item))
+    }
+  }
   let duplicateRows = 0
   const identifiers = new Set(existing.map((item) => item.id))
   for (const group of groups.values()) {
@@ -323,8 +367,11 @@ export function buildCatalogImportPreview(
       additions.push(entryFromItem(incoming, id))
       continue
     }
-    const referencePrices = mergeReferences(before.referencePrices ?? [], incoming.referencePrices)
-    const after: CatalogEntry = {
+    const replacesSource = before.source !== undefined && replacementSources.has(before.source.document)
+    const referencePrices = mergeReferences(replacesSource ? [] : before.referencePrices ?? [], incoming.referencePrices)
+    const after: CatalogEntry = replacesSource ? {
+      ...entryFromItem(incoming, before.id), currency: before.currency, unitPrice: before.unitPrice,
+    } : {
       ...cloneEntry(before), ...entryFromItem(incoming, before.id),
       currency: before.currency, unitPrice: before.unitPrice,
       detail: incoming.description || before.detail,
@@ -347,9 +394,10 @@ export function buildCatalogImportPreview(
     }
   }
   return {
-    additions, updates, unchanged, conflicts, catalogSnapshot: JSON.stringify(existing),
+    additions, updates, removals, unchanged, conflicts, replacesSources, catalogSnapshot: JSON.stringify(existing),
     summary: {
       received: validated.items.length, additions: additions.length, updates: updates.length,
+      removals: removals.length,
       unchanged: unchanged.length, conflicts: conflicts.length, duplicateRows,
       withoutKey: validated.items.filter((item) => itemKey(item) === null).length,
     },
@@ -362,12 +410,17 @@ export function applyCatalogImport(
   if (JSON.stringify(existing) !== preview.catalogSnapshot) {
     throw new Error('El catálogo cambió desde la vista previa. Revisá la importación nuevamente.')
   }
-  if (existing.length + preview.additions.length > CATALOG_IMPORT_MAX_ITEMS) {
+  if (preview.replacesSources && (!options.allowUpdates || preview.conflicts.length > 0)) {
+    throw new Error('El reemplazo de fuentes requiere aprobar todos los cambios y resolver los conflictos. El catálogo no se modificó.')
+  }
+  const removalIds = new Set(options.allowUpdates ? preview.removals.map((item) => item.id) : [])
+  const retained = existing.filter((item) => !removalIds.has(item.id))
+  if (retained.length + preview.additions.length > CATALOG_IMPORT_MAX_ITEMS) {
     throw new Error('La importación supera el límite de 2000 productos. El catálogo no se modificó.')
   }
   const updates = new Map(options.allowUpdates ? preview.updates.map((update) => [update.id, update.after]) : [])
   const result = [
-    ...existing.map((item) => cloneEntry(updates.get(item.id) ?? item)),
+    ...retained.map((item) => cloneEntry(updates.get(item.id) ?? item)),
     ...preview.additions.map(cloneEntry),
   ]
   checkSize(JSON.stringify(result))

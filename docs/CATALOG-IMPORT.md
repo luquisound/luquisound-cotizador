@@ -123,6 +123,7 @@ are rejected rather than coerced.
 | source.document | 500 characters |
 | source.sheet | 128 characters |
 | referencePrices | 50 per item, including retained history |
+| replaceSourceDocuments | 1-50 unique document names, up to 500 characters each |
 
 These bounds align with catalogue limits. Before saving the resulting catalogue,
 the integration must also validate its Workspace v1 envelope with empty
@@ -133,9 +134,10 @@ quotation unchanged. The quotation recovery snapshot is stored separately.
 ## Preview, matching and confirmation
 
 `buildCatalogImportPreview(existing, document)` returns additions, proposed
-updates, unchanged entries, conflicts, a summary, and a baseline snapshot.
+updates, removals, unchanged entries, conflicts, a summary, a `replacesSources`
+flag, and a baseline snapshot.
 The UI must show this preview and obtain confirmation before applying changes.
-`summary` contains `received`, `additions`, `updates`, `unchanged`, `conflicts`,
+`summary` contains `received`, `additions`, `updates`, `removals`, `unchanged`, `conflicts`,
 `duplicateRows`, and `withoutKey`. Conflict `itemIndexes` are zero-based indexes
 in the original input; conflicts are counted as groups, not individual rows.
 
@@ -167,12 +169,54 @@ identity. Equal prices from different documents retain separate references and
 their original provenance;
 missing new provenance does not erase known provenance. Exceeding the reference
 limit becomes a conflict, never silent history truncation. Identical keyed
-reimports are idempotent. Existing entries absent from the file are preserved.
+reimports are idempotent. Without an explicit source replacement manifest,
+existing entries absent from the file are preserved.
 
 The baseline snapshot rejects application if the catalogue changed after its
 preview opened. Application enforces the combined item and byte limits before
 returning a result. It does not mutate the input catalogue, previews, quotations,
 or browser storage. New IDs are generated locally, never accepted from the file.
+
+## Explicit source replacement
+
+A reviewed private document may include an optional `replaceSourceDocuments`
+array to replace a known set of imported sources instead of only accumulating
+their entries and historical references:
+
+```json
+"replaceSourceDocuments": ["synthetic-previous.pdf", "synthetic-current.xlsx"]
+```
+
+The array must contain 1-50 unique, nonempty strings of at most 500 characters.
+Names are trimmed, then compared exactly against the existing entry's primary
+`source.document`; matching is case-sensitive and does not use prefixes, supplier
+names, paths, or reference-level provenance. List every known previous source
+name that should be replaced, including aliases and the current source name if
+that source is revised in place. Keep this manifest private alongside the data.
+
+In this mode every incoming item requires primary source provenance and a
+complete supplier/SKU key. Existing entries within the source scope are removed
+only when their normalized key is absent from the incoming items. Retained
+in-scope entries receive the incoming metadata and historical references as an
+authoritative replacement, including empty optional metadata. Their local ID,
+approved sale price (including zero or a pending price), and approved-price
+currency remain intact. Historical references from superseded sources are not
+accumulated for those entries. Entries outside the scope keep the normal additive
+update rules. Source-less manual entries and unrelated primary sources are never
+removed by the manifest; the current quotation and legacy storage remain unchanged.
+
+An explicitly empty `items` array can retire all unambiguous keyed entries of the
+listed sources. An empty or malformed manifest is rejected. In-scope existing
+entries without complete keys or with ambiguous duplicate keys block replacement.
+Incoming conflicts also block the entire operation, preserving the previous
+catalogue. Unlike a normal additive import, replacement cannot skip conflicts or
+apply additions only: `applyCatalogImport` requires `allowUpdates: true` and a
+conflict-free preview. The import UI displays removals and confirms the complete
+replacement together. Item and byte limits are checked after the scoped removals.
+
+The same manifest is used by manual imports and the automatic common catalogue.
+It adds no persistent ownership flags or new storage keys. Unattributed old entries
+cannot safely be classified as imported and remain outside the removal scope.
 
 ## Integration and search
 

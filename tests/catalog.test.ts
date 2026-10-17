@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES,
+  applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES, CATALOG_REPLACEMENT_MAX_DOCUMENTS,
   getCatalogCategories, getCatalogChoices, parseCatalogImport, queryCatalog,
 } from '../src/features/quotation/catalog.ts'
 import type {
@@ -21,6 +21,10 @@ function item(changes: Partial<CatalogImportItem> = {}): CatalogImportItem {
 
 function document(items: CatalogImportItem[] = [item()]): CatalogImportDocument {
   return { format: 'luquisound.catalog', version: 1, items }
+}
+
+function replacement(items: CatalogImportItem[] = [item()], sources = ['synthetic-source.pdf']): CatalogImportDocument {
+  return { ...document(items), replaceSourceDocuments: sources }
 }
 
 function parse(value: unknown): CatalogImportDocument {
@@ -427,6 +431,169 @@ test('combined catalogue count and byte limits reject atomically without modifyi
   const largePreview = buildCatalogImportPreview(large, document([item()]))
   assert.throws(() => applyCatalogImport(large, largePreview, { allowUpdates: false }), /límite de 5 MB/)
   assert.equal(large.length, 1900)
+})
+
+test('replacement manifests are optional, bounded, trimmed and unique without normalizing document identities', () => {
+  assert.equal(parse(document()).replaceSourceDocuments, undefined)
+  assert.deepEqual(parse(replacement([], [' synthetic-first.xlsx ', 'Synthetic-first.xlsx'])).replaceSourceDocuments,
+    ['synthetic-first.xlsx', 'Synthetic-first.xlsx'])
+  assert.equal(parse(replacement([], Array.from({ length: CATALOG_REPLACEMENT_MAX_DOCUMENTS }, (_, index) =>
+    `synthetic-${index}.xlsx`))).replaceSourceDocuments?.length, CATALOG_REPLACEMENT_MAX_DOCUMENTS)
+  for (const invalid of [null, 'synthetic.xlsx', [], [''], ['   '], [12], ['X'.repeat(501)],
+    ['synthetic.xlsx', ' synthetic.xlsx '],
+    Array.from({ length: CATALOG_REPLACEMENT_MAX_DOCUMENTS + 1 }, (_, index) => `synthetic-${index}.xlsx`)]) {
+    assert.throws(() => parse({ ...document(), replaceSourceDocuments: invalid }), /formato válido/)
+  }
+})
+
+test('replacement records require primary provenance and complete product keys before a preview can remove anything', () => {
+  for (const changes of [{ source: undefined }, { supplier: '' }, { sku: '' }]) {
+    assert.doesNotThrow(() => parse(document([item(changes)])))
+    assert.throws(() => parse(replacement([item(changes)])), /formato válido/)
+  }
+  const existing = entries()
+  const snapshot = structuredClone(existing)
+  assert.throws(() => buildCatalogImportPreview(existing, replacement([item({ sku: '' })])), /formato válido/)
+  assert.deepEqual(existing, snapshot)
+})
+
+test('replacement removes only absent keyed entries whose primary document exactly matches its explicit scope', () => {
+  const existing = entries([
+    item({ sku: 'RETIRED' }), item({ sku: 'RETAINED' }),
+    item({ sku: 'UNRELATED', source: { document: 'Synthetic-source.pdf', date: null } }),
+    item({ sku: 'REFERENCE-ONLY', source: undefined, referencePrices: [{
+      ...item().referencePrices[0], source: item().source,
+    }] }),
+  ])
+  const manual: CatalogEntry = {
+    id: 'manual-labor', concept: 'Synthetic labor', detail: '', section: 'extras', currency: 'ARS', unitPrice: '0',
+  }
+  existing.push(manual)
+  const snapshot = structuredClone(existing)
+  const incoming = replacement([item({ supplier: ' SYNTHETIC   SUPPLIER ', sku: ' retained ', name: 'Retained product' })])
+  const preview = buildCatalogImportPreview(existing, incoming)
+  assert.equal(preview.replacesSources, true)
+  assert.equal(preview.summary.removals, 1)
+  assert.deepEqual(preview.removals, [snapshot[0]])
+  assert.notEqual(preview.removals[0], existing[0])
+  assert.notEqual(preview.removals[0].source, existing[0].source)
+  assert.notEqual(preview.removals[0].referencePrices?.[0].source, existing[0].referencePrices?.[0].source)
+  const applied = applyCatalogImport(existing, preview, { allowUpdates: true })
+  assert.deepEqual(applied.map((entry) => entry.id), snapshot.slice(1).map((entry) => entry.id))
+  assert.deepEqual(applied.slice(1), snapshot.slice(2))
+  assert.deepEqual(existing, snapshot)
+  assert.equal(buildCatalogImportPreview(applied, incoming).summary.removals, 0)
+  const plain = buildCatalogImportPreview(existing, document([]))
+  assert.equal(plain.replacesSources, false)
+  assert.deepEqual(plain.removals, [])
+  assert.deepEqual(applyCatalogImport(existing, plain, { allowUpdates: false }), snapshot)
+})
+
+test('retained scoped products replace source metadata and references while preserving all approved-price states', () => {
+  const existing = entries(['A', 'B', 'C'].map((sku) => item({ sku, unit: 'pair', presentation: 'Old packaging' })))
+  for (const [index, price] of ['123,45', '0', ''].entries()) {
+    existing[index].unitPrice = price
+    existing[index].currency = 'USD'
+  }
+  const snapshot = structuredClone(existing)
+  const incoming = replacement(existing.map((entry) => item({
+    sku: entry.sku, name: `Canonical ${entry.sku}`, description: '', brand: '', category: '',
+    source: { document: 'synthetic-canonical.xlsx', sheet: 'Example', row: 7, date: null },
+    referencePrices: [{ amount: '7.123456', currency: 'USD', role: 'cost', date: null, historical: true }],
+  })), ['synthetic-source.pdf', 'synthetic-canonical.xlsx'])
+  const preview = buildCatalogImportPreview(existing, incoming)
+  const result = applyCatalogImport(existing, preview, { allowUpdates: true })
+  for (const [index, entry] of result.entries()) {
+    assert.equal(entry.id, snapshot[index].id)
+    assert.equal(entry.unitPrice, snapshot[index].unitPrice)
+    assert.equal(entry.currency, 'USD')
+    assert.equal(entry.detail, '')
+    assert.equal(entry.brand, '')
+    assert.equal(entry.category, '')
+    assert.equal(entry.unit, undefined)
+    assert.equal(entry.presentation, undefined)
+    assert.deepEqual(entry.source, incoming.items[index].source)
+    assert.deepEqual(entry.referencePrices, referencesWithSource(incoming.items[index].referencePrices, entry.source))
+    assert.notEqual(entry.source, incoming.items[index].source)
+    assert.notEqual(entry.referencePrices, preview.updates[index].after.referencePrices)
+  }
+  assert.deepEqual(existing, snapshot)
+  assert.equal(buildCatalogImportPreview(result, incoming).summary.updates, 0)
+  result[0].referencePrices![0].source!.document = 'synthetic-mutated.xlsx'
+  assert.equal(preview.updates[0].after.referencePrices?.[0].source?.document, 'synthetic-canonical.xlsx')
+  assert.equal(incoming.items[0].source?.document, 'synthetic-canonical.xlsx')
+})
+
+test('a replacement leaves metadata outside its source scope on the existing additive update path', () => {
+  const existing = entries([item({ source: { document: 'synthetic-unrelated.pdf', date: null }, unit: 'pair' })])
+  const incoming = replacement([item({ description: '', referencePrices: [] })])
+  const result = applyCatalogImport(existing, buildCatalogImportPreview(existing, incoming), { allowUpdates: true })
+  assert.equal(result[0].detail, existing[0].detail)
+  assert.equal(result[0].unit, 'pair')
+  assert.deepEqual(result[0].referencePrices, existing[0].referencePrices)
+})
+
+test('source replacement cannot partially apply around conflicts, withheld approval or stale previews', () => {
+  const existing = entries([item({ sku: 'RETIRED' }), item({ sku: 'RETAINED' })])
+  const snapshot = structuredClone(existing)
+  const conflicting = buildCatalogImportPreview(existing, replacement([
+    item({ sku: 'RETAINED', name: 'First version' }), item({ sku: 'RETAINED', name: 'Conflicting version' }),
+    item({ sku: 'NEW' }),
+  ]))
+  assert.equal(conflicting.removals.length, 1)
+  assert.equal(conflicting.conflicts[0].reason, 'duplicate-import-key')
+  assert.throws(() => applyCatalogImport(existing, conflicting, { allowUpdates: true }), /resolver los conflictos/)
+  const approved = buildCatalogImportPreview(existing, replacement([item({ sku: 'RETAINED' })]))
+  assert.throws(() => applyCatalogImport(existing, approved, { allowUpdates: false }), /aprobar todos los cambios/)
+  assert.deepEqual(existing, snapshot)
+  existing[1].unitPrice = '321'
+  assert.throws(() => applyCatalogImport(existing, approved, { allowUpdates: true }), /cambió desde la vista previa/)
+  assert.equal(existing[1].unitPrice, '321')
+})
+
+test('ambiguous scoped local keys block even an explicitly empty source replacement', () => {
+  const keyed = entries()
+  for (const existing of [entries([item({ supplier: '', sku: '' })]),
+    [...keyed, { ...keyed[0], id: 'duplicate-local', unitPrice: '9' }]]) {
+    const snapshot = structuredClone(existing)
+    const preview = buildCatalogImportPreview(existing, replacement([]))
+    assert.equal(preview.conflicts.length, 1)
+    assert.deepEqual(preview.conflicts[0].itemIndexes, [])
+    assert.equal(preview.removals.length, 0)
+    assert.throws(() => applyCatalogImport(existing, preview, { allowUpdates: true }), /resolver los conflictos/)
+    assert.deepEqual(existing, snapshot)
+  }
+})
+
+test('replacement capacity counts 451 scoped removals before additions and validates only the resulting byte size', () => {
+  const retired = entries(Array.from({ length: 451 }, (_, index) => item({ sku: `OLD-${index}` })))
+  const manual = Array.from({ length: 1549 }, (_, index): CatalogEntry => ({
+    id: `manual-${index}`, concept: `Synthetic manual product ${index}`, detail: '', section: 'extras',
+    currency: 'ARS', unitPrice: '',
+  }))
+  const existing = [...retired, ...manual]
+  const snapshot = structuredClone(existing)
+  const incoming = replacement(Array.from({ length: 451 }, (_, index) => item({ sku: `NEW-${index}` })))
+  const preview = buildCatalogImportPreview(existing, incoming)
+  assert.equal(preview.summary.removals, 451)
+  assert.equal(preview.summary.additions, 451)
+  const result = applyCatalogImport(existing, preview, { allowUpdates: true })
+  assert.equal(result.length, 2000)
+  assert.deepEqual(result.slice(0, manual.length), manual)
+  assert.equal(result.some((entry) => entry.sku?.startsWith('OLD-')), false)
+  assert.deepEqual(existing, snapshot)
+  const tooMany = buildCatalogImportPreview(existing, replacement([...incoming.items, item({ sku: 'ONE-TOO-MANY' })]))
+  assert.throws(() => applyCatalogImport(existing, tooMany, { allowUpdates: true }), /2000 productos/)
+  const largeExisting = [...retired, ...manual.map((entry) => ({
+    ...entry, concept: 'X'.repeat(500), detail: 'X'.repeat(2000), supplier: 'X'.repeat(200),
+  }))]
+  const largeIncoming = replacement(incoming.items.map((entry) => ({
+    ...entry, name: 'Y'.repeat(500), description: 'Y'.repeat(2000), brand: 'Y'.repeat(200), category: 'Y'.repeat(200),
+  })))
+  assert.ok(new TextEncoder().encode(JSON.stringify(largeExisting)).byteLength < CATALOG_IMPORT_MAX_BYTES)
+  const largePreview = buildCatalogImportPreview(largeExisting, largeIncoming)
+  assert.equal(largePreview.removals.length, 451)
+  assert.throws(() => applyCatalogImport(largeExisting, largePreview, { allowUpdates: true }), /límite de 5 MB/)
 })
 
 test('search matches accents, case, code, supplier, brand and combined terms in original order', () => {

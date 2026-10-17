@@ -5,7 +5,12 @@ import {
   CATALOG_IMPORT_MAX_BYTES,
   type CatalogImportDocument, type CatalogImportItem, type CatalogReferencePrice,
 } from '../src/features/quotation/catalog.ts'
-import type { CatalogItem } from '../src/features/quotation/model.ts'
+import { createQuotation, type CatalogItem } from '../src/features/quotation/model.ts'
+import { serializeWorkspace, STORAGE_KEY, type StorageAdapter } from '../src/features/quotation/persistence.ts'
+import {
+  CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
+  saveCatalog, saveCurrentQuotation,
+} from '../src/features/quotation/working-storage.ts'
 import {
   loadSharedCatalog, mergeSharedCatalog, SHARED_CATALOG_MAX_BYTES, validateSharedCatalogDocument,
 } from '../src/features/quotation/shared-catalog.ts'
@@ -239,6 +244,91 @@ test('central updates keep local custom products and do not delete items absent 
   assert.deepEqual(result.slice(0, 2), original)
   assert.deepEqual(existing, original)
   assert.equal(mergeSharedCatalog(existing, document([])), existing)
+})
+
+test('shared transport preserves a validated explicit source replacement manifest', async () => {
+  const incoming: CatalogImportDocument = {
+    ...document([item({ source: { document: 'synthetic-canonical.xlsx', date: null } })]),
+    replaceSourceDocuments: ['synthetic-previous.pdf', 'synthetic-canonical.xlsx'],
+  }
+  const loaded = await load(jsonResponse(incoming))
+  assert.deepEqual(loaded?.replaceSourceDocuments, incoming.replaceSourceDocuments)
+  await assert.rejects(load(jsonResponse({ ...incoming, replaceSourceDocuments: [] })), genericFailure)
+  await assert.rejects(load(jsonResponse({ ...incoming, items: [item()] })), genericFailure)
+})
+
+test('shared removal-only updates apply once and an explicitly empty scoped catalogue preserves manual entries', () => {
+  const source = { document: 'synthetic-previous.pdf', date: null }
+  const existing = mergeSharedCatalog([], document([item({ source })]))
+  const custom: CatalogItem = {
+    id: 'local-custom', concept: 'Synthetic cable', detail: '', section: 'extras', currency: 'ARS', unitPrice: '0',
+  }
+  existing.push(custom)
+  const incoming: CatalogImportDocument = { ...document([]), replaceSourceDocuments: [source.document] }
+  const result = mergeSharedCatalog(existing, incoming)
+  assert.notEqual(result, existing)
+  assert.deepEqual(result, [custom])
+  assert.equal(mergeSharedCatalog(result, incoming), result)
+  assert.equal(existing.length, 2)
+})
+
+test('a scoped shared replacement reconciles 451 previous products without changing manual entries, current work or legacy bytes', () => {
+  const previousSource = { document: 'synthetic-previous.pdf', date: null }
+  const canonicalSource = { document: 'synthetic-canonical.xlsx', sheet: 'Example', row: 2, date: null }
+  const previous = mergeSharedCatalog([], document([
+    ...Array.from({ length: 451 }, (_, index) => item({ sku: `PREVIOUS-${index}`, source: previousSource })),
+    item({ sku: 'RETAINED', source: previousSource }),
+  ]))
+  const retained = previous[previous.length - 1]
+  retained.unitPrice = '0'
+  retained.currency = 'USD'
+  const manual: CatalogItem[] = ['product', 'labor', 'cable', 'extra'].map((kind) => ({
+    id: `manual-${kind}`, concept: `Synthetic manual ${kind}`, detail: '',
+    section: kind === 'product' ? 'equipment' : 'extras', currency: 'ARS', unitPrice: '12,34',
+  }))
+  const legacy = serializeWorkspace({ version: 1, activeQuotationId: null, quotations: [], catalog: [...previous, ...manual] })
+  const values = new Map([[STORAGE_KEY, legacy]])
+  const writes: string[] = []
+  const storage: StorageAdapter = {
+    getItem(key) { return values.get(key) ?? null },
+    setItem(key, value) { values.set(key, value); writes.push(key) },
+  }
+  const quotation = createQuotation()
+  quotation.rows[0] = { ...quotation.rows[0], concept: 'Synthetic current product', unitPrice: '456,78', priceState: 'priced' }
+  assert.equal(saveCurrentQuotation(storage, quotation).ok, true)
+  const savedCurrent = values.get(CURRENT_QUOTATION_STORAGE_KEY)
+  const loaded = loadCatalog(storage).catalog
+  const incoming: CatalogImportDocument = {
+    ...document([item({ sku: 'RETAINED', name: 'Canonical product', source: canonicalSource })]),
+    replaceSourceDocuments: [previousSource.document, canonicalSource.document],
+  }
+  const result = mergeSharedCatalog(loaded, incoming)
+  assert.equal(result.length, 5)
+  assert.equal(result[0].id, retained.id)
+  assert.equal(result[0].unitPrice, '0')
+  assert.equal(result[0].currency, 'USD')
+  assert.deepEqual(result[0].source, canonicalSource)
+  assert.equal(result[0].referencePrices?.length, 1)
+  assert.deepEqual(result[0].referencePrices?.[0].source, canonicalSource)
+  assert.deepEqual(result.slice(1), manual)
+  assert.equal(saveCatalog(storage, result).ok, true)
+  assert.deepEqual(loadCatalog(storage).catalog, result)
+  assert.deepEqual(loadCurrentQuotation(storage).quotation, quotation)
+  assert.equal(values.get(CURRENT_QUOTATION_STORAGE_KEY), savedCurrent)
+  assert.equal(values.get(STORAGE_KEY), legacy)
+  assert.deepEqual(writes, [CURRENT_QUOTATION_STORAGE_KEY, CATALOG_STORAGE_KEY])
+  assert.equal(mergeSharedCatalog(result, incoming), result)
+})
+
+test('ambiguous scoped existing keys reject shared replacement before removing unrelated previous products', () => {
+  const source = { document: 'synthetic-previous.pdf', date: null }
+  const existing = mergeSharedCatalog([], document([item({ source }), item({ sku: 'OTHER-PREVIOUS', source })]))
+  existing.push({ ...existing[0], id: 'duplicate-local', unitPrice: '9' })
+  const snapshot = structuredClone(existing)
+  assert.throws(() => mergeSharedCatalog(existing, {
+    ...document([]), replaceSourceDocuments: [source.document],
+  }), /conflicto/)
+  assert.deepEqual(existing, snapshot)
 })
 
 test('an ambiguous local key rejects the entire update without adding other products or touching manual data', () => {

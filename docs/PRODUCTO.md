@@ -101,8 +101,12 @@ open. Reusable templates and fixed budgets are managed in Figma.
 Automatic loading combines the common catalogue with the latest local state by
 supplier and SKU. It updates common metadata and historical references while
 preserving approved prices, currencies, identities, personal entries, and the
-current quotation's row values. Invalid keys, conflicts, limits, and network
-failures leave local data unchanged and show a retry action. A paused or
+current quotation's row values. A private source can explicitly replace a named
+document scope: imported entries absent from that replacement are retired, and
+retained entries receive its authoritative metadata and references. Manual
+entries without source provenance and entries outside that scope are preserved.
+Source replacement never edits the current quotation. Invalid keys, conflicts,
+limits, and network failures leave local data unchanged and show a retry action. A paused or
 unreadable catalogue store is never overwritten by the common catalogue.
 See `SHARED-CATALOG.md` for activation.
 

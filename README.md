@@ -138,7 +138,10 @@ groups entries without a category. Manual concepts remain available.
 New imported products have no approved sale price;
 historical references remain separate. Reimporting matches supplier and SKU,
 preserving existing manually approved prices and the current quotation's row
-values. See the [private import contract](docs/CATALOG-IMPORT.md).
+values. A reviewed source-replacement file can also retire imported entries from
+its explicit document scope, while preserving manual entries and retained sale
+prices. Replacement previews show the removals before confirmation. See the
+[private import contract](docs/CATALOG-IMPORT.md).
 Keep catalogue files private.
 
 Each quotation has one currency for its concepts. The open quotation automatically

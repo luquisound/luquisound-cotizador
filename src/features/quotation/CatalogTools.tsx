@@ -346,23 +346,26 @@ export function CatalogEditor({
 
   function importCatalog(): void {
     if (!preview) return
-    const updates = allowUpdates ? preview.updates.length : 0
+    const applyUpdates = preview.replacesSources || allowUpdates
+    const updates = applyUpdates ? preview.updates.length : 0
     const confirmation = [
-      `Importar ${preview.additions.length} opciones nuevas y actualizar ${updates}.`,
-      'Se conservan los presupuestos, los precios de venta ya cargados y las opciones que no figuran en el archivo.',
+      `Importar ${preview.additions.length} opciones nuevas y actualizar ${updates}.${preview.replacesSources ? ` Se retirarán ${preview.removals.length} opciones de las fuentes reemplazadas.` : ''}`,
+      preview.replacesSources
+        ? 'Se conservan las opciones manuales, el presupuesto en curso y los precios de venta de los productos que siguen en el catálogo.'
+        : 'Se conservan el presupuesto en curso, los precios de venta ya cargados y las opciones que no figuran en el archivo.',
       dirty ? 'Los cambios sin guardar de la opción abierta se descartarán.' : '',
-      preview.conflicts.length ? 'Los registros con conflicto se omiten.' : '',
+      !preview.replacesSources && preview.conflicts.length ? 'Los registros con conflicto se omiten.' : '',
       '¿Continuar?',
     ].filter(Boolean).join('\n')
     if (!window.confirm(confirmation)) return
     try {
-      const next = applyCatalogImport(catalog, preview, { allowUpdates })
+      const next = applyCatalogImport(catalog, preview, { allowUpdates: applyUpdates })
       if (!onSave(next)) {
         setImportError('No se guardó la importación. Revisá el aviso de guardado y conservá el archivo para volver a intentar.')
         return
       }
       resetMissingCategory(next)
-      setFeedback(`Importación aplicada al espacio actual: ${preview.additions.length} nuevas y ${updates} actualizadas. Los precios históricos siguen como referencias.`)
+      setFeedback(`Importación aplicada al espacio actual: ${preview.additions.length} nuevas y ${updates} actualizadas.${preview.replacesSources ? ` ${preview.removals.length} retiradas de las fuentes reemplazadas.` : ''} Los precios históricos siguen como referencias.`)
       clearPreview()
       resetDraft()
     } catch (cause: unknown) {
@@ -426,8 +429,9 @@ export function CatalogEditor({
   }
 
   const resultStart = visiblePage * PAGE_SIZE
-  const tooMany = preview !== null && catalog.length + preview.additions.length > CATALOG_IMPORT_MAX_ITEMS
-  const hasImportChanges = preview !== null && (preview.additions.length > 0 || (allowUpdates && preview.updates.length > 0))
+  const tooMany = preview !== null && catalog.length - preview.removals.length + preview.additions.length > CATALOG_IMPORT_MAX_ITEMS
+  const hasImportChanges = preview !== null && (preview.additions.length > 0 || preview.removals.length > 0 || ((preview.replacesSources || allowUpdates) && preview.updates.length > 0))
+  const replacementConflicts = preview !== null && preview.replacesSources && preview.conflicts.length > 0
 
   return (
     <Dialog title="Mi catálogo" onClose={close}>
@@ -475,17 +479,19 @@ export function CatalogEditor({
               <div><dt>Recibidas</dt><dd>{preview.summary.received}</dd></div>
               <div><dt>Nuevas</dt><dd>{preview.summary.additions}</dd></div>
               <div><dt>Actualizaciones</dt><dd>{preview.summary.updates}</dd></div>
+              {preview.replacesSources && <div><dt>A retirar</dt><dd>{preview.summary.removals}</dd></div>}
               <div><dt>Sin cambios</dt><dd>{preview.summary.unchanged}</dd></div>
               <div><dt>Conflictos</dt><dd>{preview.summary.conflicts}</dd></div>
               <div><dt>Repetidas</dt><dd>{preview.summary.duplicateRows}</dd></div>
             </dl>
+            {preview.replacesSources && <p className="notice">Este archivo reemplaza sus fuentes indicadas: actualiza las coincidencias y retira del catálogo las opciones de esas fuentes que ya no figuran. Se conservan las opciones manuales, el presupuesto en curso y los precios de venta de los productos que siguen en el catálogo.</p>}
             {preview.summary.withoutKey > 0 && <p className="notice">{preview.summary.withoutKey} registros no tienen proveedor y código completos. Se agregan sin actualizar coincidencias; volver a importarlos puede duplicarlos.</p>}
             {preview.conflicts.length > 0 && <>
-              <p className="field-help">Los conflictos se omiten. Podés importar los registros sin conflicto.</p>
-              <ul className="catalog-preview-conflicts">{preview.conflicts.slice(0, 5).map((conflict, index) => <li key={index}>Registro {conflict.itemIndexes.map((itemIndex) => itemIndex + 1).join(', ')}: {conflict.message}</li>)}</ul>
+              <p className={replacementConflicts ? 'field-errors' : 'field-help'} role={replacementConflicts ? 'alert' : undefined}>{replacementConflicts ? 'Resolvé los conflictos en el archivo antes de reemplazar las fuentes. El catálogo se conserva.' : 'Los conflictos se omiten. Podés importar los registros sin conflicto.'}</p>
+              <ul className="catalog-preview-conflicts">{preview.conflicts.slice(0, 5).map((conflict, index) => <li key={index}>{conflict.itemIndexes.length > 0 ? `Registro ${conflict.itemIndexes.map((itemIndex) => itemIndex + 1).join(', ')}: ` : ''}{conflict.message}</li>)}</ul>
               {preview.conflicts.length > 5 && <p className="field-help">Hay {preview.conflicts.length - 5} conflictos adicionales para revisar en el archivo.</p>}
             </>}
-            {preview.updates.length > 0 && <label className="catalog-confirm-updates">
+            {!preview.replacesSources && preview.updates.length > 0 && <label className="catalog-confirm-updates">
               <input type="checkbox" checked={allowUpdates} onChange={(event) => setAllowUpdates(event.target.checked)} />
               <span>Confirmo actualizar las {preview.updates.length} opciones coincidentes. Se conservan sus precios de venta y referencias anteriores.</span>
             </label>}
@@ -494,7 +500,7 @@ export function CatalogEditor({
             <div className="dialog-actions">
               <button type="button" className="button secondary" onClick={clearPreview}>Cancelar importación</button>
               <button type="button" className="button secondary" onClick={refreshPreview}>Actualizar vista previa</button>
-              <button type="button" className="button primary" disabled={!hasImportChanges || tooMany} onClick={importCatalog}>Confirmar importación</button>
+              <button type="button" className="button primary" disabled={!hasImportChanges || tooMany || replacementConflicts} onClick={importCatalog}>Confirmar importación</button>
             </div>
           </section>}
         </section>

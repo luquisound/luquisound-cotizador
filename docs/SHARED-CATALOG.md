@@ -10,8 +10,20 @@ edits, and those edits are not synchronized between devices.
 Common records need a complete, unique supplier and SKU key. Merging is atomic:
 local identities, approved prices (including zero), currencies, personal entries,
 and current quotation row values are preserved. Common metadata and historical
-references can be updated. Conflicts or limits retain the previous local catalogue
+references can be updated. By default, entries absent from the common file remain
+in the local catalogue. Conflicts or limits retain the previous local catalogue
 and show a retry action. Missing configuration retains manual file import and local use.
+
+A reviewed private JSON can opt into `replaceSourceDocuments`, using the same
+[explicit source replacement contract](CATALOG-IMPORT.md#explicit-source-replacement)
+as manual import. Only entries with primary source documents exactly listed in
+that manifest can be removed, and only when their supplier/SKU key is absent from
+the incoming items. Retained in-scope products replace old metadata and historical
+references while keeping local IDs, approved prices and currencies. Source-less
+manual entries and unrelated primary sources are outside the removal scope.
+Incomplete or ambiguous scoped keys block the entire replacement. Empty items
+retire entries only with an explicit valid source scope; an ordinary empty file
+changes nothing. Removal-only updates are saved normally.
 
 Local copies and approved prices use `luquisound.catalog.v1`, independently of
 the single current quotation's recovery snapshot. "Nuevo" replaces only that
