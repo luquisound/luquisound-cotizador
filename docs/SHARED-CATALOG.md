@@ -6,6 +6,9 @@ The app requests `GET /api/catalog` from the same origin on startup. Every new
 device receives the configured common product catalogue without a file picker.
 The endpoint is read-only. The app does not upload quotations or manual price
 edits, and those edits are not synchronized between devices.
+Manual catalogue management and its backups remain available through
+"Opciones" > "Mi catalogo", while product selection stays in the row editor.
+The initial quotation view does not show a prominent catalogue toolbar.
 
 Common records need a complete, unique supplier and SKU key. Merging is atomic:
 local identities, approved prices (including zero), currencies, personal entries,

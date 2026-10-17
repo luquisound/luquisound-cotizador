@@ -160,8 +160,11 @@ the current browser and origin. A read-only server endpoint supplies the private
 common catalogue on startup. There is no quotation upload, analytics, or
 synchronization of locally approved prices.
 
-The header contains the brand and editable quotation details. "Mi catalogo" is
-always reachable above the quotation. "Nuevo presupuesto" replaces only the
+The header contains the brand and editable quotation details. A single discreet
+"Opciones" menu contains bulk entry, "Presupuestos guardados", "Mi catalogo" and
+"Nuevo presupuesto" as secondary actions. The menu starts collapsed; history and
+save controls are accessed inside their workflow, not displayed on entry.
+"Nuevo presupuesto" replaces only the
 current quotation, confirming before content or an unreadable recovery record is
 replaced. It preserves the catalogue, approved prices and legacy workspace key.
 "Presupuestos guardados" lists named snapshots with their save dates, offers
@@ -236,7 +239,8 @@ delivery until that row is reviewed.
 
 ## Saved quotation library
 
-Saving is an explicit action with a trimmed name and save date. A duplicate name
+Open "Opciones" > "Presupuestos guardados" to access the library. Saving is an
+explicit action with a trimmed name and save date. A duplicate name
 requires confirmation before replacing its entry. The library allows up to 100
 entries in a 5 MiB envelope; limits reject the action instead of deleting older
 records. A new archive requires a row with concept, detail, price or an explicit
@@ -276,7 +280,7 @@ separately; the application does not add a frontend PIN or claim one is security
 ## Optional private catalogue
 
 No catalogue data is embedded in the public application. Product selection stays
-in the row editor; catalogue management is always available through "Mi catalogo"
+in the row editor; catalogue management is available through "Opciones" > "Mi catalogo"
 and from a storage-error notice. A configured private endpoint loads the common catalogue automatically.
 A private JSON file can also be imported after a summary and explicit confirmation.
 The catalogue combines a category filter with SKU, brand, and name search, ranks
@@ -340,7 +344,7 @@ guaranteed availability. See `CATALOG-SOURCE-ROADMAP.md`.
 
 ## Reviewed bulk entry
 
-"Pegar codigos o nombres" accepts up to 50 nonempty lines of 500 characters each,
+"Opciones" > "Pegar codigos o nombres" accepts up to 50 nonempty lines of 500 characters each,
 one product code or name per line. It does not parse pasted quantities or prices
 from extra columns. A unique exact SKU is preferred to a name; a unique exact
 name can also be proposed. Partial searches and ambiguous exact matches always

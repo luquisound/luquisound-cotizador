@@ -24,6 +24,8 @@ one hour ago, or when it has no automatic reference. This includes recovering
 the current quotation after reload. A fresh recovered reference is reused
 until its fetch-hour boundary. Missing legacy `exchangeRateMode` means automatic.
 
+The local library is accessed through "Opciones" > "Presupuestos guardados";
+history and save controls are secondary rather than visible on entry.
 Explicitly saving a named quotation stores a frozen snapshot and also freezes the
 current copy. Opening, duplicating or importing saved library quotations preserves
 their row amounts, currencies, rate and source metadata with

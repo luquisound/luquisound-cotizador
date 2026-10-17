@@ -114,11 +114,14 @@ On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
 compact header and readable row sizes; wide screens place totals beside the
 concepts and expand the workspace up to 1680 pixels. Image export controls remain
 fixed at the bottom and are excluded from the PNG along with other editing controls.
-"Mi catalogo" is always available above the quotation. "Nuevo presupuesto"
-starts a blank current quotation after confirmation when it would replace content
-or an unreadable recovery record; the catalogue and its prices are preserved.
-"Presupuestos guardados" explicitly saves named snapshots and can open or
-duplicate them. New quotations do not remove that library.
+One discreet "Opciones" menu contains the secondary actions "Pegar codigos o
+nombres", "Presupuestos guardados", "Mi catalogo" and "Nuevo presupuesto".
+These actions stay collapsed on entry so the graphic quotation remains the
+focus; history and save controls appear only inside the saved-quotation workflow.
+"Nuevo presupuesto" starts a blank current quotation after confirmation when it
+would replace content or an unreadable recovery record; the catalogue, its prices
+and the saved quotation library are preserved. "Presupuestos guardados" explicitly
+saves named snapshots and can open or duplicate them.
 Downloading or sharing a PNG leaves the current quotation open.
 
 Both sections offer optional audio categories: amplifier/DSP, additional
@@ -183,7 +186,7 @@ synchronized between devices, or encrypted by the app. Clearing browser data,
 private browsing, device loss, or an origin change can make it unavailable.
 The private common catalogue is fetched on startup when configured.
 
-Catalogue management is available from "Mi catalogo" and from a storage-error
+Catalogue management is available from "Opciones" > "Mi catalogo" and from a storage-error
 notice, with private JSON backup and import. Product selection stays in the row editor. Backups
 preserve IDs, approved prices, currencies, and provenance in the existing
 Workspace v1 envelope with `quotations: []` and `activeQuotationId: null`.
@@ -192,7 +195,7 @@ import replaces the catalogue. A compatible old full-workspace backup contribute
 only its catalogue; it never restores quotation history or replaces the open
 quotation. Keep these files private and outside the public repository.
 
-Import a private catalogue JSON from "Mi catalogo" after reviewing its summary.
+Import a private catalogue JSON from "Opciones" > "Mi catalogo" after reviewing its summary.
 Manual file import remains available alongside automatic common catalogue loading.
 Filter by product category and search by SKU, brand, or name at the same time.
 Categories come from imported data; "Todas" clears the filter and "Sin clasificar"
@@ -208,7 +211,7 @@ prices. Replacement previews show the removals before confirmation. See the
 Keep catalogue files private.
 
 The picker ranks exact SKU matches first and combines text with category filters.
-"Pegar codigos o nombres" reviews up to 50 lines, one code or name per line.
+"Opciones" > "Pegar codigos o nombres" reviews up to 50 lines, one code or name per line.
 A unique exact code or name can be proposed automatically; partial or ambiguous
 matches require a choice. Review quantity and section for each line, skip it, or
 create an independent manual concept. Repeated queries or products require

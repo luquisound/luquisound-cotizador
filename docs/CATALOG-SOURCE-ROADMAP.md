@@ -103,6 +103,10 @@ obsolete snapshot. Local approved prices and current quotation rows are unchange
 
 ## Active availability boundary
 
+Private catalogue inspection is a secondary workflow under "Opciones" >
+"Mi catalogo". Bulk review is under the same menu; neither requires a prominent
+toolbar over the graphic quotation.
+
 `fresh-positive` permits a protected product only with positive fresh stock and
 a valid sale amount. `historical-positive` also permits positive historical stock
 provisionally, with the same price requirement. Explicit source conflicts can

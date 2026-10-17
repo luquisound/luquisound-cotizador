@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
 import { calculateQuotation, isEmptyRow } from './calculation'
 import { createQuotation, createRow, hasQuotationContent, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
 import type { AudioCategory } from './audio-categories'
@@ -53,6 +53,10 @@ export default function QuotationApp() {
   const [recoveryError, setRecoveryError] = useState(initial.current.error)
   const [savedCatalog, setSavedCatalog] = useState<CatalogItem[] | null>(initial.catalog.stored ? initial.catalog.catalog : null)
   const [dialog, setDialog] = useState<'header' | 'catalog' | 'bulk' | 'library' | null>(null)
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const optionsId = useId()
+  const optionsContainer = useRef<HTMLDivElement>(null)
+  const optionsButton = useRef<HTMLButtonElement>(null)
   const [rowEditing, setRowEditing] = useState<RowEditingState | null>(null)
   const [message, setMessage] = useState('')
   const [prepared, setPrepared] = useState<{ file: File; quotation: Quotation; provisional: boolean } | null>(null)
@@ -116,11 +120,35 @@ export default function QuotationApp() {
     setSharedCatalogAttempt((attempt) => attempt + 1)
   }
 
+  function openSecondaryDialog(next: 'catalog' | 'bulk' | 'library') {
+    setOptionsOpen(false)
+    setDialog(next)
+  }
+
+  useEffect(() => {
+    if (!optionsOpen) return
+    function closeOutside(event: PointerEvent) {
+      if (event.target instanceof Node && !optionsContainer.current?.contains(event.target)) setOptionsOpen(false)
+    }
+    function closeWithEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setOptionsOpen(false)
+      optionsButton.current?.focus()
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeWithEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeWithEscape)
+    }
+  }, [optionsOpen])
+
   function closeCatalog() {
     setDialog(null)
     // Restore focus after the modal is removed and the page is no longer inert.
     window.requestAnimationFrame(() => {
-      const target = catalogButton.current ?? document.querySelector<HTMLButtonElement>('.quotation-heading-edit')
+      const target = catalogButton.current ?? optionsButton.current ?? document.querySelector<HTMLButtonElement>('.quotation-heading-edit')
       target?.focus()
     })
   }
@@ -128,7 +156,10 @@ export default function QuotationApp() {
   function startNewQuotation() {
     if ((hasQuotationContent(quotationRef.current) || recoveryError) && !window.confirm(
       '¿Comenzar un presupuesto nuevo? Se reemplazará el presupuesto en curso de este navegador. Descargá o guardá el actual antes de continuar. Tu catálogo y sus precios se conservan.',
-    )) return
+    )) {
+      window.requestAnimationFrame(() => optionsButton.current?.focus())
+      return
+    }
     const next = createQuotation()
     if (!updateQuotation(next)) return
     recoveryWriteAllowed.current = true
@@ -143,12 +174,12 @@ export default function QuotationApp() {
 
   function closeLibrary() {
     setDialog(null)
-    window.requestAnimationFrame(() => libraryButton.current?.focus())
+    window.requestAnimationFrame(() => (libraryButton.current ?? optionsButton.current)?.focus())
   }
 
   function closeBulk() {
     setDialog(null)
-    window.requestAnimationFrame(() => bulkButton.current?.focus())
+    window.requestAnimationFrame(() => (bulkButton.current ?? optionsButton.current)?.focus())
   }
 
   function addBulkRows(rows: QuotationRow[]): boolean {
@@ -505,12 +536,17 @@ export default function QuotationApp() {
     <div className="quotation-workspace">
       <a className="skip-link" href="#quotation">Ir al presupuesto</a>
       <main className="workspace-main">
-        <nav className="workspace-actions" aria-label="Herramientas del presupuesto">
-          <button ref={bulkButton} className="button secondary" type="button" onClick={() => setDialog('bulk')}>Pegar códigos o nombres</button>
-          <button ref={libraryButton} className="button secondary" type="button" onClick={() => setDialog('library')}>Presupuestos guardados</button>
-          <button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Mi catálogo</button>
-          <button className="button secondary" type="button" onClick={startNewQuotation}>Nuevo presupuesto</button>
-        </nav>
+        <div className="workspace-options" ref={optionsContainer} onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setOptionsOpen(false)
+        }}>
+          <button ref={optionsButton} className="workspace-options-toggle" type="button" aria-expanded={optionsOpen} aria-controls={optionsId} onClick={() => setOptionsOpen((open) => !open)}><span aria-hidden="true">⋯</span> Opciones</button>
+          {optionsOpen && <nav id={optionsId} className="workspace-options-panel" aria-label="Opciones del presupuesto">
+            <button ref={bulkButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('bulk')}>Pegar códigos o nombres</button>
+            <button ref={catalogButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('catalog')}>Mi catálogo</button>
+            <button ref={libraryButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('library')}>Presupuestos guardados</button>
+            <button className="button secondary" type="button" onClick={() => { setOptionsOpen(false); startNewQuotation() }}>Nuevo presupuesto</button>
+          </nav>}
+        </div>
         {historicalSource && <p className="notice pending source-warning" role="note">Fuente histórica provisional. Los precios de lista no tienen descuento automático. El stock corresponde a registros anteriores: disponibilidad a confirmar.</p>}
         <div id="quotation">
           <QuotationPreview
@@ -535,7 +571,7 @@ export default function QuotationApp() {
           />
         </div>
         {!canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({validationIssues.length})</summary><ul>{validationIssues.map((issue, index) => <li key={String(index) + '-' + issue}>{issue}</li>)}</ul>{!calculation.conversion.ok && <a className="button secondary" href="#quotation-exchange-rate">Revisar cotización del dólar</a>}</details>}
-        <p className="current-quotation-note">El presupuesto en curso se recupera al recargar. Guardá con nombre para conservar una versión en este navegador.</p>
+        <p className="current-quotation-note">El presupuesto en curso se recupera al recargar.</p>
       </main>
       <footer className="export-bar">
         <p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message || (!canExport ? 'Completá los datos pendientes para preparar la imagen.' : '')}</p>
