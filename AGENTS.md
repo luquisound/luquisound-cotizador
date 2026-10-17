@@ -40,13 +40,25 @@ inventory management, invoicing, and a general backend remain outside this stage
 ## UI conventions
 
 - Start directly with the yellow quotation header, without leading workspace
-  whitespace or a global historical-source banner. Keep private source metadata
-  and stock rules in their existing internal workflows. Place bulk entry, saved
-  quotations, catalogue management and New behind the single discreet "Opciones"
+  whitespace, a global historical-source banner or a general pending-data
+  disclaimer. Retain contextual validation and image-delivery guards. Keep private
+  source metadata and stock rules in their existing internal workflows. Place bulk
+  entry, saved quotations, catalogue management and New behind the single discreet "Opciones"
   menu below the template and contact footer. Keep history and save controls
   inside those secondary workflows.
+- Keep the full row modal focused on "Producto", unit price with its ARS or USD
+  label, and "Agregar" or "Guardar". Combine SKU, brand and name search with
+  independent manual entry; catalogue selection requires an explicit result
+  choice, never typing, blur or save. Avoid an initial catalogue accordion.
+  Keep quantity, detail, quotation category, currency, included state, private
+  provenance and removal in "Mas opciones", with active values summarized while
+  closed. Opening or closing it must preserve the draft. Retain pending and
+  invalid draft saving, price states, source and stock rules; Cancel leaves the
+  quotation unchanged.
 - Start with narrow-screen layouts and touch controls. Use semantic HTML,
   accessible names, visible keyboard focus, and sufficient contrast.
+  Both section and category "Agregar otro" buttons use their full row width and
+  a minimum 48-pixel touch target without overlapping adjacent editing controls.
 - Support safe-area insets where needed and avoid horizontal overflow. Verify
   responsive changes at mobile and desktop widths.
 - Lucas's target device is an iPhone; initial hands-on testing uses Android.

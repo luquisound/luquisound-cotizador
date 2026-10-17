@@ -41,6 +41,8 @@ not substituted for the actual sale price of a quotation.
 The initial view starts directly with the yellow quotation header, without
 leading workspace space or a global historical-source banner. Private source
 metadata and stock rules remain in their existing internal workflows.
+Do not show a general pending-data disclaimer. Keep contextual field validation
+and the existing guards that prevent image delivery with incomplete data.
 Custom quotations use a yellow #FFDA00 header with the original multicolour
 full horizontal logo, dark title and optional subtitle, and a dark
 separator. Labels, empty-title hints, and keyboard focus also remain dark for
@@ -56,8 +58,24 @@ and Save/Cancel actions. The template amount remains quantity times unit price.
 Quantity, other row fields and provenance stay unchanged. Blank means pending;
 zero is priced, except an already included row stays included at zero. A positive
 price makes an included row charged. Invalid nonblank input blocks saving in
-this dedicated editor; Cancel discards its draft. The full row editor retains
-its existing behavior.
+this dedicated editor; Cancel discards its draft.
+
+The full row modal starts with "Producto", a unit-price field labelled with the
+row's ARS or USD currency, and "Agregar" or "Guardar". The product field combines
+SKU, brand and name search with independent manual entry, without an initial
+catalogue accordion. Only an explicit result choice selects a catalogue product;
+typing, blur or saving never applies a match automatically. Selection preserves
+the row's identity, quantity, section and quotation category while copying the
+selected product's approved price, currency and private provenance together.
+
+"Mas opciones" contains quantity, optional detail, quotation category, currency,
+included-without-charge state, private provenance and the existing-row removal
+action. Its closed summary reflects the active quantity, category, currency,
+detail presence and included state. Opening or closing it does not reset values.
+The full editor retains pending and invalid drafts; editing only a description
+does not approve a pending amount or change an included state. Cancel leaves the
+quotation unchanged. Pricing, source, availability and image-output rules remain
+the same.
 
 PNG width is 1080 pixels. Height grows with content; long descriptions wrap and
 blank details do not reserve a line. Controls, pending validation, and editing
@@ -86,6 +104,9 @@ labels in the interface:
 Each category is optional and supports several independently editable concepts,
 including separate front and rear speakers with their own prices and currencies.
 Each section also provides a repeatable action to add a free-form concept.
+Both section and category "Agregar otro" controls fill their own row width with
+a minimum 48-pixel height. The whole button opens its original section/category;
+the hit area does not extend over neighbouring rows or price controls.
 Category names are editor hints, never prefilled commercial descriptions.
 Unused suggestions create no quotation rows, pending prices, totals, image
 content, or recoverable content. Compatible legacy blank rows also remain inert.

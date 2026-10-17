@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useDeferredValue, useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type Ref } from 'react'
 import { parseMoney } from './calculation.ts'
 import {
   applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES, CATALOG_IMPORT_MAX_ITEMS,
@@ -155,73 +155,119 @@ function CatalogCategorySelect({ label, options, value, onChange }: CatalogCateg
   )
 }
 
-interface CatalogPickerProps {
+interface RowProductPickerProps {
   catalog: CatalogItem[]
   section: RowSection
-  onChoose: (item: CatalogItem) => void
+  value: string
+  onChange: (value: string) => void
+  onChoose: (item: CatalogItem) => boolean
+  inputRef?: Ref<HTMLInputElement>
 }
 
-export function CatalogPicker({ catalog, section, onChoose }: CatalogPickerProps) {
-  const [query, setQuery] = useState('')
+export function RowProductPicker({ catalog, section, value, onChange, onChoose, inputRef }: RowProductPickerProps) {
+  const [resultsOpen, setResultsOpen] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('')
   const [showUnavailable, setShowUnavailable] = useState(false)
   const [selectionError, setSelectionError] = useState('')
+  const localInputRef = useRef<HTMLInputElement>(null)
+  const interacted = useRef(false)
+  const suppressFocus = useRef(false)
+  const inputId = useId()
+  const helpId = useId()
+  const resultsHeadingId = useId()
   const now = useCatalogClock(catalog)
-  const deferredQuery = useDeferredValue(query)
-  const searchId = useId()
-  const available = useMemo(() => getCatalogChoices(catalog, section), [catalog, section])
-  const categories = useMemo(() => getCatalogCategories(available), [available])
+  const choices = useMemo(() => getCatalogChoices(catalog, section), [catalog, section])
+  const categories = useMemo(() => getCatalogCategories(choices), [choices])
   const category = categories.some((option) => option.key === selectedCategory) ? selectedCategory : ''
-  const allResults = useMemo(() => queryCatalogRanked(available, deferredQuery, category), [available, deferredQuery, category])
+  const allResults = useMemo(() => queryCatalogRanked(choices, value, category), [choices, value, category])
   const results = allResults.filter((item) => showUnavailable || canSelectCatalogItem(item, now))
-  const resolution = resolveCatalogQuery(available, deferredQuery, (item) => canSelectCatalogItem(item, now))
-  const exactBlocked = resolution.matchKind === 'sku' || resolution.matchKind === 'name' ? resolution.blockedCandidates : []
+  const resolution = resolveCatalogQuery(choices, value, (item) => canSelectCatalogItem(item, now))
+  const exactBlocked = (resolution.matchKind === 'sku' || resolution.matchKind === 'name')
+    && resolution.blockedCandidates.length > 0
+  const showResults = resultsOpen && value.trim().length > 0
+  useImperativeHandle(inputRef, () => localInputRef.current!, [])
+
+  function keepManualText(): void {
+    setResultsOpen(false)
+    setSelectionError('')
+    suppressFocus.current = true
+    localInputRef.current?.focus({ preventScroll: true })
+    suppressFocus.current = false
+  }
+
   function choose(item: CatalogItem): void {
-    // The helper reads the current clock again when the user selects an item.
+    // Recheck the clock at the explicit action, including confirmed references.
     if (!canSelectCatalogItem(item)) {
       setSelectionError('La disponibilidad cambi\u00f3. Revis\u00e1 el stock del producto antes de agregarlo.')
       return
     }
     setSelectionError('')
-    onChoose(item)
+    if (onChoose(item)) setResultsOpen(false)
   }
+
   return (
-    <fieldset className="catalog-picker">
-      <legend>Elegir del catálogo <span>(opcional)</span></legend>
-      <details className="catalog-picker-search">
-        <summary>Buscar en el catálogo ({available.length} opciones)</summary>
-      <div className="catalog-filters">
-        <label className="catalog-search" htmlFor={searchId}>Buscar por código, marca o nombre
-          <input id={searchId} type="search" autoComplete="off" maxLength={200} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar una opción" />
-        </label>
-        <CatalogCategorySelect label="Filtrar productos por categoría" options={categories} value={category} onChange={setSelectedCategory} />
-      </div>
-      <label className="catalog-confirm-updates"><input type="checkbox" checked={showUnavailable} onChange={(event) => setShowUnavailable(event.target.checked)} /><span>Mostrar no habilitados</span></label>
-      {!showUnavailable && exactBlocked.length > 0 && <div className="notice pending" role="status">
-        <p>La coincidencia exacta no tiene disponibilidad habilitada. Marcá Mostrar no habilitados para revisar la ficha.</p>
-        {exactBlocked.slice(0, PICKER_LIMIT).map((item) => <p key={item.id}><strong>{item.concept}</strong><CatalogAvailability item={item} now={now} /></p>)}
-      </div>}
-      {selectionError && <p className="field-errors" role="alert">{selectionError}</p>}
-      <p className="field-help">Podés escribir un trabajo independiente o dejar el campo vacío. Al elegir, se copia el precio manual o la lista aprobada, con su moneda. Una lista histórica provisional requiere confirmar disponibilidad; las referencias sin aprobar se revisan por separado.</p>
-      <p className="catalog-count" aria-live="polite">{results.length === 0
-        ? 'No hay coincidencias para esta búsqueda.'
-        : `${results.length} coincidencias${results.length > PICKER_LIMIT ? ` · Se muestran las primeras ${PICKER_LIMIT}; afiná la búsqueda.` : ''}`}</p>
-      <ul className="catalog-picker-results" aria-busy={query !== deferredQuery}>
-        {results.slice(0, PICKER_LIMIT).map((item) => (
-          <li className="catalog-picker-card" key={item.id}>
-            <button type="button" className="catalog-picker-choice" disabled={!canSelectCatalogItem(item, now)} onClick={() => choose(item)}>
-              <strong className="catalog-item-name">{item.concept}</strong>
-              {(item.sku || item.brand || item.supplier) && <span className="catalog-item-meta">{[item.sku, item.brand, item.supplier].filter(Boolean).join(' · ')}</span>}
-              <span className="catalog-item-price">{catalogPriceLabel(item)}</span>
-              <CatalogAvailability item={item} now={now} />
-              <span className="catalog-item-meta">{canSelectCatalogItem(item, now) ? 'Usar producto' : 'No habilitado para agregar'}</span>
-            </button>
-            <HistoricalReferences item={item} currency={getCatalogDefaultCurrency(item)} allowCurrencyChange disabled={!canSelectCatalogItem(item, now)} onUse={(unitPrice, currency) => choose({ ...item, unitPrice, currency })} />
-          </li>
-        ))}
-      </ul>
-      </details>
-    </fieldset>
+    <div className="row-product-picker" onKeyDown={(event) => {
+      if (event.key === 'Escape' && showResults) {
+        event.preventDefault()
+        event.stopPropagation()
+        keepManualText()
+      }
+    }}>
+      <label className="row-product-field" htmlFor={inputId}>Producto
+        <input ref={localInputRef} id={inputId} type="text" autoFocus autoComplete="off" maxLength={500}
+          value={value} placeholder="Buscar por código o nombre, o escribir manual" aria-describedby={helpId}
+          onPointerDown={() => {
+            interacted.current = true
+            if (value.trim()) setResultsOpen(true)
+          }} onFocus={() => {
+            // Automatic initial focus must not open an unrequested catalogue list.
+            if (interacted.current && !suppressFocus.current && value.trim()) setResultsOpen(true)
+          }} onKeyDown={(event) => {
+            if (event.key === 'ArrowDown' && value.trim()) {
+              event.preventDefault()
+              interacted.current = true
+              setResultsOpen(true)
+            }
+          }} onChange={(event) => {
+            interacted.current = true
+            onChange(event.target.value)
+            setResultsOpen(event.target.value.trim().length > 0)
+            setSelectionError('')
+          }} />
+      </label>
+      <p id={helpId} className="field-help row-product-help">Escribí libremente o elegí una sugerencia.</p>
+      {showResults && <section className="row-product-results" aria-labelledby={resultsHeadingId}>
+        <h3 className="row-product-heading" id={resultsHeadingId}>Resultados del catálogo</h3>
+        <button type="button" className="button secondary row-product-manual" disabled={!resolution.manualAllowed} onClick={keepManualText}>Usar texto manual</button>
+        <details className="row-product-options">
+          <summary>Filtrar catálogo</summary>
+          <div className="catalog-filters">
+            <CatalogCategorySelect label="Categoría del catálogo" options={categories} value={category} onChange={setSelectedCategory} />
+            <label className="catalog-confirm-updates"><input type="checkbox" checked={showUnavailable} onChange={(event) => setShowUnavailable(event.target.checked)} /><span>Mostrar no habilitados</span></label>
+          </div>
+        </details>
+        {!showUnavailable && exactBlocked && <p className="notice pending" role="status">Hay una coincidencia exacta no habilitada. Activá Mostrar no habilitados para revisarla.</p>}
+        {selectionError && <p className="field-errors" role="alert">{selectionError}</p>}
+        <p className="catalog-count" aria-live="polite">{results.length === 0
+          ? 'No hay coincidencias habilitadas para esta b\u00fasqueda.'
+          : `${results.length} coincidencias${results.length > PICKER_LIMIT ? ` \u00b7 Se muestran las primeras ${PICKER_LIMIT}; afin\u00e1 la b\u00fasqueda.` : ''}`}</p>
+        <ul className="catalog-picker-results">
+          {results.slice(0, PICKER_LIMIT).map((item) => {
+            const selectable = canSelectCatalogItem(item, now)
+            return <li className="catalog-picker-card" key={item.id}>
+              <button type="button" className="catalog-picker-choice" disabled={!selectable} onClick={() => choose(item)}>
+                <strong className="catalog-item-name">{item.concept}</strong>
+                {(item.sku || item.brand || item.supplier) && <span className="catalog-item-meta">{[item.sku, item.brand, item.supplier].filter(Boolean).join(' \u00b7 ')}</span>}
+                <span className="catalog-item-price">{catalogPriceLabel(item)}</span>
+                <CatalogAvailability item={item} now={now} />
+                <span className="catalog-item-meta">{selectable ? 'Usar producto' : 'No habilitado para agregar'}</span>
+              </button>
+              <HistoricalReferences item={item} currency={getCatalogDefaultCurrency(item)} allowCurrencyChange disabled={!selectable} onUse={(unitPrice, currency) => choose({ ...item, unitPrice, currency })} />
+            </li>
+          })}
+        </ul>
+      </section>}
+    </div>
   )
 }
 

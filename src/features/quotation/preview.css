@@ -240,6 +240,13 @@
   border-bottom: 1px dashed var(--quotation-rule);
 }
 
+.quotation-add-row,
+.quotation-category-add {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 8px;
+}
+
 .quotation-add-row {
   margin-top: 8px;
 }
@@ -254,7 +261,6 @@
 }
 
 .quotation-category-add {
-  width: 100%;
   border-bottom: 1px dashed var(--quotation-rule);
 }
 

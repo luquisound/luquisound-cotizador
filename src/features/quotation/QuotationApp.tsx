@@ -79,7 +79,6 @@ export default function QuotationApp() {
   const availabilityNow = useCatalogClock(catalog, quotation.rows)
   const availability = inspectQuotationAvailability(quotation, catalog, availabilityNow)
   const canExport = calculation.canExport && availability.issues.length === 0
-  const validationIssues = [...calculation.issues, ...availability.issues]
   const preparedFile = prepared?.quotation === quotation && canExport && prepared.provisional === availability.hasProvisional ? prepared.file : null
   const savedQuotes = useQuotationLibrary()
   const editingRow = rowEditing?.kind === 'new'
@@ -597,11 +596,10 @@ export default function QuotationApp() {
             <button className="button secondary" type="button" onClick={() => { setOptionsOpen(false); startNewQuotation() }}>Nuevo presupuesto</button>
           </nav>}
         </div>
-        {!canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({validationIssues.length})</summary><ul>{validationIssues.map((issue, index) => <li key={String(index) + '-' + issue}>{issue}</li>)}</ul>{!calculation.conversion.ok && <a className="button secondary" href="#quotation-exchange-rate">Revisar cotización del dólar</a>}</details>}
         <p className="current-quotation-note">El presupuesto en curso se recupera al recargar.</p>
       </main>
       <footer className="export-bar">
-        <p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message || (!canExport ? 'Completá los datos pendientes para preparar la imagen.' : '')}</p>
+        <p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message}</p>
         <div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={downloadPreparedImage}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div>
       </footer>
       {dialog === 'header' && <HeaderEditor quotation={quotation} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}

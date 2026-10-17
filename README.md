@@ -108,6 +108,8 @@ editable title in a yellow header with dark text and the original multicolour
 horizontal logo. The header starts at the top of the workspace without leading
 space or a global historical-source banner; private source and stock metadata
 remain in the catalogue and row workflows.
+There is no general pending-data banner. Per-field feedback and image validation
+still preserve incomplete, zero-priced and included concepts as distinct states.
 The preview and PNG share the same palette and logo resource. Fixed quotations
 in Figma retain their dark headers. Exchange-rate details stay beside the totals.
 "Datos del presupuesto" edits only the title and optional subtitle.
@@ -119,8 +121,19 @@ and Save/Cancel actions. The template amount remains quantity times unit price.
 Quantity, other row fields and provenance stay unchanged. Blank means pending;
 zero is priced, except an already included row stays included at zero. A positive
 price makes an included row charged. Invalid nonblank input blocks saving in
-this dedicated editor; Cancel discards its draft. The full row editor retains
-its existing behavior.
+this dedicated editor; Cancel discards its draft.
+
+The full row editor starts with "Producto", the unit price labelled ARS or USD,
+and "Agregar" or "Guardar". "Producto" searches by SKU, brand or name and also
+accepts an independent manual concept. Choosing a catalogue result is explicit;
+typing or leaving the field never selects one silently. There is no initial
+catalogue accordion. "Mas opciones" contains quantity, optional detail, quotation
+category, currency, included-without-charge state, private provenance and removal.
+Its closed summary shows the active quantity, category, currency, detail presence
+and included state. Opening or closing these options preserves the draft.
+The full editor still saves pending or invalid drafts for later completion;
+editing only a description preserves its price state. Cancel discards all modal
+changes. This presentation preserves pricing, source and availability rules.
 
 On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
 compact header and readable row sizes; wide screens place totals beside the
@@ -142,6 +155,8 @@ amplifier, subwoofer, and speakers for equipment; cables/accessories,
 connector/harness, rings/3D adapters, and labour for installation. A category can
 contain several independent concepts, and each section also allows repeated
 free-form concepts. Empty category suggestions exist only in the editor; they
+and both "Agregar otro" actions have full-width touch targets at least 48 pixels
+high. These editor controls
 create no pending prices or image content. Opening a new row uses a temporary
 draft: cancelling leaves the quotation and any prepared image unchanged.
 Categories are recovered with their rows and can be changed within the section.
