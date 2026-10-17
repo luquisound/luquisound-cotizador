@@ -102,7 +102,7 @@ devices, or encrypted by the app. The common product catalogue is fetched from a
 private server endpoint on startup; it is available without manually importing
 on each device once that service is activated.
 Clearing browser data, private browsing, device loss, or changing the app origin
-can make them unavailable. Download a JSON backup from "Mas opciones" and keep
+can make them unavailable. Download a JSON backup from "Opciones" and keep
 it privately. Import replaces the current workspace after confirmation.
 
 An untouched quotation stays in memory and is not saved as a draft. Repeated
@@ -115,6 +115,11 @@ Corrupt stored data is not automatically overwritten. Failed saves show an error
 Concurrent changes from another tab pause saving until the user resolves them.
 Catalogue selections copy values into a quotation; later catalogue edits preserve
 the quotation's stored prices.
+
+The compact "Opciones" menu groups duplication, "Mi catalogo", backups, and
+draft cleanup. Expand "Dolar del presupuesto" to inspect or explicitly update
+the saved rate. Catalogue status and local-storage guidance are in the menu;
+storage and service failures remain visible beside the editor.
 
 Import a private catalogue JSON from "Mi catalogo" after reviewing its summary.
 Manual file import remains available alongside automatic common catalogue loading.

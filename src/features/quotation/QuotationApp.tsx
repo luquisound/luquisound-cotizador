@@ -43,6 +43,7 @@ export default function QuotationApp() {
   const rateGeneration = useRef(0)
   const copiedRateIds = useRef(new Set<string>())
   const importInput = useRef<HTMLInputElement>(null)
+  const workspaceMenu = useRef<HTMLDetailsElement>(null)
   const generation = useRef(0)
   const pausedByAnotherTab = useRef(false)
   const persistedIds = useRef(new Set(initial.persistedIds))
@@ -58,6 +59,35 @@ export default function QuotationApp() {
   const rateLoading = rateState?.id === quotation.id && rateState.loading
   const rateError = rateState?.id === quotation.id ? rateState.error : null
   const displayedRate = parseExchangeRate(quotation.exchangeRate ?? '')
+
+  useEffect(() => {
+    function closeOutside(event: PointerEvent) {
+      if (event.target instanceof Node && !workspaceMenu.current?.contains(event.target)) workspaceMenu.current?.removeAttribute('open')
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape' && workspaceMenu.current?.open) {
+        workspaceMenu.current.removeAttribute('open')
+        workspaceMenu.current.querySelector('summary')?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [])
+
+  function retrySharedCatalog() {
+    setSharedCatalogStatus('loading')
+    setSharedCatalogAttempt((attempt) => attempt + 1)
+  }
+
+  function closeCatalog() {
+    setDialog(null)
+    // Wait until the modal is removed and the menu can receive focus again.
+    window.requestAnimationFrame(() => workspaceMenu.current?.querySelector('summary')?.focus())
+  }
 
   const applyDollarQuote = useEffectEvent((id: string, quote: BlueDollarQuote, automatic: boolean) => {
     if (!storageEnabled || pausedByAnotherTab.current || workspace.activeQuotationId !== id) return
@@ -294,49 +324,60 @@ export default function QuotationApp() {
   return (
     <div className="quotation-workspace">
       <a className="skip-link" href="#quotation">Ir al presupuesto</a>
-      <header className="workspace-header"><div className="workspace-brand"><img src="/brand/luquisound-horizontal.svg" alt="Luquisound" width="176" height="20" /><div><h1>Cotizador Luquisound</h1><p>Tu plantilla. Cada proyecto.</p></div></div><button className="button primary" type="button" onClick={() => addQuotation()}>+ Nuevo</button></header>
+      <header className="workspace-header"><div className="workspace-brand"><img src="/brand/luquisound-horizontal.svg" alt="Luquisound" width="176" height="20" /><h1 className="sr-only">Cotizador Luquisound</h1></div><button className="button primary" type="button" onClick={() => addQuotation()}>+ Nuevo</button></header>
       <main className="workspace-main">
         <div className="workspace-toolbar">
-          <label className="draft-selector">Borrador
+          <label className="draft-selector"><span className="sr-only">Presupuesto</span>
             <select aria-label="Elegir borrador" value={quotation.id} onChange={(event) => setWorkspace({ ...workspace, activeQuotationId: event.target.value })}>
               {workspace.quotations.map((entry) => <option key={entry.id} value={entry.id}>{quotationLabel(entry)}</option>)}
             </select>
           </label>
-          <div className="toolbar-actions">
-            <button className="button secondary" onClick={() => addQuotation(true)}>Duplicar</button>
-            <button className="button secondary" onClick={() => setDialog('catalog')}>Mi catálogo</button>
-            <details className="workspace-menu"><summary>Más opciones</summary><div><button type="button" onClick={exportBackup}>Descargar respaldo</button><button type="button" onClick={() => importInput.current?.click()}>Importar respaldo</button><button type="button" className="danger" onClick={removeQuotation}>Eliminar borrador</button></div></details>
-          </div>
+          <details ref={workspaceMenu} className="workspace-menu">
+            <summary>Opciones</summary>
+            <div onClick={(event) => {
+              if (event.target instanceof Element && event.target.closest('button')) {
+                workspaceMenu.current?.removeAttribute('open')
+                workspaceMenu.current?.querySelector('summary')?.focus()
+              }
+            }}>
+              <button type="button" onClick={() => addQuotation(true)}>Duplicar presupuesto</button>
+              <button type="button" onClick={() => setDialog('catalog')}>Mi catálogo</button>
+              <button type="button" onClick={exportBackup}>Descargar respaldo</button>
+              <button type="button" onClick={() => importInput.current?.click()}>Importar respaldo</button>
+              <button type="button" className="danger" onClick={removeQuotation}>Eliminar borrador</button>
+              {storedEmptyCount > 0 && <button type="button" className="danger" onClick={removeStoredEmptyQuotations}>Eliminar vacíos guardados ({storedEmptyCount})</button>}
+              <div className="workspace-menu-info">
+                <p role="status">{sharedCatalogStatus === 'loading' ? 'Cargando catálogo compartido…'
+                  : sharedCatalogStatus === 'ready' ? 'Catálogo compartido disponible.'
+                    : sharedCatalogStatus === 'unavailable' ? 'Catálogo compartido no disponible. Podés usar tu catálogo o escribir conceptos.'
+                      : 'No se pudo actualizar el catálogo. Se conserva tu catálogo guardado.'}</p>
+                {(sharedCatalogStatus === 'error' || sharedCatalogStatus === 'unavailable') && <button type="button" onClick={retrySharedCatalog}>Reintentar carga del catálogo</button>}
+                <p>Presupuestos y precios solo en este navegador. Usá respaldos para conservarlos o llevarlos a otro dispositivo. Borrar los datos del navegador puede eliminarlos.</p>
+              </div>
+            </div>
+          </details>
         </div>
-        <div className="workspace-status"><span role="status">{saveStatus}</span><span>Presupuestos y precios en este navegador</span></div>
-        <div className={`notice${sharedCatalogStatus === 'error' ? ' error' : ''}`} role="status" aria-live="polite">
-          <p>{sharedCatalogStatus === 'loading' ? 'Cargando catálogo compartido…'
-            : sharedCatalogStatus === 'ready' ? 'Catálogo compartido disponible. Se conservan tus precios de venta y presupuestos de este navegador.'
-              : sharedCatalogStatus === 'unavailable' ? 'El catálogo compartido todavía no está disponible. Podés usar tu catálogo local o escribir los conceptos manualmente.'
-                : 'No se pudo actualizar el catálogo compartido. Se conserva tu catálogo guardado y podés seguir cotizando.'}</p>
-          {(sharedCatalogStatus === 'error' || sharedCatalogStatus === 'unavailable') && <button type="button" className="button secondary" onClick={() => {
-            setSharedCatalogStatus('loading')
-            setSharedCatalogAttempt((attempt) => attempt + 1)
-          }}>Reintentar carga del catálogo</button>}
-        </div>
-        {storedEmptyCount > 0 && <div className="notice"><p>Se conservaron {storedEmptyCount} borradores vacíos que ya estaban guardados. Podés eliminarlos después de confirmarlo.</p><button type="button" className="button secondary" onClick={removeStoredEmptyQuotations}>Eliminar vacíos guardados</button></div>}
+        <p className="workspace-status" role="status">{saveStatus}</p>
+        {sharedCatalogStatus === 'error' && <div className="notice error" role="status"><p>No se pudo actualizar el catálogo compartido. Podés seguir usando el catálogo guardado.</p><button type="button" className="button secondary" onClick={retrySharedCatalog}>Reintentar carga del catálogo</button></div>}
         {storageError && <div className="notice error" role="alert"><p>{storageError}</p><button className="button secondary" onClick={exportBackup}>Descargar respaldo</button>{!storageEnabled && <button className="button secondary" onClick={() => { if (window.confirm('Habilitar el guardado puede reemplazar datos locales que no pudieron recuperarse. ¿Continuar?')) { pausedByAnotherTab.current = false; setStorageEnabled(true) } }}>Habilitar guardado</button>}</div>}
-        <section className="exchange-panel" aria-label="Cotización del dólar del presupuesto">
-          <div><strong>Dólar de este presupuesto</strong><p>{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando blue venta…' : 'Cotización pendiente'}</p><p className="field-help">{exchangeRateDescription(quotation)}</p></div>
-          <button type="button" className="button secondary" disabled={rateLoading} onClick={() => { void requestDollarQuote(quotation.id) }}>{rateLoading ? 'Consultando…' : 'Actualizar cotización'}</button>
-          <p className="field-help">La cotización queda fija con este presupuesto. Actualizarla puede cambiar el total equivalente.</p>
-          {quotation.exchangeRateQuote && Date.now() - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="field-help">La fuente informa una cotización anterior. Revisá la fecha antes de compartir.</p>}
-          {rateError && <p className="field-errors" role="alert">{rateError}</p>}
-        </section>
-        <p className="editing-hint">Tocá el título o un concepto para editarlo. Podés escribir libremente, elegir del catálogo o dejar un campo vacío.</p>
+        <details className="exchange-panel">
+          <summary><span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span></summary>
+          <div className="exchange-panel-details">
+            {displayedRate.ok && <p className="field-help">{exchangeRateDescription(quotation)}</p>}
+            <p className="field-help">Queda fijo en este presupuesto. Actualizarlo puede cambiar el total equivalente.</p>
+            <button type="button" className="button secondary" disabled={rateLoading} onClick={() => { void requestDollarQuote(quotation.id) }}>{rateLoading ? 'Consultando…' : 'Actualizar cotización'}</button>
+          </div>
+        </details>
+        {quotation.exchangeRateQuote && Date.now() - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
+        {rateError && <div className="exchange-warning" role="alert"><p>{rateError}</p><button type="button" className="button secondary" disabled={rateLoading} onClick={() => { void requestDollarQuote(quotation.id) }}>Reintentar cotización</button></div>}
+        <p className="editing-hint">Tocá el título o un concepto para editar.</p>
         <div id="quotation"><QuotationPreview quotation={quotation} onEditHeader={() => setDialog('header')} onEditRow={setEditingRowId} onAddRow={addRow} /></div>
-        {!calculation.canExport && <div className="notice pending"><strong>El presupuesto todavía tiene datos pendientes.</strong><ul>{calculation.issues.map((issue, index) => <li key={`${index}-${issue}`}>{issue}</li>)}</ul>{!calculation.conversion.ok && <button type="button" className="button secondary" onClick={() => setDialog('header')}>Cargar valor USD / peso</button>}<p>Podés seguir editándolo; la imagen final se habilita cuando esté completo.</p></div>}
-        <div className="local-data-note"><strong>Tus presupuestos y precios se guardan en este navegador.</strong> El catálogo común se consulta al abrir la app. Tus presupuestos y cambios de precio no se envían al servidor. Borrar los datos del navegador puede eliminar tus borradores. Usá respaldos para conservarlos o llevarlos a otro dispositivo.</div>
+        {!calculation.canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({calculation.issues.length})</summary><ul>{calculation.issues.map((issue, index) => <li key={`${index}-${issue}`}>{issue}</li>)}</ul>{!calculation.conversion.ok && <button type="button" className="button secondary" onClick={() => setDialog('header')}>Revisar cotización del dólar</button>}</details>}
         <input ref={importInput} type="file" accept=".json,application/json" hidden onChange={(event) => { void importBackup(event) }} />
       </main>
-      <footer className="export-bar"><div><strong>{preparedFile ? 'Imagen lista para compartir' : 'Compartí tu presupuesto'}</strong><p role="status" aria-live="polite">{message || 'La imagen incluye solo la plantilla, sin controles.'}</p></div><div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={() => downloadQuotationFile(preparedFile)}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !calculation.canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div></footer>
+      <footer className="export-bar"><p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message || (!calculation.canExport ? 'Completá los datos pendientes para preparar la imagen.' : '')}</p><div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={() => downloadQuotationFile(preparedFile)}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !calculation.canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div></footer>
       {dialog === 'header' && <HeaderEditor quotation={quotation} rateLoading={rateLoading} rateError={rateError} onUpdateRate={() => { void requestDollarQuote(quotation.id) }} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
-      {dialog === 'catalog' && <CatalogEditor catalog={workspace.catalog} saveStatus={catalogSaveStatus} saveError={storageError} onClose={() => setDialog(null)} onSave={(catalog) => commitWorkspace({ ...workspace, catalog })} />}
+      {dialog === 'catalog' && <CatalogEditor catalog={workspace.catalog} saveStatus={catalogSaveStatus} saveError={storageError} onClose={closeCatalog} onSave={(catalog) => commitWorkspace({ ...workspace, catalog })} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={workspace.catalog} onClose={() => setEditingRowId(null)} onSave={(row) => { if (updateQuotation({ ...quotation, rows: quotation.rows.map((entry) => entry.id === row.id ? row : entry) })) setEditingRowId(null) }} onRemove={() => { if (updateQuotation({ ...quotation, rows: quotation.rows.filter((entry) => entry.id !== editingRow.id) })) setEditingRowId(null) }} />}
     </div>
   )

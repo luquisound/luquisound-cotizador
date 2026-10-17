@@ -71,30 +71,70 @@
 }
 
 .exchange-panel {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 20px;
-  margin: 20px 0;
-  padding: 16px;
-  border: 1px solid #d3d2cb;
-  border-radius: 8px;
-  background: #fff;
+  margin: 0;
+  border-block: 1px solid #d3d2cb;
 }
 
-.exchange-panel > div {
-  flex: 1 1 240px;
+.exchange-panel > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-height: 48px;
+  padding: 10px 0;
+  font-size: 13px;
+  list-style: none;
+}
+
+.exchange-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.exchange-panel > summary::after {
+  content: '+';
+  margin-left: auto;
+  font-size: 18px;
+}
+
+.exchange-panel[open] > summary::after {
+  content: '−';
+}
+
+.exchange-summary-value {
+  color: #62625c;
+  overflow-wrap: anywhere;
   min-width: 0;
+}
+
+.exchange-panel-details {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding-bottom: 14px;
+}
+
+.exchange-panel-details > p {
+  min-width: 0;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 
-.exchange-panel > p {
-  flex-basis: 100%;
-  min-width: 0;
-  margin: 0;
+.exchange-warning {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+  color: #8e2721;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.exchange-panel > .button {
+.exchange-warning p {
+  flex: 1 1 240px;
+}
+
+.exchange-panel-details > .button {
   max-width: 100%;
   white-space: normal;
 }
