@@ -162,7 +162,7 @@ export function QuotationPreview({
                         </button>
                       ) : (
                         <>
-                          <h3 className="quotation-category-label">{category.label}</h3>
+                          {section === 'equipment' && <h3 className="quotation-category-label">{category.label}</h3>}
                           <ul className="quotation-rows">
                             {categoryRows.map((row) => (
                               <li key={row.id}>
@@ -175,14 +175,14 @@ export function QuotationPreview({
                               </li>
                             ))}
                           </ul>
-                          <button
+                          {section === 'equipment' && <button
                             type="button"
                             className="quotation-category-add"
                             onClick={() => onAddRow(section, category.id)}
                             aria-label={`Agregar otro ítem en ${category.label}`}
                           >
                             <span aria-hidden="true">+</span> Agregar otro
-                          </button>
+                          </button>}
                         </>
                       )}
                     </div>
@@ -208,7 +208,7 @@ export function QuotationPreview({
                   onClick={() => onAddRow(section)}
                   aria-label={`Agregar otro concepto en ${accessibleLabel}`}
                 >
-                  <span aria-hidden="true">+</span> Agregar otro
+                  <span aria-hidden="true">+</span> {section === 'extras' ? 'Agregar otro concepto' : 'Agregar otro'}
                 </button>
               </section>
             )

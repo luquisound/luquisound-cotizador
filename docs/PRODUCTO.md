@@ -14,8 +14,8 @@ custom quotation and can explicitly save named snapshots in this browser.
 - Editable title, optional subtitle, and manual quotation rows. Existing notes
   remain in recovered quotations and images; the details form edits only title
   and subtitle. Exchange-rate information stays beside the totals.
-- Equipment and installation/accessory sections with optional audio categories,
-  multiple concepts per category, and arbitrary work.
+- Equipment groups and optional direct installation concepts, preserving multiple
+  existing rows per category and arbitrary work.
 - Private common catalogue loaded automatically on each device when configured,
   plus optional personal entries; every selected description and price remains
   editable. A field may be left blank without requiring a catalogue selection.
@@ -60,9 +60,10 @@ zero is priced, except an already included row stays included at zero. A positiv
 price makes an included row charged. Invalid nonblank input blocks saving in
 this dedicated editor; Cancel discards its draft.
 
-The full row modal starts with "Producto", a unit-price field labelled with the
-row's ARS or USD currency, and "Agregar" or "Guardar". The product field combines
-SKU, brand and name search with independent manual entry, without an initial
+The full modal for equipment and other custom rows starts with "Producto", a
+unit-price field labelled with the row's ARS or USD currency, and "Agregar" or
+"Guardar". The product field combines SKU, brand and name search with independent
+manual entry, without an initial
 catalogue accordion. Only an explicit result choice selects a catalogue product;
 typing, blur or saving never applies a match automatically. Selection preserves
 the row's identity, quantity, section and quotation category while copying the
@@ -91,33 +92,79 @@ is inserted; a plus sign explicitly typed as part of the title is retained.
 
 ## Optional audio categories
 
-The two quotation sections offer the following category order, with Spanish
-labels in the interface:
+Equipment keeps optional groups. Installation uses optional direct concepts in
+the corresponding stored category order:
 
 | Equipment | Installation and accessories |
 | --- | --- |
 | Amplifier / DSP | Cables and accessories |
-| Additional amplifier | Connector / harness |
-| Subwoofer | Rings / 3D adapters |
-| Speakers or component sets | Labour |
+| Additional amplifier | Stereo bypass connector |
+| Subwoofer | 3D adapter rings |
+| Speakers or component sets | Installation labour |
 
-Each category is optional and supports several independently editable concepts,
-including separate front and rear speakers with their own prices and currencies.
-Each section also provides a repeatable action to add a free-form concept.
-Both section and category "Agregar otro" controls fill their own row width with
-a minimum 48-pixel height. The whole button opens its original section/category;
-the hit area does not extend over neighbouring rows or price controls.
-Category names are editor hints, never prefilled commercial descriptions.
-Unused suggestions create no quotation rows, pending prices, totals, image
-content, or recoverable content. Compatible legacy blank rows also remain inert.
+Equipment categories support several independently editable concepts, including
+separate front and rear speakers, and do not prefill commercial descriptions.
+The four direct installation concepts use these stable IDs and names:
+
+| Stored ID | New concept | Recognized old manual name |
+| --- | --- | --- |
+| `cables` | Cables y accesorios | Cables y accesorios |
+| `harness` | Ficha bypass estereo | Ficha / arnes |
+| `adapters` | Aros adaptadores 3D | Aros / adaptadores 3D |
+| `labor` | Mano de obra de instalacion | Mano de obra |
+
+An unused installation concept opens a temporary draft with that name, quantity
+one and a pending price in the quotation's default currency. Except new adapters,
+which first focus size selection, its modal focuses and selects the unit-price
+input without product search, catalogue or category
+selection. "Mas opciones" retains quantity, detail, currency, explicit included
+state and removal of an existing row. No detail, supplier data or included state
+is supplied automatically.
+
+New adapter rows require an explicit choice between two user-approved variants:
+
+| Adapter size | Editable initial unit price |
+| --- | --- |
+| 6.5 inches | ARS 25,000 |
+| 8 inches | ARS 35,000 |
+
+Adapter size and quantity appear in the main form. Quantity remains independent;
+there is no forced pair or total-price preset. Explicit size selection copies
+the corresponding unit amount and ARS currency together while preserving
+quantity. The user can edit that amount. Reopening a row never reapplies a
+preset or replaces a saved amount/currency. The selected variant is retained in
+the approved concept wording. Legacy generic adapter rows may keep an unspecified
+size and their original name; never infer a variant from price or quantity.
+Other direct installation concepts start without a commercial price.
+
+The direct price input remains enabled for included rows. Entering zero keeps
+included, clearing it means pending and a positive amount becomes priced. Saving
+without a price edit preserves the stored amount and state, even if an included
+row retains a previous nonzero amount. Toggling included and back without a price
+edit restores the previous pending/priced state. Invalid drafts remain editable
+and cannot produce a final image.
+
+Direct editing applies only to an `extras` row with one of those category IDs,
+no provenance and an exact canonical, adapter-variant or recognized old name.
+Recovery and save never rename old concepts. Custom wording, unclassified manual rows and any
+catalogue provenance retain the full editor; source prices, original amounts
+and availability policies are preserved. No classification is inferred from text.
+
+Installation renders all existing rows without category headings or per-category
+add-another controls, including multiple legacy rows in one category. It never
+merges or drops them. "Otro concepto" remains a secondary repeatable action for
+manual or catalogue entry. Equipment keeps its group controls. Add controls fill
+their own row width with a minimum 48-pixel height without covering neighbouring
+rows or price controls. Unused suggestions create no quotation rows, prices,
+totals, image content or recoverable content; legacy blank rows remain inert.
 
 Opening a category or adding another concept starts a temporary draft. Applying
 it adds the row; cancelling, closing, or pressing Escape discards it without
 changing the quotation or invalidating a prepared image. Applying an entirely
 empty new draft adds nothing. Saving a new row rechecks the 1000-row limit.
-Existing rows can be edited, classified or reclassified within their section,
-or changed to a free-form concept. Removing the final item from a category
-restores its empty suggestion. Applied changes invalidate a prepared image.
+Custom rows can still be classified or reclassified within their section, or
+changed to a free-form concept. Removing the final item restores its empty
+suggestion. Applied changes invalidate a prepared image.
 
 Optional `audioCategory` metadata is saved with a row and restored on reload,
 alongside its identity, amounts, currency, and price state. Rows without that

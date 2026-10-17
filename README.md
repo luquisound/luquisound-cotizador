@@ -123,9 +123,10 @@ zero is priced, except an already included row stays included at zero. A positiv
 price makes an included row charged. Invalid nonblank input blocks saving in
 this dedicated editor; Cancel discards its draft.
 
-The full row editor starts with "Producto", the unit price labelled ARS or USD,
-and "Agregar" or "Guardar". "Producto" searches by SKU, brand or name and also
-accepts an independent manual concept. Choosing a catalogue result is explicit;
+The full editor for equipment and other custom concepts starts with "Producto",
+the unit price labelled ARS or USD, and "Agregar" or "Guardar". "Producto"
+searches by SKU, brand or name and also accepts an independent manual concept.
+Choosing a catalogue result is explicit;
 typing or leaving the field never selects one silently. There is no initial
 catalogue accordion. "Mas opciones" contains quantity, optional detail, quotation
 category, currency, included-without-charge state, private provenance and removal.
@@ -150,20 +151,39 @@ and the saved quotation library are preserved. "Presupuestos guardados" explicit
 saves named snapshots and can open or duplicate them.
 Downloading or sharing a PNG leaves the current quotation open.
 
-Both sections offer optional audio categories: amplifier/DSP, additional
-amplifier, subwoofer, and speakers for equipment; cables/accessories,
-connector/harness, rings/3D adapters, and labour for installation. A category can
-contain several independent concepts, and each section also allows repeated
-free-form concepts. Empty category suggestions exist only in the editor; they
-and both "Agregar otro" actions have full-width touch targets at least 48 pixels
-high. These editor controls
-create no pending prices or image content. Opening a new row uses a temporary
-draft: cancelling leaves the quotation and any prepared image unchanged.
-Categories are recovered with their rows and can be changed within the section.
-Existing and free-form rows remain after categorized rows in their section,
-preserving their relative order. PNG output uses the same concept order and
-omits category labels and controls. Catalogue categories remain independent;
-choosing a category neither approves a price nor changes currency rules. See
+Equipment keeps optional amplifier/DSP, additional amplifier, subwoofer and
+speaker groups, including several independent rows in one group. Installation
+offers four optional direct concepts: "Cables y accesorios", "Ficha bypass
+estereo", "Aros adaptadores 3D" and "Mano de obra de instalacion". Opening an
+unused concept prefills its name in a temporary draft and focuses its unit
+price. It supplies no included state. Cancel leaves the quotation
+and any prepared image unchanged; unused concepts never enter the PNG.
+
+New "Aros adaptadores 3D" rows require an explicit size choice: 6.5 inches uses
+the user-approved ARS 25,000 unit price; 8 inches uses ARS 35,000 per unit.
+Size and quantity appear in the main form; quantity is not forced to a pair and
+the unit price remains editable. Choosing a size copies its price and ARS currency
+together, preserving quantity. Reopening preserves saved amounts and overrides.
+Legacy generic adapter rows can keep an unspecified size; their size is never
+inferred from price. The other direct concepts start with a blank pending price.
+
+The direct editor hides product search and category selection. "Mas opciones"
+retains quantity (outside the adapter main form), detail, currency, included
+state and existing-row removal.
+Its price input stays editable when included: zero preserves included, blank
+means pending and a positive amount becomes priced. Opening and saving without
+editing preserves an included row's stored amount. Custom concepts and all rows
+with catalogue provenance retain the full editor and source/stock rules.
+
+Installation shows entered rows without category headings or per-category
+"Agregar otro" controls; it preserves every existing row, even several in one
+category. "Otro concepto" remains a secondary manual/catalogue action. Category
+IDs and ordering remain compatible; recognized old manual names open directly
+without being renamed on recovery or save. Equipment, unclassified rows and
+custom wording retain their behavior. Add controls have full-width touch targets
+at least 48 pixels high. PNG output keeps row order and excludes unused concepts
+and editor controls. Catalogue categories remain independent; selecting a
+concept supplies no price except the explicit approved adapter size presets. See
 [the optional audio row contract](docs/PRODUCTO.md#optional-audio-categories).
 
 The current quotation is recovered across reloads from

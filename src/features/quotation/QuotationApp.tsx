@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
 import { calculateQuotation, isEmptyRow } from './calculation'
 import { createQuotation, createRow, hasQuotationContent, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
-import type { AudioCategory } from './audio-categories'
+import { getDirectExtraConcept, isDirectExtraRow, type AudioCategory } from './audio-categories'
 import { serializeWorkspace, type WorkspaceSaveResult } from './persistence'
 import {
   CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
@@ -428,7 +428,8 @@ export default function QuotationApp() {
     if (quotationRef.current.rows.length >= 1000) { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
     rememberRowTrigger()
     const row = createRow(section, quotationRef.current.currency)
-    setRowEditing({ kind: 'new', row: { ...row, ...(audioCategory ? { audioCategory } : {}) } })
+    const directConcept = section === 'extras' ? getDirectExtraConcept(audioCategory) : undefined
+    setRowEditing({ kind: 'new', row: { ...row, ...(audioCategory ? { audioCategory } : {}), ...(directConcept ? { concept: directConcept } : {}) } })
   }
 
   function saveRow(row: QuotationRow) {
@@ -606,7 +607,7 @@ export default function QuotationApp() {
       {dialog === 'catalog' && <CatalogEditor catalog={catalog} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onRetrySharedCatalog={retrySharedCatalog} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
       {dialog === 'bulk' && <BulkEntryDialog catalog={catalog} canSelect={canSelectCatalogItem} defaultCurrency={quotation.currency} existingRowCount={quotation.rows.length} onApply={addBulkRows} onClose={closeBulk} />}
       {dialog === 'library' && <QuotationLibraryDialog quotation={quotation} library={savedQuotes.library} storageError={savedQuotes.error} savingPaused={savedQuotes.paused} onSaveCurrent={saveNamedQuotation} onOpen={(id) => openNamedQuotation(id)} onDuplicate={(id) => openNamedQuotation(id, true)} onExport={downloadLibraryBackup} onImport={savedQuotes.importLibrary} onResumeSaving={savedQuotes.resumeSaving} onClose={closeLibrary} />}
-      {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} />}
+      {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} directConcept={isDirectExtraRow(editingRow) ? editingRow.concept : undefined} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} />}
       {priceEditingRow && <RowPriceEditor key={priceEditingRow.id} row={priceEditingRow} quotation={quotation} onClose={closePriceEditor} onSave={savePrice} />}
     </div>
   )

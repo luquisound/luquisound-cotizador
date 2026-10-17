@@ -46,19 +46,37 @@ inventory management, invoicing, and a general backend remain outside this stage
   entry, saved quotations, catalogue management and New behind the single discreet "Opciones"
   menu below the template and contact footer. Keep history and save controls
   inside those secondary workflows.
-- Keep the full row modal focused on "Producto", unit price with its ARS or USD
-  label, and "Agregar" or "Guardar". Combine SKU, brand and name search with
-  independent manual entry; catalogue selection requires an explicit result
+- Keep the full modal for equipment and custom rows focused on "Producto", unit
+  price with its ARS or USD label, and "Agregar" or "Guardar". Combine SKU, brand
+  and name search with independent manual entry; catalogue selection requires an explicit result
   choice, never typing, blur or save. Avoid an initial catalogue accordion.
   Keep quantity, detail, quotation category, currency, included state, private
   provenance and removal in "Mas opciones", with active values summarized while
   closed. Opening or closing it must preserve the draft. Retain pending and
   invalid draft saving, price states, source and stock rules; Cancel leaves the
   quotation unchanged.
+- Treat the four installation slots as optional direct concepts: "Cables y
+  accesorios", "Ficha bypass estereo", "Aros adaptadores 3D" and "Mano de obra de
+  instalacion". Prefill only a temporary draft name and focus/select its unit
+  price; hide product search and category selection. Keep quantity, detail,
+  currency, included state and removal in "Mas opciones", except adapter size
+  and quantity belong in the main form. New adapter rows require an explicit
+  6.5-inch (ARS 25,000/unit) or 8-inch (ARS 35,000/unit) choice; these are the only
+  approved direct-concept presets. Keep quantity independent and unit price editable.
+  Size choice copies amount and ARS together; reopening must preserve saved
+  overrides. Legacy generic adapters may remain unspecified; never infer size
+  from price. Never automatically include a concept. Preserve IDs `cables`,
+  `harness`, `adapters`
+  and `labor`, all existing rows and recognized old manual names without renaming.
+  Direct editing requires the matching category, an exact recognized name or
+  approved adapter variant, and no provenance; custom and catalogue rows retain
+  the full editor and source guards.
+  Installation has no category headings or per-category add-another action;
+  "Otro concepto" keeps independent manual/catalogue entry available.
 - Start with narrow-screen layouts and touch controls. Use semantic HTML,
   accessible names, visible keyboard focus, and sufficient contrast.
-  Both section and category "Agregar otro" buttons use their full row width and
-  a minimum 48-pixel touch target without overlapping adjacent editing controls.
+  Add controls use their full row width and a minimum 48-pixel touch target
+  without overlapping adjacent editing controls.
 - Support safe-area insets where needed and avoid horizontal overflow. Verify
   responsive changes at mobile and desktop widths.
 - Lucas's target device is an iPhone; initial hands-on testing uses Android.
