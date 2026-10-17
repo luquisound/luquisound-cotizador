@@ -12,7 +12,7 @@ import { HeaderEditor, RowEditor } from './QuotationDialogs'
 import { CatalogEditor } from './CatalogTools'
 import type { CatalogImportDocument } from './catalog'
 import { loadSharedCatalog, mergeSharedCatalog } from './shared-catalog'
-import { exchangeRateDescription, type BlueDollarQuote } from './exchange-quote'
+import type { BlueDollarQuote } from './exchange-quote'
 import { startExchangeRateRefresh, type ExchangeRefreshState } from './exchange-refresh'
 import { parseExchangeRate } from './exchange'
 
@@ -328,29 +328,35 @@ export default function QuotationApp() {
   return (
     <div className="quotation-workspace">
       <a className="skip-link" href="#quotation">Ir al presupuesto</a>
-      <header className="workspace-header">
-        <div className="workspace-brand"><img src="/brand/luquisound-horizontal.svg" alt="Luquisound" width="176" height="20" /><h1 className="sr-only">Cotizador Luquisound</h1></div>
-        <div className="workspace-header-actions">
-          <button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Catálogo</button>
-          <button className="button primary" type="button" onClick={newQuotation}>+ Nuevo</button>
-        </div>
-      </header>
       <main className="workspace-main">
-        {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
-        {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
-        {sharedCatalogStatus === 'error' && <div className="notice error" role="status"><p>No se pudo actualizar el catálogo compartido. Podés seguir usando tus opciones.</p><button className="button secondary" type="button" onClick={retrySharedCatalog}>Reintentar catálogo compartido</button></div>}
-        <details className="exchange-panel">
-          <summary><span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span></summary>
-          <div className="exchange-panel-details">
-            {displayedRate.ok && <p className="field-help">{exchangeRateDescription(quotation)}</p>}
-            <p className="field-help">Se actualiza automáticamente cada hora al usar la app. El total equivalente puede cambiar.</p>
-            {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
-          </div>
-        </details>
-        {quotation.exchangeRateQuote && rateCheckedAt - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
-        {rateError && <p className="exchange-warning" role="alert">{rateError}</p>}
-        <p className="editing-hint">Agregá productos o trabajos. Tocá el título o un concepto para editar.</p>
-        <div id="quotation"><QuotationPreview quotation={quotation} onEditHeader={() => setDialog('header')} onEditRow={setEditingRowId} onAddRow={addRow} /></div>
+        <div id="quotation">
+          <QuotationPreview
+            quotation={quotation}
+            onEditHeader={() => setDialog('header')}
+            onEditRow={setEditingRowId}
+            onAddRow={addRow}
+            headerActions={<>
+              <button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Catálogo</button>
+              <button className="button primary" type="button" onClick={newQuotation}>+ Nuevo</button>
+            </>}
+            notices={<>
+              {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
+              {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
+              {sharedCatalogStatus === 'error' && <div className="notice error" role="status"><p>No se pudo actualizar el catálogo compartido. Podés seguir usando tus opciones.</p><button className="button secondary" type="button" onClick={retrySharedCatalog}>Reintentar catálogo compartido</button></div>}
+            </>}
+            exchangeDetails={<>
+              <details className="exchange-panel">
+                <summary><span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span></summary>
+                <div className="exchange-panel-details">
+                  <p className="field-help">Se actualiza automáticamente cada hora al usar la app. El total equivalente puede cambiar.</p>
+                  {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
+                </div>
+              </details>
+              {quotation.exchangeRateQuote && rateCheckedAt - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
+              {rateError && <p className="exchange-warning" role="alert">{rateError}</p>}
+            </>}
+          />
+        </div>
         {!calculation.canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({calculation.issues.length})</summary><ul>{calculation.issues.map((issue, index) => <li key={String(index) + '-' + issue}>{issue}</li>)}</ul>{!calculation.conversion.ok && <button type="button" className="button secondary" onClick={() => setDialog('header')}>Revisar cotización del dólar</button>}</details>}
         <p className="current-quotation-note">Se recupera solo el presupuesto en curso al recargar. «Nuevo» lo reemplaza.</p>
       </main>

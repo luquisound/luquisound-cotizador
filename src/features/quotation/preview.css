@@ -19,13 +19,10 @@
 }
 
 .quotation-edit-hint {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  margin: 0 0 max(16px, 1.8519cqw);
+  color: var(--quotation-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .quotation-sheet {
@@ -58,7 +55,7 @@
 
 .quotation-header {
   min-height: 32.2222cqw;
-  padding: 3.7037cqw 5.9259cqw 3.1481cqw;
+  padding: calc(3.7037cqw + env(safe-area-inset-top, 0px)) max(5.9259cqw, env(safe-area-inset-right, 0px)) 3.1481cqw max(5.9259cqw, env(safe-area-inset-left, 0px));
   border-bottom: max(2px, 0.463cqw) solid var(--quotation-yellow);
   background: var(--quotation-black);
   color: #fff;
@@ -69,6 +66,45 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 1.8519cqw;
+}
+
+.quotation-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.quotation-header-actions .button {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.quotation-header-actions .button.primary {
+  background: var(--quotation-yellow);
+  color: var(--quotation-black);
+  border-color: var(--quotation-yellow);
+}
+
+.quotation-header-actions .button.secondary {
+  background: transparent;
+  color: #fff;
+  border-color: #737373;
+}
+
+.quotation-header-actions .button.primary:hover:enabled {
+  background: #ffe440;
+}
+
+.quotation-header-actions .button.secondary:hover {
+  background: #ffffff14;
+}
+
+.quotation-header button:focus-visible {
+  outline-color: var(--quotation-yellow);
 }
 
 .quotation-logo {
@@ -142,7 +178,7 @@
 }
 
 .quotation-content {
-  padding: 3.8889cqw 5.9259cqw 0;
+  padding: 3.8889cqw max(5.9259cqw, env(safe-area-inset-right, 0px)) 0 max(5.9259cqw, env(safe-area-inset-left, 0px));
 }
 
 .quotation-section + .quotation-section {

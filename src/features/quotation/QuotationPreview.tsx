@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import {
   calculateQuotation,
   formatMoney,
@@ -16,6 +16,9 @@ export interface QuotationPreviewProps {
   onEditHeader: () => void
   onEditRow: (rowId: string) => void
   onAddRow: (section: RowSection) => void
+  headerActions: ReactNode
+  notices: ReactNode
+  exchangeDetails: ReactNode
 }
 
 interface PreviewRowProps {
@@ -101,6 +104,9 @@ export function QuotationPreview({
   onEditHeader,
   onEditRow,
   onAddRow,
+  headerActions,
+  notices,
+  exchangeDetails,
 }: QuotationPreviewProps) {
   const hintId = useId()
   const calculation = calculateQuotation(quotation)
@@ -108,9 +114,6 @@ export function QuotationPreview({
 
   return (
     <div className="quotation-preview">
-      <p className="quotation-edit-hint" id={hintId}>
-        Tocá el título o un concepto para editar el presupuesto.
-      </p>
       <article
         className="quotation-sheet"
         aria-label="Vista previa editable del presupuesto"
@@ -127,7 +130,7 @@ export function QuotationPreview({
             />
             <p className="quotation-document-label">PRESUPUESTO<br />DE AUDIO</p>
           </div>
-          <h2 className="quotation-heading">
+          <h1 className="quotation-heading">
             <button
               type="button"
               className="quotation-heading-edit"
@@ -144,13 +147,18 @@ export function QuotationPreview({
                 <span className="quotation-subtitle">{quotation.subtitle.trim()}</span>
               )}
             </button>
-          </h2>
+          </h1>
+          <div className="quotation-header-actions">{headerActions}</div>
         </header>
 
         <div className="quotation-content">
+          {notices}
+          <p className="quotation-edit-hint" id={hintId}>
+            Tocá el título o un concepto para editar el presupuesto.
+          </p>
           {sections.map(({ section, label, addLabel }) => (
             <section className="quotation-section" key={section} aria-label={label}>
-              <h3 className="quotation-section-title">{label}</h3>
+              <h2 className="quotation-section-title">{label}</h2>
               <ul className="quotation-rows">
                 {quotation.rows.filter((row) => row.section === section).map((row) => (
                   <li key={row.id}>
@@ -196,9 +204,7 @@ export function QuotationPreview({
               </div>
             )
           })}
-          <button type="button" className="quotation-rate" onClick={onEditHeader} aria-label="Ver cotización del dólar">
-            {calculation.conversion.ok ? calculation.conversion.rateLabel : 'Consultar cotización del dólar'}
-          </button>
+          {exchangeDetails}
           <p className="quotation-rate-source">{exchangeRateDescription(quotation)}</p>
         </div>
 
