@@ -213,7 +213,7 @@ test('renders the stored source and date completely between the rate and footer'
   const rate = result.texts.find((entry) => entry.text === '1 USD = 1.234,56 ARS')
   assert.ok(rate)
   const sourceLines = result.texts.filter((entry) => entry.y > rate.y && entry.y < result.footerY)
-  assert.equal(sourceLines.map((entry) => entry.text).join(' '), exchangeRateDescription(quotation))
+  assert.equal(sourceLines.map((entry) => entry.text).join(' '), 'Dólar blue · DolarAPI · 16/10/2026, 10:30 (Buenos Aires)')
   assert.ok(sourceLines.length > 1)
   assert.ok(sourceLines.every((entry) => entry.x + entry.width <= 1016 && entry.y + 30 <= result.footerY))
   assert.ok(!result.texts.some((entry) => /Actualizar|Consultando|Error/.test(entry.text)))

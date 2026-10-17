@@ -149,7 +149,7 @@ export function exchangeRateDescription(quotation: Pick<Quotation, 'exchangeRate
   if (metadata) {
     const sourceRate = parseExchangeRate(metadata.rate)
     if (sourceRate.ok && rate.numerator * sourceRate.denominator === sourceRate.numerator * rate.denominator) {
-      return `Dólar blue · Venta · DolarAPI · ${dateFormatter.format(new Date(metadata.updatedAt))} (Buenos Aires)`
+      return `Dólar blue · DolarAPI · ${dateFormatter.format(new Date(metadata.updatedAt))} (Buenos Aires)`
     }
   }
   return 'Cotización manual · Fecha no registrada'

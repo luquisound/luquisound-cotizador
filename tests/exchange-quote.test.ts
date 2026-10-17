@@ -84,10 +84,14 @@ test('normalized metadata requires fixed provenance, canonical rates and real UT
 })
 
 test('descriptions identify the source date in Buenos Aires and never invent provenance for manual rates', () => {
-  const metadata = { ...quoteFixture(), updatedAt: '2026-10-16T02:30:00.000Z' }
+  const metadata = {
+    ...quoteFixture(), updatedAt: '2026-10-16T20:58:00.000Z', fetchedAt: '2026-10-16T21:00:00.000Z',
+  }
   const description = exchangeRateDescription({ exchangeRate: '1234,560000', exchangeRateQuote: metadata })
-  assert.match(description, /Dólar blue · Venta · DolarAPI/)
-  assert.match(description, /15\/10\/2026, 23:30 \(Buenos Aires\)/)
+  assert.equal(description, 'Dólar blue · DolarAPI · 16/10/2026, 17:58 (Buenos Aires)')
+  assert.equal(exchangeRateDescription({
+    exchangeRate: '1.234,56', exchangeRateQuote: { ...metadata, updatedAt: '2026-10-16T02:30:00.000Z' },
+  }), 'Dólar blue · DolarAPI · 15/10/2026, 23:30 (Buenos Aires)')
   assert.equal(exchangeRateDescription({ exchangeRate: '1.200', exchangeRateQuote: metadata }), 'Cotización manual · Fecha no registrada')
   assert.equal(exchangeRateDescription({ exchangeRate: '1.234,56' }), 'Cotización manual · Fecha no registrada')
   for (const exchangeRate of [undefined, '', '0', 'invalid']) {
