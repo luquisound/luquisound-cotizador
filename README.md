@@ -110,6 +110,16 @@ The preview and PNG share the same palette and logo resource. Fixed quotations
 in Figma retain their dark headers. Exchange-rate details stay beside the totals.
 "Datos del presupuesto" edits only the title and optional subtitle.
 Previously stored notes are retained in recovery and PNG output.
+
+Each row has separate edit buttons: its description opens the full row editor;
+its amount opens "Editar precio" with one unit-price field, fixed row currency,
+and Save/Cancel actions. The template amount remains quantity times unit price.
+Quantity, other row fields and provenance stay unchanged. Blank means pending;
+zero is priced, except an already included row stays included at zero. A positive
+price makes an included row charged. Invalid nonblank input blocks saving in
+this dedicated editor; Cancel discards its draft. The full row editor retains
+its existing behavior.
+
 On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
 compact header and readable row sizes; wide screens place totals beside the
 concepts and expand the workspace up to 1680 pixels. Image export controls remain

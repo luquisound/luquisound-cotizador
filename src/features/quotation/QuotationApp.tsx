@@ -10,6 +10,8 @@ import {
 import { createQuotationFile, downloadQuotationFile, shareQuotationFile } from './export'
 import { QuotationPreview } from './QuotationPreview'
 import { HeaderEditor, RowEditor } from './QuotationDialogs'
+import { RowPriceEditor } from './RowPriceEditor'
+import { updateRowUnitPrice } from './row-price'
 import { CatalogEditor } from './CatalogTools'
 import type { CatalogImportDocument } from './catalog'
 import { loadSharedCatalog, mergeSharedCatalog } from './shared-catalog'
@@ -58,6 +60,7 @@ export default function QuotationApp() {
   const optionsContainer = useRef<HTMLDivElement>(null)
   const optionsButton = useRef<HTMLButtonElement>(null)
   const [rowEditing, setRowEditing] = useState<RowEditingState | null>(null)
+  const [priceEditingId, setPriceEditingId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [prepared, setPrepared] = useState<{ file: File; quotation: Quotation; provisional: boolean } | null>(null)
   const [preparing, setPreparing] = useState(false)
@@ -83,6 +86,7 @@ export default function QuotationApp() {
   const editingRow = rowEditing?.kind === 'new'
     ? rowEditing.row
     : quotation.rows.find((row) => row.id === rowEditing?.rowId)
+  const priceEditingRow = quotation.rows.find((row) => row.id === priceEditingId)
   const rateLoading = quotation.exchangeRateMode !== 'frozen' && rateState?.id === quotation.id && rateState.loading
   const rateError = quotation.exchangeRateMode !== 'frozen' && rateState?.id === quotation.id ? rateState.error : null
   const displayedRate = parseExchangeRate(quotation.exchangeRate ?? '')
@@ -398,6 +402,30 @@ export default function QuotationApp() {
     setRowEditing({ kind: 'existing', rowId })
   }
 
+  function closePriceEditor() {
+    const previous = rowEditorTrigger.current
+    const rowId = priceEditingId
+    setPriceEditingId(null)
+    window.requestAnimationFrame(() => {
+      const target = rowId ? document.querySelector<HTMLElement>(`[data-row-price-id="${rowId}"]`) : null
+      const focusTarget = target ?? (previous?.isConnected ? previous : optionsButton.current)
+      focusTarget?.focus()
+    })
+  }
+
+  function editPrice(rowId: string) {
+    rememberRowTrigger()
+    setPriceEditingId(rowId)
+  }
+
+  function savePrice(unitPrice: string) {
+    const current = quotationRef.current
+    const row = current.rows.find((entry) => entry.id === priceEditingId)
+    if (!row) { closePriceEditor(); return }
+    const nextRow = updateRowUnitPrice(row, unitPrice)
+    if (nextRow === row || updateQuotation({ ...current, rows: current.rows.map((entry) => entry.id === row.id ? nextRow : entry) })) closePriceEditor()
+  }
+
   function addRow(section: RowSection, audioCategory?: AudioCategory) {
     if (quotationRef.current.rows.length >= 1000) { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
     rememberRowTrigger()
@@ -553,6 +581,7 @@ export default function QuotationApp() {
             quotation={quotation}
             onEditHeader={() => setDialog('header')}
             onEditRow={editRow}
+            onEditPrice={editPrice}
             onAddRow={addRow}
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
@@ -582,6 +611,7 @@ export default function QuotationApp() {
       {dialog === 'bulk' && <BulkEntryDialog catalog={catalog} canSelect={canSelectCatalogItem} defaultCurrency={quotation.currency} existingRowCount={quotation.rows.length} onApply={addBulkRows} onClose={closeBulk} />}
       {dialog === 'library' && <QuotationLibraryDialog quotation={quotation} library={savedQuotes.library} storageError={savedQuotes.error} savingPaused={savedQuotes.paused} onSaveCurrent={saveNamedQuotation} onOpen={(id) => openNamedQuotation(id)} onDuplicate={(id) => openNamedQuotation(id, true)} onExport={downloadLibraryBackup} onImport={savedQuotes.importLibrary} onResumeSaving={savedQuotes.resumeSaving} onClose={closeLibrary} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} />}
+      {priceEditingRow && <RowPriceEditor key={priceEditingRow.id} row={priceEditingRow} quotation={quotation} onClose={closePriceEditor} onSave={savePrice} />}
     </div>
   )
 }

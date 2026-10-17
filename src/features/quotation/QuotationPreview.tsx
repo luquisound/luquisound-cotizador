@@ -23,6 +23,7 @@ export interface QuotationPreviewProps {
   quotation: Quotation
   onEditHeader: () => void
   onEditRow: (rowId: string) => void
+  onEditPrice: (rowId: string) => void
   onAddRow: (section: RowSection, audioCategory?: AudioCategory) => void
   notices: ReactNode
   exchangeDetails: ReactNode
@@ -32,6 +33,7 @@ interface PreviewRowProps {
   row: QuotationRow
   calculated: CalculatedRow | undefined
   onEdit: () => void
+  onEditPrice: () => void
 }
 
 const sections: { section: RowSection; label: string; accessibleLabel: string }[] = [
@@ -39,7 +41,7 @@ const sections: { section: RowSection; label: string; accessibleLabel: string }[
   { section: 'extras', label: 'INSTALACIÓN Y ACCESORIOS', accessibleLabel: 'instalación y accesorios' },
 ]
 
-function PreviewRow({ row, calculated, onEdit }: PreviewRowProps) {
+function PreviewRow({ row, calculated, onEdit, onEditPrice }: PreviewRowProps) {
   const quantity = parseQuantity(row.quantity)
   const quantityLabel = quantity.ok && quantity.thousandths === 1000
     ? ''
@@ -53,23 +55,18 @@ function PreviewRow({ row, calculated, onEdit }: PreviewRowProps) {
   const concept = row.concept.trim() || 'Concepto pendiente'
 
   return (
-    <button
-      type="button"
+    <div
       className={`quotation-row${hasErrors ? ' quotation-row-pending' : ''}`}
-      data-row-id={row.id}
-      onClick={onEdit}
-      aria-label={`Editar ${concept}. ${amount}`}
-      title="Tocá para editar el concepto, la cantidad y el precio"
     >
-      <span className="quotation-row-description">
+      <button type="button" className="quotation-row-description" data-row-id={row.id} onClick={onEdit} aria-label={`Editar ${concept}. ${amount}`} title="Tocá para editar el concepto, la cantidad y sus datos">
         <span className="quotation-row-concept">{concept}</span>
         {row.detail.trim() && <span className="quotation-row-detail">{row.detail.trim()}</span>}
         {quantityLabel && <span className="quotation-row-quantity">{quantityLabel}</span>}
-      </span>
-      <span className={`quotation-row-price${hasErrors ? ' quotation-price-pending' : ''}`}>
+      </button>
+      <button type="button" className={`quotation-row-price${hasErrors ? ' quotation-price-pending' : ''}`} data-row-price-id={row.id} onClick={onEditPrice} aria-label={`Editar precio unitario de ${concept}. Importe de la fila: ${amount}`} title="Tocá para editar sólo el precio unitario">
         {amount}
-      </span>
-    </button>
+      </button>
+    </div>
   )
 }
 
@@ -96,6 +93,7 @@ export function QuotationPreview({
   quotation,
   onEditHeader,
   onEditRow,
+  onEditPrice,
   onAddRow,
   notices,
   exchangeDetails,
@@ -172,6 +170,7 @@ export function QuotationPreview({
                                   row={row}
                                   calculated={calculatedById.get(row.id)}
                                   onEdit={() => onEditRow(row.id)}
+                                  onEditPrice={() => onEditPrice(row.id)}
                                 />
                               </li>
                             ))}
@@ -197,6 +196,7 @@ export function QuotationPreview({
                           row={row}
                           calculated={calculatedById.get(row.id)}
                           onEdit={() => onEditRow(row.id)}
+                          onEditPrice={() => onEditPrice(row.id)}
                         />
                       </li>
                     ))}

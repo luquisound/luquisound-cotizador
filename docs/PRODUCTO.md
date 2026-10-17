@@ -47,6 +47,15 @@ right-aligned amounts, totals, and dark contact footer. The approved public cont
 footer is 11 7358-1958 and @luquisound.ok. Fixed quotations remain in Figma with
 their existing dark headers; this app change does not modify those assets.
 
+Each row has separate edit buttons: its description opens the full row editor;
+its amount opens "Editar precio" with one unit-price field, fixed row currency,
+and Save/Cancel actions. The template amount remains quantity times unit price.
+Quantity, other row fields and provenance stay unchanged. Blank means pending;
+zero is priced, except an already included row stays included at zero. A positive
+price makes an included row charged. Invalid nonblank input blocks saving in
+this dedicated editor; Cancel discards its draft. The full row editor retains
+its existing behavior.
+
 PNG width is 1080 pixels. Height grows with content; long descriptions wrap and
 blank details do not reserve a line. Controls, pending validation, and editing
 hints never appear in the image. The approved brand guide provides Pliant Bold
