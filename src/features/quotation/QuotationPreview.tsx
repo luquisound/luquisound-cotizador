@@ -133,7 +133,7 @@ export function QuotationPreview({
               type="button"
               className="quotation-heading-edit"
               onClick={onEditHeader}
-              aria-label="Editar título, subtítulo y observaciones del presupuesto"
+              aria-label="Editar título, subtítulo y moneda del presupuesto"
               title="Tocá para editar el encabezado"
             >
               <span className="quotation-title">
@@ -174,15 +174,10 @@ export function QuotationPreview({
             </section>
           ))}
           {quotation.notes.trim() && (
-            <button
-              type="button"
-              className="quotation-notes"
-              onClick={onEditHeader}
-              aria-label="Editar observaciones del presupuesto"
-            >
+            <div className="quotation-notes">
               <span className="quotation-notes-label">OBSERVACIONES</span>
               <span>{quotation.notes.trim()}</span>
-            </button>
+            </div>
           )}
         </div>
 

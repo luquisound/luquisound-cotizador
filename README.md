@@ -99,6 +99,8 @@ that library; do not commit the local routing file.
 
 The main screen opens directly on the editable quotation, with the brand and
 editable title in its header and exchange-rate details beside the totals.
+"Datos del presupuesto" edits only the title, optional subtitle, and row currency.
+Previously stored notes are retained in recovery and PNG output.
 On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
 compact header and readable row sizes; wide screens place totals beside the
 concepts and expand the workspace up to 1680 pixels. Image export controls remain

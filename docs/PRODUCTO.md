@@ -11,7 +11,9 @@ current custom quotation, rather than managing a quotation archive.
 
 ## V1 scope
 
-- Editable title, optional subtitle, notes, and manual quotation rows.
+- Editable title, optional subtitle, and manual quotation rows. Existing notes
+  remain in recovered quotations and images; the details form edits only title,
+  subtitle, and row currency. Exchange-rate information stays beside the totals.
 - Equipment and installation/accessory sections, including arbitrary work.
 - Private common catalogue loaded automatically on each device when configured,
   plus optional personal entries; every selected description and price remains

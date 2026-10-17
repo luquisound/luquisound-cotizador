@@ -47,29 +47,6 @@
   overflow-wrap: anywhere;
 }
 
-.exchange-rate-editor {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid #d3d2cb;
-  border-radius: 8px;
-}
-
-.exchange-rate-editor p {
-  margin: 0;
-}
-
-.exchange-rate-value {
-  overflow-wrap: anywhere;
-}
-
-.exchange-rate-editor .button {
-  justify-self: start;
-  max-width: 100%;
-  white-space: normal;
-}
-
 .exchange-panel {
   margin: 0;
   border-block: 1px solid #d3d2cb;
