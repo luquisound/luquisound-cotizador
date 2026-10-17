@@ -11,7 +11,8 @@ complete, unique supplier and SKU keys and applies common updates automatically
 while preserving local sale prices. See [shared catalogue setup](SHARED-CATALOG.md).
 This `luquisound.catalog` source format is distinct from lossless catalogue
 backups in the existing Workspace v1 envelope. Source imports never supply
-approved sale prices or persistent item IDs.
+manually approved sale prices or persistent item IDs. An explicitly reviewed
+retail list price is a separate optional field, not an inferred historical reference.
 
 ## Version 1 document
 
@@ -68,13 +69,16 @@ A catalogue item's `section` is a suggestion for ordering choices. Products can
 be chosen in either quotation section; choosing a cable or accessory preserves
 the row's selected section. Each row has its own editable ARS or USD currency;
 selecting an approved price copies its amount and currency together, including
-an explicit zero. Products without an approved price remain available.
+an explicit zero. Unrestricted manual entries may be selected with a pending
+price; protected source entries require both an eligible price and stock.
 
 `source` may be omitted when provenance is unavailable. If supplied, it requires
 a nonempty document name and an explicit `date`: a valid month in `YYYY-MM`
 form, a valid calendar date in `YYYY-MM-DD` form, or `null` when unknown. Optional
 `page` and `row` are positive integers no greater than 1000000. Optional `sheet`
-identifies a spreadsheet tab.
+identifies a spreadsheet tab. Optional `kind` is `snapshot` or `sheets`; `version`
+is a nonempty string of up to 200 characters; `checksum` is a lowercase 64-digit
+SHA-256 string. These fields record provenance only, not freshness or approval.
 A file creation, extraction, or import date is never substituted for commercial
 validity. Month-only precision remains literal; no day is invented for display or
 storage. Provenance stays separate from the customer-visible description.
@@ -100,9 +104,9 @@ An optional reference-level `source` is accepted without changing version 1.
 Files with only item-level source remain compatible and are normalized as above.
 
 No reference is an approved current price. New catalogue entries always receive
-an empty editable `unitPrice`; their current-price currency placeholder is ARS.
+an empty editable `unitPrice`; their manual-price currency placeholder is ARS.
 Reference currencies remain independent. Import never copies cost, list, or
-historical sale values into a quotation sale price, calculates margins, rounds
+historical sale reference values into a quotation sale price, calculates margins, rounds
 supplier prices, or changes the current quotation's row values.
 
 When selecting an entry without an approved price, a single explicit ARS or USD
@@ -113,12 +117,50 @@ An eligible list/sale reference with a known currency and at most two decimals
 requires explicit confirmation before copying its amount and currency together
 into an editable row. Cost and unknown-role references cannot supply a price.
 
+## Explicit reviewed list price
+
+A reviewed private source may add `listPrice` without changing version 1:
+
+```json
+"listPrice": {
+  "amount": "125.50",
+  "currency": "USD",
+  "basis": "retail-list-before-discount",
+  "provisional": true,
+  "source": {
+    "document": "synthetic-reviewed-source.xlsx",
+    "date": null,
+    "kind": "snapshot",
+    "version": "synthetic-review-1"
+  }
+}
+```
+
+This example is synthetic. The amount is a nonnegative dot-decimal string with
+at most two decimals, a known ARS or USD currency, the exact basis above, a boolean
+provisional flag and required source. An amount must fit the application's safe
+money range. Missing currency, cost, supplier discount and unreviewed historical
+references do not infer this field. Commercial dates remain explicit or `null`.
+
+Selection uses a valid nonempty manual `unitPrice` first, including zero; otherwise
+it copies the reviewed list amount and currency together. A provisional list is
+labelled historical and remains a price before supplier discount. It is not a
+verified current price; no automatic 20% deduction, margin or source rounding is
+applied. List metadata is preserved separately from local manual prices during
+merges, scoped replacement, recovery and private backups. Current quotation row
+values never refresh from a catalogue price change.
+
 ## Optional stock observations
 
 An item may include `stock` without changing schema version 1. It contains
-`quantity` (a nonnegative safe integer or explicit `null`), canonical UTC
-millisecond `checkedAt` and `validUntil` timestamps, and its own required `source`
-using the same provenance schema. The validity interval must be positive. Missing
+`quantity` (a safe integer or explicit `null`), observation timestamps and its own
+required `source` using the same provenance schema. Negative values are preserved
+as a source anomaly and cannot qualify for selection. For current observations,
+`checkedAt` and `validUntil` are canonical UTC millisecond timestamps, with a
+positive validity interval. Optional `observation` can explicitly be `current`.
+For `observation: "historical"`, either timestamp may be `null`; known timestamps
+remain literal and a known expiry requires an earlier known observation date.
+Missing
 stock does not mean zero, and imports never infer availability from price,
 historical Excel columns, file dates or import time.
 
@@ -127,18 +169,46 @@ replaces the previous observation; an ordinary additive update with stock omitte
 preserves the prior observation without extending its validity. An explicit
 authoritative source replacement uses the incoming optional stock exactly, so
 omission clears old stock. Copies and backups preserve nested provenance and
-timestamps. Stock does not alter approved prices or current quotation rows.
+timestamps. Stock does not alter approved prices or current quotation row amounts.
 
-The observation classifier is prepared but disconnected from product selection
-and visual indicators until the remote source and freshness policy are validated.
-See [private spreadsheet preparation](CATALOG-SOURCE-ROADMAP.md).
+The active classifier distinguishes quantity from age. No observation, unknown
+quantity, negative quantity, zero, stale or future observations are not eligible
+under a protected availability policy. A positive `historical` record is not a
+fresh observation even if it was imported today.
+
+## Selection policy and private row trace
+
+Optional `availabilityPolicy` is `fresh-positive` or `historical-positive`.
+The former requires positive fresh stock; the latter also permits positive
+historical stock provisionally. Both require a valid manual or reviewed list
+price. An optional nonempty `selectionBlock` of up to 500 characters always
+prevents selection, including when stock and price would otherwise qualify.
+Existing protected legacy entries keep the compatibility policy enforced in
+`getCatalogAvailabilityPolicy`; omitting a field is not a stock bypass.
+
+Entries without a policy remain independent manual concepts and may have a
+pending price. Blocked source entries remain inspectable through the catalogue
+manager's "Mostrar no habilitados" control;
+they cannot become exact-match manual overrides during bulk entry. The UI shows
+stock quantity, age, source commercial date and textual eligibility, never using
+color alone. Timers recheck stock boundaries while the app is open. Selection,
+bulk application, PNG preparation and delivery revalidate availability.
+
+`rowFromCatalog` snapshots item identity, supplier/SKU, source, list price, stock,
+policy, original amount and currency, and `priceBasis` (`manual`, `list`,
+`provisional-list` or `pending`) into private row `provenance`. Edits retain this
+trace and distinguish a manual price/currency/included-state override. A matching
+current catalogue can update availability checks without changing row amounts.
+An ineligible row is preserved but blocks final image delivery. Historical usage
+adds a generic availability-to-confirm line to the PNG, with no source details,
+SKU or stock quantity. See [source boundaries](CATALOG-SOURCE-ROADMAP.md).
 
 ## Validation and limits
 
 `parseCatalogImport(text)` validates an unknown JSON value and returns only known
 fields. UTF-8 BOM is accepted. Malformed input produces a safe Spanish error
 without echoing document content or private paths. Unsupported format/version,
-invalid dates, invalid currencies, nonhistorical prices, and malformed fields
+invalid dates, invalid currencies, nonhistorical reference prices, and malformed fields
 are rejected rather than coerced.
 
 | Field | Maximum length/count |
@@ -151,6 +221,9 @@ are rejected rather than coerced.
 | sku | 128 characters |
 | source.document | 500 characters |
 | source.sheet | 128 characters |
+| source.version | 200 characters |
+| source.checksum | Exactly 64 lowercase hexadecimal characters |
+| selectionBlock | 500 characters |
 | referencePrices | 50 per item, including retained history |
 | replaceSourceDocuments | 1-50 unique document names, up to 500 characters each |
 
@@ -250,7 +323,8 @@ cannot safely be classified as imported and remain outside the removal scope.
 ## Integration and search
 
 `CatalogEntry` extends the existing catalogue type with optional supplier, SKU,
-brand, category, unit, presentation, source, and reference price metadata. The
+brand, category, unit, presentation, source, references, reviewed list price,
+stock and selection policy metadata. The
 model and persistence whitelist must preserve and validate these fields; earlier
 version-1 backups without them remain compatible catalogue sources. Source import
 merges only catalogue data. Catalogue-backup import is a separate confirmed
@@ -264,5 +338,8 @@ quotation or rewrites or deletes the legacy `luquisound.workspace.v1` storage ke
 `queryCatalog(items, query)` searches supplier, SKU, brand, name, description,
 and category. It ignores case and accent marks; all whitespace-separated query
 terms must match. It preserves catalogue order and does not sort or mutate the
-input. The UI should show an appropriately bounded set of results and allow
+input. `queryCatalogRanked` adds stable exact-SKU priority for picker searches.
+`resolveCatalogQuery` prefers exact SKU, then exact name, then text search; only
+a unique eligible exact record is automatically proposed in bulk review.
+Ambiguous or partial matches require a choice. The UI shows bounded results and allows
 manual or blank fields without requiring a product selection.

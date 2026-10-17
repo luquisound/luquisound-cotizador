@@ -1,5 +1,6 @@
-import type { CatalogReferencePrice, CatalogSource } from './catalog.ts'
-import type { CatalogStockSnapshot } from './catalog-stock.ts'
+import type { CatalogListPrice, CatalogReferencePrice, CatalogSource } from './catalog.ts'
+import type { CatalogAvailabilityPolicy, CatalogStockSnapshot } from './catalog-stock.ts'
+import type { QuotationRowProvenance } from './row-provenance.ts'
 import type { BlueDollarQuote } from './exchange-quote.ts'
 import type { AudioCategory } from './audio-categories.ts'
 
@@ -20,6 +21,7 @@ export interface QuotationRow {
   quantity: string
   unitPrice: string
   priceState: PriceState
+  provenance?: QuotationRowProvenance
 }
 
 export interface Quotation {
@@ -30,6 +32,7 @@ export interface Quotation {
   currency: Currency
   exchangeRate?: string
   exchangeRateQuote?: BlueDollarQuote
+  exchangeRateMode?: 'automatic' | 'frozen'
   rows: QuotationRow[]
   notes: string
   createdAt: string
@@ -52,6 +55,9 @@ export interface CatalogItem {
   source?: CatalogSource
   referencePrices?: CatalogReferencePrice[]
   stock?: CatalogStockSnapshot
+  listPrice?: CatalogListPrice
+  availabilityPolicy?: CatalogAvailabilityPolicy
+  selectionBlock?: string
 }
 
 export interface Workspace {
@@ -119,7 +125,7 @@ export function duplicateQuotation(quotation: Quotation): Quotation {
   const now = new Date().toISOString()
   return {
     ...quotation, id: crypto.randomUUID(), title: `${(quotation.title || 'PRESUPUESTO').slice(0, 492)} (copia)`,
-    rows: quotation.rows.map((row) => ({ ...row, id: crypto.randomUUID() })),
+    rows: quotation.rows.map((row) => ({ ...structuredClone(row), id: crypto.randomUUID() })),
     ...(quotation.exchangeRateQuote ? { exchangeRateQuote: { ...quotation.exchangeRateQuote } } : {}),
     createdAt: now, updatedAt: now,
   }

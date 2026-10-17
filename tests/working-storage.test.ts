@@ -8,6 +8,7 @@ import {
   CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
   parseCatalogBackup, saveCatalog, saveCurrentQuotation, serializeCatalogBackup,
 } from '../src/features/quotation/working-storage.ts'
+import type { WorkingSaveOptions } from '../src/features/quotation/working-storage.ts'
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial))
@@ -52,6 +53,33 @@ function legacyFixture(): Workspace {
   return { version: 1, activeQuotationId: second.id, quotations: [first, second], catalog: catalogFixture() }
 }
 
+function workingStorageCases() {
+  const catalog = catalogFixture()
+  const nextCatalog = structuredClone(catalog)
+  nextCatalog[0]!.concept = 'Synthetic replacement equipment'
+  const quotation = createQuotation()
+  quotation.notes = 'Synthetic original current work'
+  const nextQuotation = { ...quotation, notes: 'Synthetic replacement current work' }
+  const quotationText = serializeWorkspace({
+    version: 1, activeQuotationId: quotation.id, quotations: [quotation], catalog: [],
+  })
+  return [{
+    name: 'catalogue', key: CATALOG_STORAGE_KEY,
+    normalizedOriginal: serializeCatalogBackup(catalog),
+    original: `\ufeff${serializeCatalogBackup(catalog)}\n`,
+    replacement: serializeCatalogBackup(nextCatalog), load: loadCatalog,
+    save: (storage: StorageAdapter, options?: WorkingSaveOptions) => saveCatalog(storage, nextCatalog, options),
+  }, {
+    name: 'current quotation', key: CURRENT_QUOTATION_STORAGE_KEY,
+    normalizedOriginal: quotationText, original: `\ufeff${quotationText}\n`,
+    replacement: serializeWorkspace({
+      version: 1, activeQuotationId: nextQuotation.id, quotations: [nextQuotation], catalog: [],
+    }),
+    load: loadCurrentQuotation,
+    save: (storage: StorageAdapter, options?: WorkingSaveOptions) => saveCurrentQuotation(storage, nextQuotation, options),
+  }]
+}
+
 test('categorized current recovery preserves all row data without modifying catalogue or legacy stores', () => {
   const legacyText = `\ufeff${JSON.stringify(legacyFixture())}`
   const catalog = catalogFixture()
@@ -67,7 +95,9 @@ test('categorized current recovery preserves all row data without modifying cata
   ]
   const snapshot = structuredClone(quotation)
   assert.equal(saveCurrentQuotation(memory.storage, quotation).ok, true)
-  assert.deepEqual(loadCurrentQuotation(memory.storage), { quotation: snapshot, error: null })
+  assert.deepEqual(loadCurrentQuotation(memory.storage), {
+    quotation: snapshot, error: null, raw: memory.values.get(CURRENT_QUOTATION_STORAGE_KEY),
+  })
   assert.deepEqual(quotation, snapshot)
   assert.deepEqual(loadCatalog(memory.storage).catalog, catalog)
   assert.equal(memory.values.get(CATALOG_STORAGE_KEY), catalogText)
@@ -103,7 +133,7 @@ test('invalid optional category metadata recovers the item without changing stor
       ...quotation, rows: [{ ...quotation.rows[0], audioCategory }, quotation.rows[1]],
     }] })
     const memory = memoryStorage({ [CURRENT_QUOTATION_STORAGE_KEY]: raw })
-    assert.deepEqual(loadCurrentQuotation(memory.storage), { quotation, error: null })
+    assert.deepEqual(loadCurrentQuotation(memory.storage), { quotation, error: null, raw })
     assert.equal(memory.values.get(CURRENT_QUOTATION_STORAGE_KEY), raw)
     assert.deepEqual(memory.writes, [])
   }
@@ -152,7 +182,7 @@ test('legacy migration seeds only the catalog without reading old quotations int
   const legacy = legacyFixture()
   const raw = `\ufeff${JSON.stringify(legacy)}`
   const memory = memoryStorage({ [STORAGE_KEY]: raw })
-  assert.deepEqual(loadCatalog(memory.storage), { catalog: legacy.catalog, stored: false, error: null })
+  assert.deepEqual(loadCatalog(memory.storage), { catalog: legacy.catalog, stored: false, error: null, raw: null })
   const current = loadCurrentQuotation(memory.storage)
   assert.equal(current.error, null)
   assert.equal(hasQuotationContent(current.quotation), false)
@@ -171,7 +201,9 @@ test('an explicit new catalog including an empty catalog always takes precedence
       [STORAGE_KEY]: serializeWorkspace(legacyFixture()),
       [CATALOG_STORAGE_KEY]: serializeCatalogBackup(catalog),
     })
-    assert.deepEqual(loadCatalog(memory.storage), { catalog, stored: true, error: null })
+    assert.deepEqual(loadCatalog(memory.storage), {
+      catalog, stored: true, error: null, raw: memory.values.get(CATALOG_STORAGE_KEY),
+    })
     assert.deepEqual(memory.writes, [])
   }
 })
@@ -198,6 +230,7 @@ test('corrupt new catalog data blocks replacement without falling back to legacy
     assert.notEqual(loaded.error, null)
     assert.deepEqual(loaded.catalog, [])
     assert.equal(loaded.stored, false)
+    assert.equal(loaded.raw, text)
     assert.equal(saveCatalog(memory.storage, catalogFixture()).ok, false)
     assert.equal(memory.values.get(CATALOG_STORAGE_KEY), text)
     assert.deepEqual(memory.writes, [])
@@ -210,7 +243,9 @@ test('unreadable legacy data is reported and remains intact when new storage is 
   assert.deepEqual(memory.writes, [])
   assert.equal(saveCatalog(memory.storage, []).ok, true)
   assert.equal(memory.values.get(STORAGE_KEY), '{broken legacy')
-  assert.deepEqual(loadCatalog(memory.storage), { catalog: [], stored: true, error: null })
+  assert.deepEqual(loadCatalog(memory.storage), {
+    catalog: [], stored: true, error: null, raw: memory.values.get(CATALOG_STORAGE_KEY),
+  })
 })
 
 test('catalog-only backups preserve approved zero, missing sale price and historical provenance exactly', () => {
@@ -223,7 +258,7 @@ test('catalog-only backups preserve approved zero, missing sale price and histor
   assert.deepEqual(catalog, snapshot)
   const memory = memoryStorage()
   assert.equal(saveCatalog(memory.storage, catalog).ok, true)
-  assert.deepEqual(loadCatalog(memory.storage), { catalog: snapshot, error: null, stored: true })
+  assert.deepEqual(loadCatalog(memory.storage), { catalog: snapshot, error: null, stored: true, raw: text })
 })
 
 test('stock snapshots roundtrip catalogue backups and both storage keys without inventing or refreshing values', () => {
@@ -234,10 +269,12 @@ test('stock snapshots roundtrip catalogue backups and both storage keys without 
     const legacy = { ...legacyFixture(), catalog }
     const raw = `\ufeff${JSON.stringify(legacy)}`
     const memory = memoryStorage({ [STORAGE_KEY]: raw })
-    assert.deepEqual(loadCatalog(memory.storage), { catalog: snapshot, error: null, stored: false })
+    assert.deepEqual(loadCatalog(memory.storage), { catalog: snapshot, error: null, stored: false, raw: null })
     assert.deepEqual(parseCatalogBackup(serializeCatalogBackup(catalog)), snapshot)
     assert.equal(saveCatalog(memory.storage, catalog).ok, true)
-    assert.deepEqual(loadCatalog(memory.storage), { catalog: snapshot, error: null, stored: true })
+    assert.deepEqual(loadCatalog(memory.storage), {
+      catalog: snapshot, error: null, stored: true, raw: memory.values.get(CATALOG_STORAGE_KEY),
+    })
     assert.equal(memory.values.get(STORAGE_KEY), raw)
     assert.deepEqual(memory.writes, [CATALOG_STORAGE_KEY])
     assert.deepEqual(catalog, snapshot)
@@ -273,7 +310,7 @@ test('malformed stock never replaces valid catalogue, current recovery or legacy
   const before = new Map(memory.values)
   const stock = stockFixture()
   for (const invalidStock of [
-    null, {}, { ...stock, quantity: -1 }, { ...stock, quantity: 1.5 }, { ...stock, quantity: '0' },
+    null, {}, { ...stock, quantity: -Number.MAX_SAFE_INTEGER - 1 }, { ...stock, quantity: 1.5 }, { ...stock, quantity: '0' },
     { ...stock, checkedAt: undefined }, { ...stock, validUntil: stock.checkedAt },
     { ...stock, source: undefined }, { ...stock, source: { document: '', date: null } },
   ]) {
@@ -309,7 +346,9 @@ test('current work overwrites one recovery quotation and retains incomplete raw 
     assert.equal(parsed.quotations.length, 1)
     assert.equal(parsed.activeQuotationId, quotation.id)
     assert.deepEqual(parsed.catalog, [])
-    assert.deepEqual(loadCurrentQuotation(memory.storage), { quotation, error: null })
+    assert.deepEqual(loadCurrentQuotation(memory.storage), {
+      quotation, error: null, raw: memory.values.get(CURRENT_QUOTATION_STORAGE_KEY),
+    })
   }
   assert.deepEqual([...memory.values.keys()], [CURRENT_QUOTATION_STORAGE_KEY])
 })
@@ -362,6 +401,7 @@ test('current work rejects history, embedded catalog, mismatched active ID and c
     const memory = memoryStorage({ [CURRENT_QUOTATION_STORAGE_KEY]: text })
     const loaded = loadCurrentQuotation(memory.storage)
     assert.notEqual(loaded.error, null)
+    assert.equal(loaded.raw, text)
     assert.equal(hasQuotationContent(loaded.quotation), false)
     assert.equal(saveCurrentQuotation(memory.storage, createQuotation()).ok, false)
     assert.equal(memory.values.get(CURRENT_QUOTATION_STORAGE_KEY), text)
@@ -402,7 +442,9 @@ test('catalog failure leaves current recovery available and current recovery fai
   const memory = memoryStorage({ [CATALOG_STORAGE_KEY]: '{invalid catalog' })
   assert.notEqual(loadCatalog(memory.storage).error, null)
   assert.equal(saveCurrentQuotation(memory.storage, quotation).ok, true)
-  assert.deepEqual(loadCurrentQuotation(memory.storage), { quotation, error: null })
+  assert.deepEqual(loadCurrentQuotation(memory.storage), {
+    quotation, error: null, raw: memory.values.get(CURRENT_QUOTATION_STORAGE_KEY),
+  })
   const inverse = memoryStorage({ [CURRENT_QUOTATION_STORAGE_KEY]: '{invalid current' })
   assert.notEqual(loadCurrentQuotation(inverse.storage).error, null)
   assert.equal(saveCatalog(inverse.storage, catalogFixture()).ok, true)
@@ -420,4 +462,239 @@ test('read and write adapter failures return errors without crossing storage bou
   const full: StorageAdapter = { getItem() { return null }, setItem() { throw new Error('Quota exceeded') } }
   assert.equal(saveCatalog(full, catalogFixture()).ok, false)
   assert.equal(saveCurrentQuotation(full, createQuotation()).ok, false)
+})
+
+test('loads expose the exact new-key bytes including formatting and retain corrupt raw values', () => {
+  for (const scenario of workingStorageCases()) {
+    const memory = memoryStorage({ [scenario.key]: scenario.original })
+    assert.equal(scenario.load(memory.storage).error, null, scenario.name)
+    assert.equal(scenario.load(memory.storage).raw, scenario.original, scenario.name)
+    assert.notEqual(scenario.original, scenario.normalizedOriginal)
+    for (const raw of ['', '{broken-A', '\ufeffnot JSON\n']) {
+      memory.values.set(scenario.key, raw)
+      const loaded = scenario.load(memory.storage)
+      assert.notEqual(loaded.error, null, scenario.name)
+      assert.equal(loaded.raw, raw, scenario.name)
+    }
+    assert.deepEqual(memory.writes, [])
+  }
+})
+
+test('an absent new key exposes a null baseline and catalogue fallback never uses legacy bytes as its baseline', () => {
+  const legacy = serializeWorkspace(legacyFixture())
+  for (const scenario of workingStorageCases()) {
+    const memory = memoryStorage({ [STORAGE_KEY]: legacy })
+    assert.equal(scenario.load(memory.storage).raw, null, scenario.name)
+    assert.equal(scenario.load(memory.storage).error, null, scenario.name)
+    const result = scenario.save(memory.storage, { expectedRaw: null })
+    assert.deepEqual(result, { ok: true, error: null, raw: scenario.replacement, conflict: false })
+    assert.equal(memory.values.get(STORAGE_KEY), legacy)
+    assert.deepEqual(memory.writes, [scenario.key])
+  }
+  const corruptLegacy = memoryStorage({ [STORAGE_KEY]: '{broken legacy' })
+  assert.notEqual(loadCatalog(corruptLegacy.storage).error, null)
+  assert.equal(loadCatalog(corruptLegacy.storage).raw, null)
+})
+
+test('valid concurrent replacements conflict without overwriting any store even before a storage event is handled', () => {
+  for (const scenario of workingStorageCases()) {
+    const legacy = serializeWorkspace(legacyFixture())
+    const memory = memoryStorage({ [scenario.key]: scenario.original, [STORAGE_KEY]: legacy })
+    const baseline = scenario.load(memory.storage).raw
+    memory.values.set(scenario.key, scenario.replacement)
+    const before = new Map(memory.values)
+    const result = scenario.save(memory.storage, { expectedRaw: baseline })
+    assert.equal(result.ok, false, scenario.name)
+    assert.equal(result.conflict, true, scenario.name)
+    assert.equal(result.raw, scenario.replacement, scenario.name)
+    assert.ok(result.error)
+    assert.deepEqual(memory.values, before)
+    assert.deepEqual(memory.writes, [])
+  }
+})
+
+test('raw equality uses exact stored text rather than an equivalent normalized serialization', () => {
+  for (const scenario of workingStorageCases()) {
+    const memory = memoryStorage({ [scenario.key]: scenario.original })
+    const result = scenario.save(memory.storage, { expectedRaw: scenario.normalizedOriginal })
+    assert.equal(result.conflict, true, scenario.name)
+    assert.equal(result.raw, scenario.original, scenario.name)
+    assert.equal(memory.values.get(scenario.key), scenario.original)
+    assert.deepEqual(memory.writes, [])
+  }
+})
+
+test('concurrent corrupt values conflict before validation and overwriteInvalid cannot bypass the baseline', () => {
+  for (const scenario of workingStorageCases()) {
+    for (const original of [scenario.original, '{broken-A']) {
+      for (const overwriteInvalid of [false, true]) {
+        const memory = memoryStorage({ [scenario.key]: original })
+        const baseline = scenario.load(memory.storage).raw
+        memory.values.set(scenario.key, '{broken-B')
+        const result = scenario.save(memory.storage, { expectedRaw: baseline, overwriteInvalid })
+        assert.equal(result.ok, false, scenario.name)
+        assert.equal(result.conflict, true, scenario.name)
+        assert.equal(result.raw, '{broken-B', scenario.name)
+        assert.equal(memory.values.get(scenario.key), '{broken-B')
+        assert.deepEqual(memory.writes, [])
+      }
+    }
+  }
+})
+
+test('a corrupt unchanged baseline requires explicit overwrite authorization and then returns the bytes written', () => {
+  for (const scenario of workingStorageCases()) {
+    const memory = memoryStorage({ [scenario.key]: '{broken-A' })
+    const baseline = scenario.load(memory.storage).raw
+    const rejected = scenario.save(memory.storage, { expectedRaw: baseline })
+    assert.equal(rejected.ok, false, scenario.name)
+    assert.equal(rejected.conflict, false, scenario.name)
+    assert.equal(rejected.raw, '{broken-A', scenario.name)
+    assert.deepEqual(memory.writes, [])
+    const saved = scenario.save(memory.storage, { expectedRaw: baseline, overwriteInvalid: true })
+    assert.deepEqual(saved, { ok: true, error: null, raw: scenario.replacement, conflict: false })
+    assert.equal(memory.values.get(scenario.key), scenario.replacement)
+    assert.deepEqual(memory.writes, [scenario.key])
+  }
+})
+
+test('an explicit null baseline rejects newly created valid, corrupt and empty-string values', () => {
+  for (const scenario of workingStorageCases()) {
+    for (const actual of [scenario.original, '{broken', '']) {
+      const memory = memoryStorage()
+      assert.equal(scenario.load(memory.storage).raw, null, scenario.name)
+      memory.values.set(scenario.key, actual)
+      const result = scenario.save(memory.storage, { expectedRaw: null, overwriteInvalid: true })
+      assert.equal(result.ok, false, scenario.name)
+      assert.equal(result.conflict, true, scenario.name)
+      assert.equal(result.raw, actual, scenario.name)
+      assert.equal(memory.values.get(scenario.key), actual)
+      assert.deepEqual(memory.writes, [])
+    }
+  }
+})
+
+test('concurrent deletion conflicts with a nonnull baseline and cannot resurrect removed data', () => {
+  for (const scenario of workingStorageCases()) {
+    const memory = memoryStorage({ [scenario.key]: scenario.original })
+    const baseline = scenario.load(memory.storage).raw
+    memory.values.delete(scenario.key)
+    const result = scenario.save(memory.storage, { expectedRaw: baseline, overwriteInvalid: true })
+    assert.equal(result.ok, false, scenario.name)
+    assert.equal(result.conflict, true, scenario.name)
+    assert.equal(result.raw, null, scenario.name)
+    assert.equal(memory.values.has(scenario.key), false)
+    assert.deepEqual(memory.writes, [])
+  }
+})
+
+test('successful saves return a usable next baseline and stale prior baselines cannot be reused', () => {
+  for (const scenario of workingStorageCases()) {
+    const memory = memoryStorage({ [scenario.key]: scenario.original })
+    const baseline = scenario.load(memory.storage).raw
+    const first = scenario.save(memory.storage, { expectedRaw: baseline })
+    assert.deepEqual(first, { ok: true, error: null, raw: scenario.replacement, conflict: false })
+    assert.equal(scenario.load(memory.storage).raw, first.raw, scenario.name)
+    const stale = scenario.save(memory.storage, { expectedRaw: baseline })
+    assert.equal(stale.ok, false, scenario.name)
+    assert.equal(stale.conflict, true, scenario.name)
+    assert.equal(stale.raw, first.raw, scenario.name)
+    assert.deepEqual(memory.writes, [scenario.key])
+    assert.deepEqual(scenario.save(memory.storage, { expectedRaw: first.raw }), first)
+    assert.deepEqual(memory.writes, [scenario.key, scenario.key])
+  }
+})
+
+test('blank recovery writes return the stored empty envelope as a nonnull next baseline', () => {
+  const quotation = createQuotation()
+  quotation.notes = 'Synthetic recoverable original'
+  const original = serializeWorkspace({ version: 1, activeQuotationId: quotation.id, quotations: [quotation], catalog: [] })
+  const memory = memoryStorage({ [CURRENT_QUOTATION_STORAGE_KEY]: original })
+  const result = saveCurrentQuotation(memory.storage, createQuotation(), { expectedRaw: original })
+  assert.equal(result.ok, true)
+  assert.equal(result.conflict, false)
+  assert.equal(result.raw, serializeCatalogBackup([]))
+  assert.equal(loadCurrentQuotation(memory.storage).raw, result.raw)
+  assert.equal(saveCurrentQuotation(memory.storage, quotation, { expectedRaw: null }).conflict, true)
+  assert.equal(saveCurrentQuotation(memory.storage, quotation, { expectedRaw: result.raw }).ok, true)
+  assert.deepEqual(memory.writes, [CURRENT_QUOTATION_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY])
+})
+
+test('omitting expectedRaw or passing undefined preserves the legacy no-comparison save contract', () => {
+  for (const scenario of workingStorageCases()) {
+    for (const options of [undefined, {}, { expectedRaw: undefined }]) {
+      const memory = memoryStorage({ [scenario.key]: scenario.original })
+      const result = scenario.save(memory.storage, options)
+      assert.deepEqual(result, { ok: true, error: null, raw: scenario.replacement, conflict: false })
+      assert.deepEqual(memory.writes, [scenario.key])
+    }
+  }
+})
+
+test('the comparison is repeated after validation to reject changes between the first read and write', () => {
+  for (const scenario of workingStorageCases()) {
+    for (const changed of [scenario.replacement, '{concurrent corrupt', '', null]) {
+      let reads = 0
+      const storage: StorageAdapter = {
+        getItem(key) {
+          assert.equal(key, scenario.key)
+          reads += 1
+          return reads === 1 ? scenario.original : changed
+        },
+        setItem() { assert.fail('A concurrent change must not be overwritten') },
+      }
+      const result = scenario.save(storage, { expectedRaw: scenario.original, overwriteInvalid: true })
+      assert.equal(result.ok, false, scenario.name)
+      assert.equal(result.conflict, true, scenario.name)
+      assert.equal(result.raw, changed, scenario.name)
+      assert.equal(reads, 2, scenario.name)
+    }
+  }
+})
+
+test('failed reads never write even with overwrite authorization and do not masquerade as conflicts', () => {
+  for (const scenario of workingStorageCases()) {
+    const unavailable: StorageAdapter = {
+      getItem() { throw new Error('Synthetic read failure') },
+      setItem() { assert.fail('A failed read must never allow a write') },
+    }
+    assert.equal(scenario.load(unavailable).raw, null, scenario.name)
+    assert.notEqual(scenario.load(unavailable).error, null, scenario.name)
+    for (const expectedRaw of [undefined, null, scenario.original]) {
+      const result = scenario.save(unavailable, { expectedRaw, overwriteInvalid: true })
+      assert.equal(result.ok, false, scenario.name)
+      assert.equal(result.conflict, false, scenario.name)
+      assert.equal(result.raw, null, scenario.name)
+      assert.ok(result.error)
+    }
+    let reads = 0
+    const lostDuringValidation: StorageAdapter = {
+      getItem() {
+        if (++reads === 1) return scenario.original
+        throw new Error('Synthetic second read failure')
+      },
+      setItem() { assert.fail('A failed second read must never allow a write') },
+    }
+    const result = scenario.save(lostDuringValidation, { expectedRaw: scenario.original, overwriteInvalid: true })
+    assert.equal(result.ok, false, scenario.name)
+    assert.equal(result.conflict, false, scenario.name)
+    assert.equal(result.raw, null, scenario.name)
+    assert.equal(reads, 2)
+  }
+})
+
+test('write failures report the observed prior bytes without advancing the caller baseline', () => {
+  for (const scenario of workingStorageCases()) {
+    for (const actual of [scenario.original, null]) {
+      const storage: StorageAdapter = {
+        getItem(key) { assert.equal(key, scenario.key); return actual },
+        setItem() { throw new Error('Synthetic quota failure') },
+      }
+      const result = scenario.save(storage, { expectedRaw: actual })
+      assert.equal(result.ok, false, scenario.name)
+      assert.equal(result.conflict, false, scenario.name)
+      assert.equal(result.raw, actual, scenario.name)
+      assert.ok(result.error)
+    }
+  }
 })

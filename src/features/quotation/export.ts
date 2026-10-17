@@ -1,8 +1,9 @@
 import { calculateQuotation, formatMoney, parseMoney, parseQuantity } from './calculation.ts'
-import type { Quotation, QuotationRow, RowSection } from './model.ts'
+import type { CatalogItem, Quotation, QuotationRow, RowSection } from './model.ts'
 import { BODY_FONT, HEADING_FONT, loadQuotationFonts } from './typography.ts'
 import { exchangeRateDescription } from './exchange-quote.ts'
 import { QUOTATION_GRAPHIC } from './graphic.ts'
+import { inspectQuotationAvailability } from './quotation-availability.ts'
 
 const WIDTH = 1080
 const MARGIN = 64
@@ -10,6 +11,12 @@ const CONTENT_WIDTH = WIDTH - MARGIN * 2
 const { yellow: YELLOW, black: BLACK } = QUOTATION_GRAPHIC
 const FOOTER_HEIGHT = 84
 const MAX_CANVAS_PIXELS = 16_000_000
+export const LOGO_LOAD_TIMEOUT_MS = 15_000
+
+export interface QuotationExportOptions {
+  availabilityWarning?: boolean
+  availabilityCatalog?: readonly CatalogItem[]
+}
 
 type MeasureText = (text: string) => number
 type CalculatedRow = ReturnType<typeof calculateQuotation>['rows'][number]
@@ -180,11 +187,15 @@ function drawContactIcon(context: CanvasRenderingContext2D, x: number, y: number
   }
 }
 
-export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSource): HTMLCanvasElement {
+export function renderQuotationCanvas(
+  quotation: Quotation, logo: CanvasImageSource, options: QuotationExportOptions = {},
+): HTMLCanvasElement {
   const calculation = calculateQuotation(quotation)
   if (!calculation.canExport || !calculation.conversion.ok) {
     throw new Error('Completá los campos pendientes antes de preparar la imagen.')
   }
+  const availability = inspectQuotationAvailability(quotation, options.availabilityCatalog)
+  if (availability.issues.length) throw new Error(availability.issues[0])
   const canvas = document.createElement('canvas')
   const context = canvas.getContext('2d')
   if (!context) throw new Error('El navegador no pudo crear la imagen.')
@@ -225,8 +236,11 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   setFont(context, 24, BODY_FONT)
   const rateLines = measureLines(context, calculation.conversion.rateLabel, CONTENT_WIDTH)
   const rateSourceLines = measureLines(context, exchangeRateDescription(quotation), CONTENT_WIDTH)
+  const availabilityLines = availability.hasProvisional || options.availabilityWarning
+    ? measureLines(context, 'Disponibilidad a confirmar.', CONTENT_WIDTH) : []
   const rateHeight = rateLines.length * 30 + 8 + rateSourceLines.length * 30
-  const totalHeight = 76 + totalRows.reduce((sum, row) => sum + row.height, 0) + 18 + rateHeight + 28
+  const availabilityHeight = availabilityLines.length ? 14 + availabilityLines.length * 30 : 0
+  const totalHeight = 76 + totalRows.reduce((sum, row) => sum + row.height, 0) + 18 + rateHeight + availabilityHeight + 28
   const bodyHeight = Math.max(contentHeight, 1320 - headerHeight - 5 - totalHeight - FOOTER_HEIGHT)
   const height = Math.ceil(headerHeight + 5 + bodyHeight + totalHeight + FOOTER_HEIGHT)
   if (WIDTH * height > MAX_CANVAS_PIXELS) {
@@ -320,6 +334,7 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   setFont(context, 24, BODY_FONT)
   drawLines(context, rateLines, MARGIN, totalRowY + 18, 30)
   drawLines(context, rateSourceLines, MARGIN, totalRowY + 18 + rateLines.length * 30 + 8, 30)
+  drawLines(context, availabilityLines, MARGIN, totalRowY + 18 + rateHeight + 14, 30)
 
   const footerY = height - FOOTER_HEIGHT
   context.fillStyle = BLACK
@@ -344,18 +359,37 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   return canvas
 }
 
-export async function createQuotationFile(quotation: Quotation): Promise<File> {
+async function loadQuotationLogo(): Promise<HTMLImageElement> {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    let settled = false
+    const finish = (error?: Error): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      image.onload = null
+      image.onerror = null
+      if (error) reject(error)
+      else resolve(image)
+    }
+    const timer = setTimeout(() => finish(new Error('El logo tardó demasiado en cargar. Intentá preparar la imagen nuevamente.')), LOGO_LOAD_TIMEOUT_MS)
+    image.onload = () => finish()
+    image.onerror = () => finish(new Error('No se pudo cargar el logo. Intentá preparar la imagen nuevamente.'))
+    try { image.src = QUOTATION_GRAPHIC.logoUrl } catch {
+      finish(new Error('No se pudo cargar el logo. Intentá preparar la imagen nuevamente.'))
+    }
+  })
+}
+
+export async function createQuotationFile(quotation: Quotation, options: QuotationExportOptions = {}): Promise<File> {
   if (!calculateQuotation(quotation).canExport) {
     throw new Error('Completá los campos pendientes antes de preparar la imagen.')
   }
-  const logo = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('No se pudo cargar el logo. Intentá preparar la imagen nuevamente.'))
-    image.src = QUOTATION_GRAPHIC.logoUrl
-  })
+  const availability = inspectQuotationAvailability(quotation, options.availabilityCatalog)
+  if (availability.issues.length) throw new Error(availability.issues[0])
+  const logo = await loadQuotationLogo()
   await loadQuotationFonts()
-  const canvas = renderQuotationCanvas(quotation, logo)
+  const canvas = renderQuotationCanvas(quotation, logo, options)
   try {
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((result) => {

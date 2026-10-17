@@ -16,6 +16,12 @@ import { loadSharedCatalog, mergeSharedCatalog } from './shared-catalog'
 import type { BlueDollarQuote } from './exchange-quote'
 import { startExchangeRateRefresh, type ExchangeRefreshState } from './exchange-refresh'
 import { parseExchangeRate } from './exchange'
+import { BulkEntryDialog } from './BulkEntryDialog'
+import { canSelectCatalogItem } from './catalog-stock'
+import { inspectQuotationAvailability } from './quotation-availability'
+import { useCatalogClock } from './useCatalogClock'
+import { QuotationLibraryDialog } from './QuotationLibraryDialog'
+import { useQuotationLibrary } from './useQuotationLibrary'
 
 function initialData() {
   try {
@@ -23,8 +29,8 @@ function initialData() {
     return { catalog: loadCatalog(storage), current: loadCurrentQuotation(storage) }
   } catch {
     return {
-      catalog: { catalog: [] as CatalogItem[], error: 'El almacenamiento del catálogo no está disponible.', stored: false },
-      current: { quotation: createQuotation(), error: 'No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.' },
+      catalog: { catalog: [] as CatalogItem[], error: 'El almacenamiento del catálogo no está disponible.', stored: false, raw: null },
+      current: { quotation: createQuotation(), error: 'No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.', raw: null },
     }
   }
 }
@@ -37,6 +43,8 @@ export default function QuotationApp() {
   const [catalog, setCatalog] = useState(initial.catalog.catalog)
   const quotationRef = useRef(initial.current.quotation)
   const catalogRef = useRef(initial.catalog.catalog)
+  const catalogStorageRaw = useRef(initial.catalog.raw)
+  const currentStorageRaw = useRef(initial.current.raw)
   const [catalogStorageEnabled, setCatalogStorageEnabled] = useState(!initial.catalog.error)
   const [recoveryEnabled, setRecoveryEnabled] = useState(!initial.current.error)
   const catalogWriteAllowed = useRef(!initial.catalog.error)
@@ -44,28 +52,64 @@ export default function QuotationApp() {
   const [catalogError, setCatalogError] = useState(initial.catalog.error)
   const [recoveryError, setRecoveryError] = useState(initial.current.error)
   const [savedCatalog, setSavedCatalog] = useState<CatalogItem[] | null>(initial.catalog.stored ? initial.catalog.catalog : null)
-  const [dialog, setDialog] = useState<'header' | 'catalog' | null>(null)
+  const [dialog, setDialog] = useState<'header' | 'catalog' | 'bulk' | 'library' | null>(null)
   const [rowEditing, setRowEditing] = useState<RowEditingState | null>(null)
   const [message, setMessage] = useState('')
-  const [prepared, setPrepared] = useState<{ file: File; quotation: Quotation } | null>(null)
+  const [prepared, setPrepared] = useState<{ file: File; quotation: Quotation; provisional: boolean } | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [sharedCatalogStatus, setSharedCatalogStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
   const [sharedCatalogAttempt, setSharedCatalogAttempt] = useState(0)
   const [rateState, setRateState] = useState<(ExchangeRefreshState & { id: string }) | null>(null)
-  const [rateCheckedAt, setRateCheckedAt] = useState(Date.now)
+  const [rateRefreshRequest, setRateRefreshRequest] = useState<{ id: string; token: string } | null>(null)
   const catalogButton = useRef<HTMLButtonElement>(null)
+  const libraryButton = useRef<HTMLButtonElement>(null)
+  const bulkButton = useRef<HTMLButtonElement>(null)
   const rowEditorTrigger = useRef<HTMLElement | null>(null)
   const generation = useRef(0)
-  const preparedFile = prepared?.quotation === quotation ? prepared.file : null
   const catalogSaveStatus = !catalogStorageEnabled ? 'Guardado del catálogo pausado' : catalogError ? 'No se pudo guardar el catálogo' : savedCatalog === catalog ? 'Catálogo y precios conservados en este navegador' : 'Guardando catálogo…'
   const calculation = calculateQuotation(quotation)
+  const availabilityNow = useCatalogClock(catalog, quotation.rows)
+  const availability = inspectQuotationAvailability(quotation, catalog, availabilityNow)
+  const canExport = calculation.canExport && availability.issues.length === 0
+  const validationIssues = [...calculation.issues, ...availability.issues]
+  const preparedFile = prepared?.quotation === quotation && canExport && prepared.provisional === availability.hasProvisional ? prepared.file : null
+  const historicalSource = availability.hasProvisional || catalog.some((item) => item.availabilityPolicy === 'historical-positive' || item.listPrice?.provisional)
+  const savedQuotes = useQuotationLibrary()
   const editingRow = rowEditing?.kind === 'new'
     ? rowEditing.row
     : quotation.rows.find((row) => row.id === rowEditing?.rowId)
-  const rateLoading = rateState?.id === quotation.id && rateState.loading
-  const rateError = rateState?.id === quotation.id ? rateState.error : null
+  const rateLoading = quotation.exchangeRateMode !== 'frozen' && rateState?.id === quotation.id && rateState.loading
+  const rateError = quotation.exchangeRateMode !== 'frozen' && rateState?.id === quotation.id ? rateState.error : null
   const displayedRate = parseExchangeRate(quotation.exchangeRate ?? '')
+
+  function persistCatalog(next: CatalogItem[], overwriteInvalid = false) {
+    const storage = window.localStorage
+    const result = saveCatalog(storage, next, {
+      expectedRaw: overwriteInvalid ? storage.getItem(CATALOG_STORAGE_KEY) : catalogStorageRaw.current,
+      overwriteInvalid,
+    })
+    if (result.ok) catalogStorageRaw.current = result.raw
+    if (result.conflict) {
+      catalogWriteAllowed.current = false
+      setCatalogStorageEnabled(false)
+    }
+    return result
+  }
+
+  function persistCurrent(next: Quotation, overwriteInvalid = false) {
+    const storage = window.localStorage
+    const result = saveCurrentQuotation(storage, next, {
+      expectedRaw: overwriteInvalid ? storage.getItem(CURRENT_QUOTATION_STORAGE_KEY) : currentStorageRaw.current,
+      overwriteInvalid,
+    })
+    if (result.ok) currentStorageRaw.current = result.raw
+    if (result.conflict) {
+      recoveryWriteAllowed.current = false
+      setRecoveryEnabled(false)
+    }
+    return result
+  }
 
   function retrySharedCatalog() {
     setSharedCatalogStatus('loading')
@@ -90,11 +134,75 @@ export default function QuotationApp() {
     recoveryWriteAllowed.current = true
     setRecoveryEnabled(true)
     try {
-      setRecoveryError(saveCurrentQuotation(window.localStorage, next, { overwriteInvalid: true }).error)
+      setRecoveryError(persistCurrent(next, true).error)
     } catch {
       setRecoveryError('No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.')
     }
     window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.quotation-heading-edit')?.focus())
+  }
+
+  function closeLibrary() {
+    setDialog(null)
+    window.requestAnimationFrame(() => libraryButton.current?.focus())
+  }
+
+  function closeBulk() {
+    setDialog(null)
+    window.requestAnimationFrame(() => bulkButton.current?.focus())
+  }
+
+  function addBulkRows(rows: QuotationRow[]): boolean {
+    const current = quotationRef.current
+    if (current.rows.length + rows.length > 1000) {
+      setMessage('La lista supera el máximo de 1000 conceptos. El presupuesto se conserva.')
+      return false
+    }
+    const next = { ...current, rows: [...current.rows, ...rows] }
+    const review = inspectQuotationAvailability({ ...current, rows }, catalogRef.current)
+    if (review.issues.length > 0) {
+      setMessage('Revisá la disponibilidad de los productos antes de agregar la lista.')
+      return false
+    }
+    return updateQuotation(next)
+  }
+
+  function saveNamedQuotation(name: string, replaceEntryId?: string): boolean {
+    const current = quotationRef.current
+    const saved = savedQuotes.saveCurrent(current, name, replaceEntryId)
+    if (saved) {
+      updateQuotation({ ...current, exchangeRateMode: 'frozen' })
+      setMessage('Presupuesto guardado. Sus importes y el dólar se conservaron sin actualización automática.')
+    }
+    return saved
+  }
+
+  function openNamedQuotation(entryId: string, duplicate = false) {
+    if (recoveryError && !window.confirm('Se reemplazarán los datos de recuperación de este navegador por el presupuesto elegido. El catálogo y el historial se conservan. ¿Continuar?')) return
+    const next = savedQuotes.openEntry(entryId, duplicate)
+    if (!next || !updateQuotation(next)) return
+    recoveryWriteAllowed.current = true
+    setRecoveryEnabled(true)
+    try { setRecoveryError(persistCurrent(next, true).error) }
+    catch { setRecoveryError('No se podrá recuperar este presupuesto al recargar. Podés conservarlo en el historial o descargarlo.') }
+    closeLibrary()
+  }
+
+  function downloadLibraryBackup() {
+    try {
+      const backup = savedQuotes.createBackup()
+      downloadQuotationFile(backup.file)
+      setMessage(backup.message)
+    } catch {
+      setMessage('No se pudo crear el respaldo del historial. Los presupuestos se conservan.')
+    }
+  }
+
+  function refreshSavedDollar() {
+    const current = quotationRef.current
+    if (!window.confirm('¿Consultar el dólar actual? Se conservarán los precios de cada concepto y podrán cambiar los totales convertidos. El presupuesto guardado en el historial no se modifica.')) return
+    if (updateQuotation({ ...current, exchangeRateMode: 'automatic' })) {
+      setRateRefreshRequest({ id: current.id, token: crypto.randomUUID() })
+    }
   }
 
   function updateQuotation(next: Quotation): boolean {
@@ -115,20 +223,20 @@ export default function QuotationApp() {
 
   const applyDollarQuote = useEffectEvent((id: string, quote: BlueDollarQuote): boolean => {
     const current = quotationRef.current
-    if (current.id !== id) return false
+    if (current.id !== id || current.exchangeRateMode === 'frozen') return false
     return updateQuotation({ ...current, exchangeRate: quote.rate, exchangeRateQuote: quote })
   })
   const currentDollarQuote = useEffectEvent(() => quotation.exchangeRateQuote)
 
   useEffect(() => {
+    if (quotation.exchangeRateMode === 'frozen') return
     const refresh = startExchangeRateRefresh({
-      initialQuote: currentDollarQuote(),
+      initialQuote: rateRefreshRequest?.id === quotation.id ? undefined : currentDollarQuote(),
       isActive: () => document.visibilityState !== 'hidden' && navigator.onLine,
       onQuote: (quote) => applyDollarQuote(quotation.id, quote),
-      onState: (state) => { setRateState({ id: quotation.id, ...state }); setRateCheckedAt(Date.now()) },
+      onState: (state) => { setRateState({ id: quotation.id, ...state }) },
     })
     function checkRate() {
-      setRateCheckedAt(Date.now())
       refresh.check()
     }
     window.addEventListener('focus', checkRate)
@@ -140,7 +248,7 @@ export default function QuotationApp() {
       window.removeEventListener('online', checkRate)
       document.removeEventListener('visibilitychange', checkRate)
     }
-  }, [quotation.id])
+  }, [quotation.id, quotation.exchangeRateMode, rateRefreshRequest])
 
   function updateCatalog(next: CatalogItem[]): boolean {
     try { serializeCatalogBackup(next) }
@@ -191,7 +299,7 @@ export default function QuotationApp() {
     const timer = window.setTimeout(() => {
       if (!catalogWriteAllowed.current || catalogRef.current !== catalog) return
       try {
-        const result = saveCatalog(window.localStorage, catalog)
+        const result = persistCatalog(catalog)
         setCatalogError(result.error)
         if (result.ok) setSavedCatalog(catalog)
       } catch { setCatalogError('No se pudo acceder al catálogo guardado. Descargá un respaldo del catálogo.') }
@@ -203,7 +311,7 @@ export default function QuotationApp() {
     if (!recoveryEnabled) return
     const timer = window.setTimeout(() => {
       if (!recoveryWriteAllowed.current || quotationRef.current !== quotation) return
-      try { setRecoveryError(saveCurrentQuotation(window.localStorage, quotation).error) }
+      try { setRecoveryError(persistCurrent(quotation).error) }
       catch { setRecoveryError('No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.') }
     }, 250)
     return () => window.clearTimeout(timer)
@@ -224,10 +332,10 @@ export default function QuotationApp() {
     }
     function flush() {
       if (catalogWriteAllowed.current) {
-        try { saveCatalog(window.localStorage, catalogRef.current) } catch { /* Preserve in-memory data when storage is unavailable. */ }
+        try { persistCatalog(catalogRef.current) } catch { /* Preserve in-memory data when storage is unavailable. */ }
       }
       if (recoveryWriteAllowed.current) {
-        try { saveCurrentQuotation(window.localStorage, quotationRef.current) } catch { /* Editing and export remain available. */ }
+        try { persistCurrent(quotationRef.current) } catch { /* Editing and export remain available. */ }
       }
     }
     window.addEventListener('storage', handleStorage)
@@ -301,7 +409,7 @@ export default function QuotationApp() {
     if (!window.confirm('¿Reemplazar el catálogo y sus precios por los del respaldo? El presupuesto en curso se conserva.')) return false
     if (signal?.aborted) return false
     let result: WorkspaceSaveResult
-    try { result = saveCatalog(window.localStorage, next, { overwriteInvalid: true }) }
+    try { result = persistCatalog(next, true) }
     catch { throw new Error('No se pudo restaurar el catálogo en este navegador.') }
     if (!result.ok) {
       setCatalogError(result.error)
@@ -319,7 +427,7 @@ export default function QuotationApp() {
   function enableCatalogStorage() {
     if (!window.confirm('¿Habilitar el guardado del catálogo? Sus datos guardados se reemplazarán por las opciones y precios que ves ahora.')) return
     try {
-      const result = saveCatalog(window.localStorage, catalog, { overwriteInvalid: true })
+      const result = persistCatalog(catalog, true)
       setCatalogError(result.error)
       if (result.ok) {
         catalogWriteAllowed.current = true
@@ -330,14 +438,20 @@ export default function QuotationApp() {
   }
 
   async function prepareImage() {
-    if (!calculation.canExport) { setMessage('Completá los conceptos, precios y la cotización del dólar antes de preparar la imagen.'); return }
+    const currentAvailability = inspectQuotationAvailability(quotation, catalogRef.current)
+    if (!calculation.canExport || currentAvailability.issues.length > 0) { setMessage('Completá los datos pendientes y revisá la disponibilidad antes de preparar la imagen.'); return }
     const request = ++generation.current
     setPreparing(true)
     setMessage('Preparando imagen…')
     try {
-      const file = await createQuotationFile(quotation)
+      const file = await createQuotationFile(quotation, { availabilityCatalog: catalogRef.current, availabilityWarning: currentAvailability.hasProvisional })
       if (request === generation.current) {
-        setPrepared({ file, quotation })
+        const latestAvailability = inspectQuotationAvailability(quotationRef.current, catalogRef.current)
+        if (latestAvailability.issues.length > 0 || latestAvailability.hasProvisional !== currentAvailability.hasProvisional) {
+          setMessage('La disponibilidad cambió mientras se preparaba la imagen. Revisala antes de volver a preparar.')
+          return
+        }
+        setPrepared({ file, quotation, provisional: currentAvailability.hasProvisional })
         setMessage('Imagen lista. Podés descargarla o compartirla y seguir ajustando el presupuesto.')
       }
     } catch (error) {
@@ -347,15 +461,36 @@ export default function QuotationApp() {
     }
   }
 
+  function fileReadyForDelivery(): File | null {
+    const current = quotationRef.current
+    const review = inspectQuotationAvailability(current, catalogRef.current)
+    if (!prepared || prepared.quotation !== current || !calculateQuotation(current).canExport
+      || review.issues.length > 0 || review.hasProvisional !== prepared.provisional) {
+      setPrepared(null)
+      setMessage('Revisá los datos y la disponibilidad antes de volver a preparar la imagen.')
+      return null
+    }
+    return prepared.file
+  }
+
+  function downloadPreparedImage() {
+    const file = fileReadyForDelivery()
+    if (file) downloadQuotationFile(file)
+  }
+
   async function shareImage() {
-    if (!preparedFile || sharing) return
+    if (sharing) return
+    const file = fileReadyForDelivery()
+    if (!file) return
     const request = generation.current
     setSharing(true)
     try {
-      const result = await shareQuotationFile(preparedFile, navigator)
+      const result = await shareQuotationFile(file, navigator)
       if (request !== generation.current) return
       if (result === 'unsupported') {
-        downloadQuotationFile(preparedFile)
+        const currentFile = fileReadyForDelivery()
+        if (!currentFile) return
+        downloadQuotationFile(currentFile)
         setMessage('Este navegador no permite compartir archivos. Se descargó la imagen para compartirla manualmente.')
       } else if (result === 'cancelled') setMessage('Compartir cancelado. La imagen sigue disponible.')
       else setMessage('Menú de compartir cerrado. El envío se confirma en la aplicación que elijas.')
@@ -371,9 +506,12 @@ export default function QuotationApp() {
       <a className="skip-link" href="#quotation">Ir al presupuesto</a>
       <main className="workspace-main">
         <nav className="workspace-actions" aria-label="Herramientas del presupuesto">
+          <button ref={bulkButton} className="button secondary" type="button" onClick={() => setDialog('bulk')}>Pegar códigos o nombres</button>
+          <button ref={libraryButton} className="button secondary" type="button" onClick={() => setDialog('library')}>Presupuestos guardados</button>
           <button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Mi catálogo</button>
           <button className="button secondary" type="button" onClick={startNewQuotation}>Nuevo presupuesto</button>
         </nav>
+        {historicalSource && <p className="notice pending source-warning" role="note">Fuente histórica provisional. Los precios de lista no tienen descuento automático. El stock corresponde a registros anteriores: disponibilidad a confirmar.</p>}
         <div id="quotation">
           <QuotationPreview
             quotation={quotation}
@@ -389,21 +527,24 @@ export default function QuotationApp() {
               <p className="exchange-panel" id="quotation-exchange-rate">
                 <span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span>
               </p>
+              {quotation.exchangeRateMode === 'frozen' && <div className="exchange-frozen"><p className="field-help">Dólar conservado del presupuesto guardado. No se actualiza al abrirlo.</p><button className="button secondary" type="button" onClick={refreshSavedDollar}>Actualizar dólar guardado</button></div>}
               {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
-              {quotation.exchangeRateQuote && rateCheckedAt - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
+              {quotation.exchangeRateQuote && availabilityNow - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
               {rateError && <p className="exchange-warning" role="alert">{rateError}</p>}
             </>}
           />
         </div>
-        {!calculation.canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({calculation.issues.length})</summary><ul>{calculation.issues.map((issue, index) => <li key={String(index) + '-' + issue}>{issue}</li>)}</ul>{!calculation.conversion.ok && <a className="button secondary" href="#quotation-exchange-rate">Revisar cotización del dólar</a>}</details>}
-        <p className="current-quotation-note">Se recupera solo el presupuesto en curso al recargar.</p>
+        {!canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({validationIssues.length})</summary><ul>{validationIssues.map((issue, index) => <li key={String(index) + '-' + issue}>{issue}</li>)}</ul>{!calculation.conversion.ok && <a className="button secondary" href="#quotation-exchange-rate">Revisar cotización del dólar</a>}</details>}
+        <p className="current-quotation-note">El presupuesto en curso se recupera al recargar. Guardá con nombre para conservar una versión en este navegador.</p>
       </main>
       <footer className="export-bar">
-        <p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message || (!calculation.canExport ? 'Completá los datos pendientes para preparar la imagen.' : '')}</p>
-        <div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={() => downloadQuotationFile(preparedFile)}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !calculation.canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div>
+        <p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message || (!canExport ? 'Completá los datos pendientes para preparar la imagen.' : '')}</p>
+        <div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={downloadPreparedImage}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div>
       </footer>
       {dialog === 'header' && <HeaderEditor quotation={quotation} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
       {dialog === 'catalog' && <CatalogEditor catalog={catalog} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onRetrySharedCatalog={retrySharedCatalog} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
+      {dialog === 'bulk' && <BulkEntryDialog catalog={catalog} canSelect={canSelectCatalogItem} defaultCurrency={quotation.currency} existingRowCount={quotation.rows.length} onApply={addBulkRows} onClose={closeBulk} />}
+      {dialog === 'library' && <QuotationLibraryDialog quotation={quotation} library={savedQuotes.library} storageError={savedQuotes.error} savingPaused={savedQuotes.paused} onSaveCurrent={saveNamedQuotation} onOpen={(id) => openNamedQuotation(id)} onDuplicate={(id) => openNamedQuotation(id, true)} onExport={downloadLibraryBackup} onImport={savedQuotes.importLibrary} onResumeSaving={savedQuotes.resumeSaving} onClose={closeLibrary} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} />}
     </div>
   )

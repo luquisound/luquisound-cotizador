@@ -2,11 +2,17 @@ import { useDeferredValue, useEffect, useId, useMemo, useRef, useState, type Cha
 import { parseMoney } from './calculation.ts'
 import {
   applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES, CATALOG_IMPORT_MAX_ITEMS,
-  getCatalogCategories, getCatalogChoices, getCatalogDefaultCurrency, parseCatalogImport, queryCatalog,
+  getCatalogCategories, getCatalogChoices, getCatalogDefaultCurrency, parseCatalogImport,
 } from './catalog.ts'
 import type { CatalogCategoryOption, CatalogImportDocument, CatalogImportPreview, CatalogReferencePrice, CatalogSource } from './catalog.ts'
 import type { CatalogItem, Currency, RowSection } from './model.ts'
 import { Dialog } from './QuotationDialog.tsx'
+import { buildCatalogEdit, captureCatalogEditBaseline } from './catalog-edit.ts'
+import { queryCatalogRanked, resolveCatalogQuery } from './catalog-search.ts'
+import { canSelectCatalogItem } from './catalog-stock.ts'
+import { CatalogAvailability } from './CatalogAvailability.tsx'
+import { getCatalogSelectionPrice } from './row-provenance.ts'
+import { useCatalogClock } from './useCatalogClock.ts'
 import './catalog-ui.css'
 
 const PAGE_SIZE = 25
@@ -31,8 +37,23 @@ function sourceLabel(source: CatalogSource): string {
   if (source.page !== undefined) parts.push(`página ${source.page}`)
   if (source.sheet) parts.push(`hoja ${source.sheet}`)
   if (source.row !== undefined) parts.push(`fila ${source.row}`)
-  if (source.date !== null) parts.push(`fecha ${source.date}`)
+  parts.push(`fecha ${source.date ?? 'no informada'}`)
+  if (source.version) parts.push(`versi\u00f3n ${source.version}`)
+  if (source.checksum) parts.push(`SHA-256 ${source.checksum}`)
   return parts.join(' · ')
+}
+
+function catalogPriceLabel(item: CatalogItem): string {
+  try {
+    const price = getCatalogSelectionPrice(item)
+    if (price.priceBasis === 'pending') return 'Precio pendiente'
+    const label = price.priceBasis === 'manual' ? 'Precio manual del cat\u00e1logo'
+      : price.priceBasis === 'provisional-list' ? 'Lista hist\u00f3rica provisional, antes del 20%'
+        : 'Lista aprobada, antes del descuento'
+    return `${label}: ${price.currency} ${price.unitPrice}`
+  } catch {
+    return 'Precio manual inv\u00e1lido: revisalo antes de seleccionar'
+  }
 }
 
 function referenceAmount(price: CatalogReferencePrice): string {
@@ -73,10 +94,11 @@ interface HistoricalReferencesProps {
   item: CatalogItem
   currency: Currency
   allowCurrencyChange?: boolean
+  disabled?: boolean
   onUse: (unitPrice: string, currency: Currency) => void
 }
 
-function HistoricalReferences({ item, currency, allowCurrencyChange = false, onUse }: HistoricalReferencesProps) {
+function HistoricalReferences({ item, currency, allowCurrencyChange = false, disabled = false, onUse }: HistoricalReferencesProps) {
   const [open, setOpen] = useState(false)
   const references = item.referencePrices ?? []
   const requiredCurrency = allowCurrencyChange ? undefined : currency
@@ -98,7 +120,7 @@ function HistoricalReferences({ item, currency, allowCurrencyChange = false, onU
                 <div className="catalog-reference-action">
                   {input === null
                     ? <p className="catalog-reference-note">{referenceUnavailableReason(price, requiredCurrency)}</p>
-                    : <button type="button" className="button secondary" onClick={() => {
+                    : <button type="button" className="button secondary" disabled={disabled} onClick={() => {
                       const confirmedInput = confirmReference(item, price, requiredCurrency)
                       if (confirmedInput !== null && price.currency !== null) onUse(confirmedInput, price.currency)
                     }}>Usar referencia como precio</button>}
@@ -142,12 +164,27 @@ interface CatalogPickerProps {
 export function CatalogPicker({ catalog, section, onChoose }: CatalogPickerProps) {
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
+  const [showUnavailable, setShowUnavailable] = useState(false)
+  const [selectionError, setSelectionError] = useState('')
+  const now = useCatalogClock(catalog)
   const deferredQuery = useDeferredValue(query)
   const searchId = useId()
   const available = useMemo(() => getCatalogChoices(catalog, section), [catalog, section])
   const categories = useMemo(() => getCatalogCategories(available), [available])
   const category = categories.some((option) => option.key === selectedCategory) ? selectedCategory : ''
-  const results = useMemo(() => queryCatalog(available, deferredQuery, category), [available, deferredQuery, category])
+  const allResults = useMemo(() => queryCatalogRanked(available, deferredQuery, category), [available, deferredQuery, category])
+  const results = allResults.filter((item) => showUnavailable || canSelectCatalogItem(item, now))
+  const resolution = resolveCatalogQuery(available, deferredQuery, (item) => canSelectCatalogItem(item, now))
+  const exactBlocked = resolution.matchKind === 'sku' || resolution.matchKind === 'name' ? resolution.blockedCandidates : []
+  function choose(item: CatalogItem): void {
+    // The helper reads the current clock again when the user selects an item.
+    if (!canSelectCatalogItem(item)) {
+      setSelectionError('La disponibilidad cambi\u00f3. Revis\u00e1 el stock del producto antes de agregarlo.')
+      return
+    }
+    setSelectionError('')
+    onChoose(item)
+  }
   return (
     <fieldset className="catalog-picker">
       <legend>Elegir del catálogo <span>(opcional)</span></legend>
@@ -159,20 +196,27 @@ export function CatalogPicker({ catalog, section, onChoose }: CatalogPickerProps
         </label>
         <CatalogCategorySelect label="Filtrar productos por categoría" options={categories} value={category} onChange={setSelectedCategory} />
       </div>
-      <p className="field-help">Podés escribir manualmente o dejar el campo vacío. Elegir un producto conserva su precio de venta; las referencias se revisan por separado.</p>
+      <label className="catalog-confirm-updates"><input type="checkbox" checked={showUnavailable} onChange={(event) => setShowUnavailable(event.target.checked)} /><span>Mostrar no habilitados</span></label>
+      {!showUnavailable && exactBlocked.length > 0 && <div className="notice pending" role="status">
+        <p>La coincidencia exacta no tiene disponibilidad habilitada. Marcá Mostrar no habilitados para revisar la ficha.</p>
+        {exactBlocked.slice(0, PICKER_LIMIT).map((item) => <p key={item.id}><strong>{item.concept}</strong><CatalogAvailability item={item} now={now} /></p>)}
+      </div>}
+      {selectionError && <p className="field-errors" role="alert">{selectionError}</p>}
+      <p className="field-help">Podés escribir un trabajo independiente o dejar el campo vacío. Al elegir, se copia el precio manual o la lista aprobada, con su moneda. Una lista histórica provisional requiere confirmar disponibilidad; las referencias sin aprobar se revisan por separado.</p>
       <p className="catalog-count" aria-live="polite">{results.length === 0
         ? 'No hay coincidencias para esta búsqueda.'
         : `${results.length} coincidencias${results.length > PICKER_LIMIT ? ` · Se muestran las primeras ${PICKER_LIMIT}; afiná la búsqueda.` : ''}`}</p>
       <ul className="catalog-picker-results" aria-busy={query !== deferredQuery}>
         {results.slice(0, PICKER_LIMIT).map((item) => (
           <li className="catalog-picker-card" key={item.id}>
-            <button type="button" className="catalog-picker-choice" onClick={() => onChoose(item)}>
+            <button type="button" className="catalog-picker-choice" disabled={!canSelectCatalogItem(item, now)} onClick={() => choose(item)}>
               <strong className="catalog-item-name">{item.concept}</strong>
               {(item.sku || item.brand || item.supplier) && <span className="catalog-item-meta">{[item.sku, item.brand, item.supplier].filter(Boolean).join(' · ')}</span>}
-              <span className="catalog-item-price">{item.unitPrice.trim() ? `Venta: ${item.currency} ${item.unitPrice}` : 'Precio de venta pendiente'}</span>
-              <span className="catalog-item-meta">Usar producto</span>
+              <span className="catalog-item-price">{catalogPriceLabel(item)}</span>
+              <CatalogAvailability item={item} now={now} />
+              <span className="catalog-item-meta">{canSelectCatalogItem(item, now) ? 'Usar producto' : 'No habilitado para agregar'}</span>
             </button>
-            <HistoricalReferences item={item} currency={getCatalogDefaultCurrency(item)} allowCurrencyChange onUse={(unitPrice, currency) => onChoose({ ...item, unitPrice, currency })} />
+            <HistoricalReferences item={item} currency={getCatalogDefaultCurrency(item)} allowCurrencyChange disabled={!canSelectCatalogItem(item, now)} onUse={(unitPrice, currency) => choose({ ...item, unitPrice, currency })} />
           </li>
         ))}
       </ul>
@@ -200,10 +244,12 @@ export function CatalogEditor({
 }: CatalogEditorProps) {
   const [draft, setDraft] = useState<CatalogItem>(emptyItem)
   const [baseline, setBaseline] = useState(() => editableSignature(draft))
+  const [editBaseline, setEditBaseline] = useState(() => captureCatalogEditBaseline(draft, false))
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
+  const [showUnavailable, setShowUnavailable] = useState(false)
   const [page, setPage] = useState({ index: 0, category: '' })
   const [reading, setReading] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -218,12 +264,16 @@ export function CatalogEditor({
   const backupController = useRef<AbortController | null>(null)
   const searchId = useId()
   const deferredQuery = useDeferredValue(query)
+  const now = useCatalogClock(catalog)
   const categories = useMemo(() => getCatalogCategories(catalog), [catalog])
   const category = categories.some((option) => option.key === selectedCategory) ? selectedCategory : ''
-  const results = useMemo(() => queryCatalog(catalog, deferredQuery, category), [catalog, deferredQuery, category])
+  const allResults = useMemo(() => queryCatalogRanked(catalog, deferredQuery, category), [catalog, deferredQuery, category])
+  const results = allResults.filter((item) => showUnavailable || canSelectCatalogItem(item, now))
+  const resolution = resolveCatalogQuery(catalog, deferredQuery, (item) => canSelectCatalogItem(item, now))
+  const exactBlocked = resolution.matchKind === 'sku' || resolution.matchKind === 'name' ? resolution.blockedCandidates : []
   const pageCount = Math.max(1, Math.ceil(results.length / PAGE_SIZE))
   const visiblePage = page.category === category ? Math.min(page.index, pageCount - 1) : 0
-  const editingExisting = catalog.some((item) => item.id === draft.id)
+  const editingExisting = editBaseline.snapshot !== null
   const dirty = editableSignature(draft) !== baseline
   useEffect(() => () => {
     readToken.current += 1
@@ -241,6 +291,7 @@ export function CatalogEditor({
     const next = structuredClone(item)
     setDraft(next)
     setBaseline(editableSignature(next))
+    setEditBaseline(captureCatalogEditBaseline(next, catalog.some((entry) => entry.id === next.id)))
     setError('')
   }
 
@@ -367,7 +418,7 @@ export function CatalogEditor({
         return
       }
       resetMissingCategory(next)
-      setFeedback(`Importación aplicada al espacio actual: ${preview.additions.length} nuevas y ${updates} actualizadas.${preview.replacesSources ? ` ${preview.removals.length} retiradas de las fuentes reemplazadas.` : ''} Los precios históricos siguen como referencias.`)
+      setFeedback(`Importación aplicada al espacio actual: ${preview.additions.length} nuevas y ${updates} actualizadas.${preview.replacesSources ? ` ${preview.removals.length} retiradas de las fuentes reemplazadas.` : ''} Las referencias sin aprobar siguen como consulta; una lista aprobada se copia al seleccionar. El presupuesto en curso se conserva.`)
       clearPreview()
       resetDraft()
     } catch (cause: unknown) {
@@ -377,31 +428,14 @@ export function CatalogEditor({
 
   function saveItem(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault()
-    if (!draft.concept.trim()) {
-      setError('Escribí un concepto para guardar esta opción.')
-      inputRef.current?.focus()
+    let next: CatalogItem[]
+    try {
+      next = buildCatalogEdit(catalog, draft, editBaseline)
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo revisar la opción. Tus cambios siguen en el formulario.')
+      if (!draft.concept.trim()) inputRef.current?.focus()
       return
     }
-    if (!editingExisting && catalog.length >= CATALOG_IMPORT_MAX_ITEMS) {
-      setError('El catálogo admite hasta 2000 opciones. Eliminá una antes de agregar otra.')
-      return
-    }
-    if (draft.unitPrice.trim() && !parseMoney(draft.unitPrice).ok) {
-      setError('Revisá el precio de venta. Usá cero o un importe positivo y coma para decimales.')
-      return
-    }
-    const normalizeKey = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase()
-    const supplier = normalizeKey(draft.supplier ?? '')
-    const sku = normalizeKey(draft.sku ?? '')
-    if (supplier && sku && catalog.some((item) => item.id !== draft.id
-      && normalizeKey(item.supplier ?? '') === supplier && normalizeKey(item.sku ?? '') === sku)) {
-      setError('Ya existe otra opción con ese proveedor y código. Buscala para editarla o revisá la identificación.')
-      return
-    }
-    const nextItem = { ...draft, concept: draft.concept.trim(), detail: draft.detail.trim(), unitPrice: draft.unitPrice.trim() }
-    const next = editingExisting
-      ? catalog.map((item) => item.id === draft.id ? nextItem : item)
-      : [...catalog, nextItem]
     if (!onSave(next)) {
       setError('No se guardó la opción. Revisá el aviso de guardado y volvé a intentar sin cerrar este formulario.')
       return
@@ -468,7 +502,7 @@ export function CatalogEditor({
         </details>
         <section className="catalog-import" aria-label="Importar catálogo privado">
           <h3>Importar catálogo privado</h3>
-          <p className="field-help">Elegí un JSON de Luquisound. Se procesa en este navegador; el presupuesto en curso se conserva y ningún precio histórico se carga como venta.</p>
+          <p className="field-help">Elegí un JSON de Luquisound. Se procesa en este navegador y el presupuesto en curso se conserva. Las referencias sin aprobar quedan como consulta. Una lista aprobada explícitamente se copia al elegir el producto y muestra si es histórica provisional.</p>
           <label className="catalog-search">Archivo JSON privado
             <input type="file" accept=".json,application/json" disabled={reading} onChange={readImport} />
           </label>
@@ -525,6 +559,11 @@ export function CatalogEditor({
               setPage({ index: 0, category: value })
             }} />
           </div>
+          <label className="catalog-confirm-updates"><input type="checkbox" checked={showUnavailable} onChange={(event) => { setShowUnavailable(event.target.checked); setPage({ index: 0, category }) }} /><span>Mostrar no habilitados</span></label>
+          {!showUnavailable && exactBlocked.length > 0 && <div className="notice pending" role="status">
+            <p>La coincidencia exacta no está habilitada para cotizar. Marcá Mostrar no habilitados para consultar o editar su ficha.</p>
+            {exactBlocked.slice(0, PAGE_SIZE).map((item) => <p key={item.id}><strong>{item.concept}</strong><CatalogAvailability item={item} now={now} /></p>)}
+          </div>}
           <p className="catalog-count" aria-live="polite">{results.length} de {catalog.length} opciones{results.length ? ` · Mostrando ${resultStart + 1}–${Math.min(resultStart + PAGE_SIZE, results.length)}` : ''}</p>
           <ul className="catalog-results" aria-busy={query !== deferredQuery}>
             {results.slice(resultStart, resultStart + PAGE_SIZE).map((item) => <li className="catalog-result" key={item.id}>
@@ -536,7 +575,8 @@ export function CatalogEditor({
               }}>
                 <strong className="catalog-item-name">{item.concept}</strong>
                 <span className="catalog-item-meta">{[item.sku, item.brand, item.supplier].filter(Boolean).join(' · ') || 'Opción manual'}</span>
-                <span className="catalog-item-price">{item.unitPrice.trim() ? `Venta: ${item.currency} ${item.unitPrice}` : 'Precio de venta pendiente'}</span>
+                <span className="catalog-item-price">{catalogPriceLabel(item)}</span>
+                <CatalogAvailability item={item} now={now} />
                 <span className="catalog-item-meta">Editar opción</span>
               </button>
               <div className="catalog-result-actions"><button type="button" className="button danger" aria-label={`Eliminar ${item.concept} del catálogo`} onClick={() => removeItem(item)}>Eliminar</button></div>
@@ -557,8 +597,13 @@ export function CatalogEditor({
             <label>Sección sugerida<select value={draft.section} onChange={(event) => setDraft({ ...draft, section: event.target.value as RowSection })}><option value="equipment">Equipamiento</option><option value="extras">Instalación y accesorios</option></select></label>
             <label>Moneda del precio<select value={draft.currency} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">ARS</option><option value="USD">USD</option></select></label>
           </div>
-          <label>Precio de venta unitario · {draft.currency} <span>(opcional)</span><input inputMode="decimal" placeholder="Precio pendiente" value={draft.unitPrice} maxLength={64} onChange={(event) => setDraft({ ...draft, unitPrice: event.target.value })} /></label>
-          <p className="field-help">Cargá el precio de venta que quieras usar. Coma para decimales; cero es válido. Una referencia de costo o de lista no se convierte automáticamente en venta.</p>
+          <label>Precio manual para próximas selecciones · {draft.currency} <span>(opcional)</span><input inputMode="decimal" placeholder={draft.listPrice ? 'Usar lista aprobada' : 'Precio pendiente'} value={draft.unitPrice} maxLength={64} onChange={(event) => setDraft({ ...draft, unitPrice: event.target.value })} /></label>
+          <p className="field-help">Este precio se guarda en el catálogo para futuras selecciones. Coma para decimales; cero es válido. Cambiarlo no modifica filas ya cargadas. Las referencias sin aprobar requieren confirmación.</p>
+          {draft.listPrice && <div className="notice pending">
+            <p>Lista {draft.listPrice.provisional ? 'histórica provisional' : 'aprobada'}: {draft.listPrice.currency} {draft.listPrice.amount.replace('.', ',')}, PVP antes del 20% de descuento. Si dejás vacío el precio manual, se usará esta lista y su moneda al elegir el producto.</p>
+            <p className="catalog-provenance">{sourceLabel(draft.listPrice.source)}</p>
+          </div>}
+          <CatalogAvailability item={draft} now={now} />
           <details className="catalog-metadata">
             <summary>Identificación y presentación <span>(opcional)</span></summary>
             <div className="form-stack">

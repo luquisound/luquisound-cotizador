@@ -1,5 +1,6 @@
 import type { CatalogItem, Currency, RowSection } from './model.ts'
-import { parseCatalogStockFields, type CatalogStockSnapshot } from './catalog-stock.ts'
+import { parseCatalogStockFields, type CatalogAvailabilityPolicy, type CatalogStockSnapshot } from './catalog-stock.ts'
+import { parseMoney } from './calculation.ts'
 
 export interface CatalogSource {
   document: string
@@ -7,6 +8,17 @@ export interface CatalogSource {
   sheet?: string
   row?: number
   date: string | null
+  kind?: 'snapshot' | 'sheets'
+  version?: string
+  checksum?: string
+}
+
+export interface CatalogListPrice {
+  amount: string
+  currency: Currency
+  basis: 'retail-list-before-discount'
+  provisional: boolean
+  source: CatalogSource
 }
 
 export interface CatalogReferencePrice {
@@ -28,6 +40,9 @@ export interface CatalogEntry extends CatalogItem {
   source?: CatalogSource
   referencePrices?: CatalogReferencePrice[]
   stock?: CatalogStockSnapshot
+  listPrice?: CatalogListPrice
+  availabilityPolicy?: CatalogAvailabilityPolicy
+  selectionBlock?: string
 }
 
 export interface CatalogImportItem {
@@ -43,6 +58,9 @@ export interface CatalogImportItem {
   source?: CatalogSource
   referencePrices: CatalogReferencePrice[]
   stock?: CatalogStockSnapshot
+  listPrice?: CatalogListPrice
+  availabilityPolicy?: CatalogAvailabilityPolicy
+  selectionBlock?: string
 }
 
 export interface CatalogImportDocument {
@@ -121,7 +139,7 @@ function section(value: unknown): RowSection {
   return value
 }
 
-function source(value: unknown): CatalogSource {
+export function parseCatalogSource(value: unknown): CatalogSource {
   const input = record(value)
   const document = text(input.document, 500)
   if (!document) invalidImport()
@@ -130,12 +148,19 @@ function source(value: unknown): CatalogSource {
       typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 1000000
     )) invalidImport()
   }
+  if (input.kind !== undefined && input.kind !== 'snapshot' && input.kind !== 'sheets') invalidImport()
+  const version = input.version === undefined ? undefined : text(input.version, 200)
+  if (version !== undefined && !version) invalidImport()
+  if (input.checksum !== undefined && (typeof input.checksum !== 'string' || !/^[a-f0-9]{64}$/.test(input.checksum))) invalidImport()
   return {
     document,
     ...(input.page === undefined ? {} : { page: input.page as number }),
     ...(input.sheet === undefined ? {} : { sheet: text(input.sheet, 128) }),
     ...(input.row === undefined ? {} : { row: input.row as number }),
     date: date(input.date),
+    ...(input.kind === undefined ? {} : { kind: input.kind }),
+    ...(version === undefined ? {} : { version }),
+    ...(input.checksum === undefined ? {} : { checksum: input.checksum as string }),
   }
 }
 
@@ -153,15 +178,38 @@ function referencePrice(value: unknown): CatalogReferencePrice {
     role: input.role,
     date: date(input.date),
     historical: true,
-    ...(input.source === undefined ? {} : { source: source(input.source) }),
+    ...(input.source === undefined ? {} : { source: parseCatalogSource(input.source) }),
   }
 }
 
-function stockSnapshot(value: unknown): CatalogStockSnapshot {
+export function parseCatalogStockSnapshot(value: unknown): CatalogStockSnapshot {
   const input = record(value)
-  const fields = parseCatalogStockFields(input.quantity, input.checkedAt, input.validUntil)
+  const fields = parseCatalogStockFields(input.quantity, input.checkedAt, input.validUntil, input.observation)
   if (!fields) invalidImport()
-  return { ...fields, source: source(input.source) }
+  return { ...fields, source: parseCatalogSource(input.source) }
+}
+
+export function parseCatalogListPrice(value: unknown): CatalogListPrice {
+  const input = record(value)
+  if (typeof input.amount !== 'string' || !/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(input.amount)
+    || !parseMoney(input.amount.replace('.', ',')).ok) invalidImport()
+  if (input.currency !== 'ARS' && input.currency !== 'USD') invalidImport()
+  if (input.basis !== 'retail-list-before-discount' || typeof input.provisional !== 'boolean') invalidImport()
+  return {
+    amount: input.amount, currency: input.currency, basis: input.basis,
+    provisional: input.provisional, source: parseCatalogSource(input.source),
+  }
+}
+
+export function parseCatalogAvailabilityPolicy(value: unknown): CatalogAvailabilityPolicy {
+  if (value !== 'historical-positive' && value !== 'fresh-positive') invalidImport()
+  return value
+}
+
+export function parseCatalogSelectionBlock(value: unknown): string {
+  const reason = text(value, 500)
+  if (!reason) invalidImport()
+  return reason
 }
 
 function importItem(value: unknown): CatalogImportItem {
@@ -171,7 +219,7 @@ function importItem(value: unknown): CatalogImportItem {
   if (input.referencePrices !== undefined && (
     !Array.isArray(input.referencePrices) || input.referencePrices.length > CATALOG_REFERENCE_MAX_PRICES
   )) invalidImport()
-  const itemSource = input.source === undefined ? undefined : source(input.source)
+  const itemSource = input.source === undefined ? undefined : parseCatalogSource(input.source)
   const referencePrices = (input.referencePrices as unknown[] | undefined)?.map(referencePrice) ?? []
   return {
     supplier: text(input.supplier, 200, true),
@@ -188,7 +236,10 @@ function importItem(value: unknown): CatalogImportItem {
       const priceSource = price.source ?? itemSource
       return { ...price, ...(priceSource === undefined ? {} : { source: { ...priceSource } }) }
     }),
-    ...(input.stock === undefined ? {} : { stock: stockSnapshot(input.stock) }),
+    ...(input.stock === undefined ? {} : { stock: parseCatalogStockSnapshot(input.stock) }),
+    ...(input.listPrice === undefined ? {} : { listPrice: parseCatalogListPrice(input.listPrice) }),
+    ...(input.availabilityPolicy === undefined ? {} : { availabilityPolicy: parseCatalogAvailabilityPolicy(input.availabilityPolicy) }),
+    ...(input.selectionBlock === undefined ? {} : { selectionBlock: parseCatalogSelectionBlock(input.selectionBlock) }),
   }
 }
 
@@ -243,7 +294,10 @@ function itemSignature(item: CatalogImportItem): string {
     section: item.section, unit: item.unit ?? '', presentation: item.presentation ?? '',
     source: sourceSignature(item.source),
     referencePrices: item.referencePrices.map(referenceSignature),
-    stock: item.stock ? [item.stock.quantity, item.stock.checkedAt, item.stock.validUntil, sourceSignature(item.stock.source)] : null,
+    stock: item.stock ? [item.stock.quantity, item.stock.checkedAt, item.stock.validUntil, item.stock.observation ?? null, sourceSignature(item.stock.source)] : null,
+    listPrice: item.listPrice ? [item.listPrice.amount, item.listPrice.currency, item.listPrice.basis,
+      item.listPrice.provisional, sourceSignature(item.listPrice.source)] : null,
+    availabilityPolicy: item.availabilityPolicy ?? null, selectionBlock: item.selectionBlock ?? null,
   })
 }
 
@@ -254,7 +308,8 @@ function referenceSignature(price: CatalogReferencePrice): string {
 }
 
 function sourceSignature(value: CatalogSource | undefined): (string | number | null)[] | null {
-  return value ? [value.document, value.page ?? null, value.sheet ?? null, value.row ?? null, value.date] : null
+  return value ? [value.document, value.page ?? null, value.sheet ?? null, value.row ?? null, value.date,
+    value.kind ?? null, value.version ?? null, value.checksum ?? null] : null
 }
 
 function cloneReference(price: CatalogReferencePrice): CatalogReferencePrice {
@@ -263,6 +318,10 @@ function cloneReference(price: CatalogReferencePrice): CatalogReferencePrice {
 
 function cloneStock(stock: CatalogStockSnapshot): CatalogStockSnapshot {
   return { ...stock, source: { ...stock.source } }
+}
+
+function cloneListPrice(price: CatalogListPrice): CatalogListPrice {
+  return { ...price, source: { ...price.source } }
 }
 
 function asImportItem(item: CatalogEntry): CatalogImportItem {
@@ -274,6 +333,9 @@ function asImportItem(item: CatalogEntry): CatalogImportItem {
     ...(item.source === undefined ? {} : { source: { ...item.source } }),
     referencePrices: item.referencePrices?.map(cloneReference) ?? [],
     ...(item.stock === undefined ? {} : { stock: cloneStock(item.stock) }),
+    ...(item.listPrice === undefined ? {} : { listPrice: cloneListPrice(item.listPrice) }),
+    ...(item.availabilityPolicy === undefined ? {} : { availabilityPolicy: item.availabilityPolicy }),
+    ...(item.selectionBlock === undefined ? {} : { selectionBlock: item.selectionBlock }),
   }
 }
 
@@ -285,6 +347,7 @@ function cloneEntry(item: CatalogEntry): CatalogEntry {
       referencePrices: item.referencePrices.map(cloneReference),
     }),
     ...(item.stock === undefined ? {} : { stock: cloneStock(item.stock) }),
+    ...(item.listPrice === undefined ? {} : { listPrice: cloneListPrice(item.listPrice) }),
   }
 }
 
@@ -298,6 +361,9 @@ function entryFromItem(item: CatalogImportItem, id: string): CatalogEntry {
     ...(item.source === undefined ? {} : { source: { ...item.source } }),
     referencePrices: mergeReferences([], item.referencePrices),
     ...(item.stock === undefined ? {} : { stock: cloneStock(item.stock) }),
+    ...(item.listPrice === undefined ? {} : { listPrice: cloneListPrice(item.listPrice) }),
+    ...(item.availabilityPolicy === undefined ? {} : { availabilityPolicy: item.availabilityPolicy }),
+    ...(item.selectionBlock === undefined ? {} : { selectionBlock: item.selectionBlock }),
   }
 }
 

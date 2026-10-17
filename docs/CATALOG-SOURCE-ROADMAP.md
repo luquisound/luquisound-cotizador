@@ -1,4 +1,4 @@
-# Private spreadsheet source preparation
+# Private source snapshots and spreadsheet roadmap
 
 ## Current boundary
 
@@ -6,7 +6,9 @@ The current common catalogue remains a reviewed private JSON snapshot, served by
 `GET /api/catalog`. A future supplier spreadsheet reader can produce that same
 format. No spreadsheet URL, account, OAuth flow, network adapter, schedule or
 credential is configured by this preparation. Access to the supplier sheet is
-pending; the existing Excel and private catalogue remain the working source.
+pending. Reviewed historical snapshots can supply explicit provisional retail
+list prices and historical stock through this format, without pretending the
+download date is the source's commercial date or a live stock check.
 
 Business account details, the private sheet URL and the selected source checksum
 belong in the external project library, never in this public repository or client
@@ -41,42 +43,56 @@ do not synthesize zero stock or extend an old observation's validity on failure.
 Refresh cadence, retry policy and atomic publication are implementation decisions
 for the activation task. No new periodic job is part of this preparation.
 
-## Prepared stock contract
+## Active snapshot contract
 
 `stock` is an optional private product observation, independent of sale prices:
 
 ```json
 "stock": {
-  "quantity": 0,
-  "checkedAt": "2026-10-17T10:00:00.000Z",
-  "validUntil": "2026-10-17T10:15:00.000Z",
+  "quantity": 3,
+  "checkedAt": null,
+  "validUntil": null,
+  "observation": "historical",
   "source": {
-    "document": "Synthetic private supplier sheet",
+    "document": "synthetic-private-source.xlsx",
     "sheet": "Products",
     "row": 2,
-    "date": null
+    "date": null,
+    "kind": "snapshot",
+    "version": "synthetic-review-1"
   }
 }
 ```
 
-The example interval is synthetic, not a chosen refresh cadence or production
-TTL. Quantity is a nonnegative safe integer or explicit `null` for unknown.
-Missing `stock` also means no observation. Strings, blanks, errors, negative
-numbers, fractions and unresolved formulas must not be coerced into zero.
+This example is synthetic, not a promise of current availability. Quantity is a
+safe integer or explicit `null` for unknown. Negative values remain an anomaly
+and block protected selection. Missing `stock` also means no observation.
+Strings, blanks, errors, fractions and unresolved formulas must not become zero.
 The adapter must report ambiguous supplier conventions before mapping them.
 
-`checkedAt` and `validUntil` are canonical UTC instants with milliseconds, and
-`validUntil` must be later than `checkedAt`. They describe observation freshness;
+For a current observation, `checkedAt` and `validUntil` are canonical UTC instants
+with milliseconds, and `validUntil` must be later than `checkedAt`. For a historical
+observation, unknown instants remain `null`; known instants must be valid and an
+expiry still requires an earlier observation instant. They describe freshness;
 they do not replace the source's commercial date. No default validity period is
 invented. Observation provenance is mandatory and can differ from the product's
 or a historical price's provenance. The old Excel's stored stock and its import
 date do not create a current observation.
 
-The pure `classifyCatalogStock` helper distinguishes `unknown`, `stale`,
-`out-of-stock`, `low` and `available`, using an explicit current time. Only a
-currently valid explicit zero is `out-of-stock`. Future-dated observations are
-unknown; expired observations are stale, including expired zeros. A positive
-low-stock threshold must be supplied by the caller; no threshold is selected.
+The pure stock helpers distinguish quantity (`unknown`, zero, negative or positive)
+from age (`unknown`, future, stale, fresh or historical), using explicit time.
+Historical observations never become fresh simply because they were imported.
+The optional low-stock classifier requires a positive threshold from its caller;
+there is no inventory or replenishment policy.
+
+The private source may also provide `listPrice` with a known currency, at most two
+decimals, explicit `retail-list-before-discount` basis, provisional flag and its
+own provenance. Historical list prices require review before that field exists;
+ordinary `referencePrices` do not imply approval. Selection copies a manual price
+first, otherwise that reviewed list price, before the supplier's 20% discount.
+No discount or cost-derived price is calculated automatically. Source `date`
+remains `null` when commercial validity is unknown. Optional kind, version and
+checksum identify the reviewed snapshot privately, without supplying a date.
 
 Import, common transport, recovery and private backups preserve an observation's
 values and original timestamps. A supplied snapshot replaces the previous stock
@@ -85,24 +101,38 @@ stock preserves the existing observation without refreshing it. An authoritative
 source replacement uses exactly the incoming optional stock; omission clears an
 obsolete snapshot. Local approved prices and current quotation rows are unchanged.
 
-## Deferred activation
+## Active availability boundary
 
-Stock classification is currently disconnected from the product picker and UI.
-This preparation does not hide products, show availability colors or import stock
-from the approved Excel. Once the remote source is validated, activation must:
+`fresh-positive` permits a protected product only with positive fresh stock and
+a valid sale amount. `historical-positive` also permits positive historical stock
+provisionally, with the same price requirement. Explicit source conflicts can
+set `selectionBlock` and take precedence. Zero, negative, unknown, stale or future
+observations cannot qualify. The catalogue manager retains excluded entries and
+shows textual quantity, age, source date and eligibility; independent manual
+concepts remain available.
 
-1. Exclude currently verified zero stock from catalogue choices for new rows.
-   Keep the product available for private catalogue management and preserve rows
-   already copied into a quotation. Manual products and arbitrary work remain.
-2. Define and implement the validity period and expiry updates while a picker
-   stays open; a cached zero must not hide a product indefinitely after expiry.
-3. Agree on the low-stock threshold and a subtle indicator with readable text;
-   color alone must not carry the meaning. Positive stock otherwise behaves
-   normally. Decide how unknown and stale availability are presented.
-4. Validate changed, missing, duplicated and discontinued supplier keys; retain
-   the existing quarantine for unresolved product configurations.
-5. Verify fresh and previously populated browsers, stock-only updates, backup
-   recovery, remote failures and current-quotation/manual-price preservation.
+The picker, bulk application and open quotation recheck current eligibility,
+including time boundaries, PNG preparation, download and sharing. A row keeps
+its original values and private source trace even when its latest matching
+catalogue snapshot blocks delivery. Provisional rows add a generic availability
+warning to the customer image; private stock quantities and source details stay
+outside it. There is no blanket manual override for an exact blocked product in
+bulk entry.
+
+## Deferred live-source activation
+
+The policy and UI above do not create a Sheets connection. Before activating one:
+
+1. Verify authorized read-only access and the selected file/ranges, source keys,
+   price basis, explicit commercial date, stock conventions and completeness.
+2. Agree on observation validity and refresh/error handling. Do not stamp a
+   historical export as a current observation or extend expiry on a failed read.
+3. Review any source replacement atomically, including discontinued or ambiguous
+   keys; preserve the prior snapshot on failed, partial or conflicting reads.
+4. Verify new and previously populated browsers, stock-only changes, expiry,
+   blocked rows, local manual prices, private backups and source failures.
+5. Separately authorize source publication, credentials and deployment. Local
+   implementation and tests do not establish production activation.
 
 This is supplier availability, not reservations, internal inventory, stock
 deduction or a promise of availability at sale time. Stock and supplier provenance

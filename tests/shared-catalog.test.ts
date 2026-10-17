@@ -287,7 +287,7 @@ test('shared snapshots preserve unknown and zero through loading and stock-only 
     assert.equal(loaded.items[0].stock?.source.row, 2)
     assert.deepEqual(existing, original)
   }
-  await assert.rejects(load(jsonResponse(document([item({ stock: { ...stock(0), quantity: -1 } })]))), genericFailure)
+  await assert.rejects(load(jsonResponse(document([item({ stock: { ...stock(0), quantity: -1.5 } })]))), genericFailure)
 })
 
 test('shared removal-only updates apply once and an explicitly empty scoped catalogue preserves manual entries', () => {

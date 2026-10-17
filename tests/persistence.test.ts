@@ -311,7 +311,7 @@ test('invalid stock quantity, timestamps, intervals and provenance cannot overwr
   const stock = stockFixture()
   const invalidStocks: unknown[] = [
     null, [], {},
-    ...[undefined, -1, 1.5, '0', '', true, Number.MAX_SAFE_INTEGER + 1].map((quantity) => ({ ...stock, quantity })),
+    ...[undefined, 1.5, '0', '', true, Number.MAX_SAFE_INTEGER + 1].map((quantity) => ({ ...stock, quantity })),
     ...[undefined, null, '', 0, '2020-01-10', '2020-02-30T15:00:00.000Z', '2020-01-10T15:00:00Z',
       '2020-01-10T15:00:00.000+00:00'].flatMap((timestamp) => [
       { ...stock, checkedAt: timestamp }, { ...stock, validUntil: timestamp },

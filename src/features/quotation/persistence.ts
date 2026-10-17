@@ -1,6 +1,10 @@
 import { createWorkspace } from './model.ts'
-import { CATALOG_REFERENCE_MAX_PRICES } from './catalog.ts'
+import {
+  CATALOG_REFERENCE_MAX_PRICES, parseCatalogAvailabilityPolicy, parseCatalogListPrice,
+  parseCatalogSelectionBlock,
+} from './catalog.ts'
 import { parseCatalogStockFields } from './catalog-stock.ts'
+import { parseRowProvenance } from './row-provenance.ts'
 import { parseExchangeRate } from './exchange.ts'
 import { readStoredBlueDollarQuote } from './exchange-quote.ts'
 import { readAudioCategory } from './audio-categories.ts'
@@ -81,6 +85,10 @@ function readRow(value: unknown, identifiers: Set<string>, legacyCurrency: Curre
   const row = readRecord(value)
   const section = readSection(row.section)
   const audioCategory = readAudioCategory(row.audioCategory, section)
+  let provenance: QuotationRow['provenance']
+  if (row.provenance !== undefined) {
+    try { provenance = parseRowProvenance(row.provenance) } catch { invalidBackup() }
+  }
   return {
     id: readIdentifier(row.id, identifiers),
     section,
@@ -91,12 +99,15 @@ function readRow(value: unknown, identifiers: Set<string>, legacyCurrency: Curre
     quantity: readString(row.quantity, 64),
     unitPrice: readString(row.unitPrice, 64),
     priceState: readPriceState(row.priceState),
+    ...(provenance === undefined ? {} : { provenance }),
   }
 }
 
 function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
   const quotation = readRecord(value)
   const currency = readCurrency(quotation.currency)
+  if (quotation.exchangeRateMode !== undefined && quotation.exchangeRateMode !== 'automatic'
+    && quotation.exchangeRateMode !== 'frozen') invalidBackup()
   let exchangeRateQuote: Quotation['exchangeRateQuote']
   if (quotation.exchangeRateQuote !== undefined) {
     try {
@@ -117,6 +128,7 @@ function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
     currency,
     ...(quotation.exchangeRate === undefined ? {} : { exchangeRate: readString(quotation.exchangeRate, 64) }),
     ...(exchangeRateQuote === undefined ? {} : { exchangeRateQuote }),
+    ...(quotation.exchangeRateMode === undefined ? {} : { exchangeRateMode: quotation.exchangeRateMode }),
     rows: readArray(quotation.rows, 1000).map((row) => readRow(row, identifiers, currency)),
     notes: readString(quotation.notes, 10000),
     createdAt: readTimestamp(quotation.createdAt),
@@ -143,12 +155,19 @@ function readCatalogSource(value: unknown): CatalogSource {
   const source = readRecord(value)
   const document = readString(source.document, 500)
   if (!document.trim()) invalidBackup()
+  if (source.kind !== undefined && source.kind !== 'snapshot' && source.kind !== 'sheets') invalidBackup()
+  const version = source.version === undefined ? undefined : readString(source.version, 200)
+  if (version !== undefined && !version.trim()) invalidBackup()
+  if (source.checksum !== undefined && (typeof source.checksum !== 'string' || !/^[a-f0-9]{64}$/.test(source.checksum))) invalidBackup()
   return {
     document,
     ...(source.page === undefined ? {} : { page: readSourcePosition(source.page) }),
     ...(source.sheet === undefined ? {} : { sheet: readString(source.sheet, 128) }),
     ...(source.row === undefined ? {} : { row: readSourcePosition(source.row) }),
     date: readCatalogDate(source.date),
+    ...(source.kind === undefined ? {} : { kind: source.kind }),
+    ...(version === undefined ? {} : { version }),
+    ...(source.checksum === undefined ? {} : { checksum: source.checksum as string }),
   }
 }
 
@@ -171,14 +190,23 @@ function readReferencePrice(value: unknown): CatalogReferencePrice {
 
 function readCatalogStock(value: unknown): NonNullable<CatalogItem['stock']> {
   const stock = readRecord(value)
-  const fields = parseCatalogStockFields(stock.quantity, stock.checkedAt, stock.validUntil)
+  const fields = parseCatalogStockFields(stock.quantity, stock.checkedAt, stock.validUntil, stock.observation)
   if (fields === null) invalidBackup()
   return { ...fields, source: readCatalogSource(stock.source) }
 }
 
 function readCatalogItem(value: unknown, identifiers: Set<string>): CatalogItem {
   const item = readRecord(value)
+  let metadata: Pick<CatalogItem, 'listPrice' | 'availabilityPolicy' | 'selectionBlock'>
+  try {
+    metadata = {
+      ...(item.listPrice === undefined ? {} : { listPrice: parseCatalogListPrice(item.listPrice) }),
+      ...(item.availabilityPolicy === undefined ? {} : { availabilityPolicy: parseCatalogAvailabilityPolicy(item.availabilityPolicy) }),
+      ...(item.selectionBlock === undefined ? {} : { selectionBlock: parseCatalogSelectionBlock(item.selectionBlock) }),
+    }
+  } catch { invalidBackup() }
   return {
+    ...metadata,
     id: readIdentifier(item.id, identifiers),
     concept: readString(item.concept, 500),
     detail: readString(item.detail, 2000),

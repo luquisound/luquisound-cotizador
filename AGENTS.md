@@ -10,10 +10,11 @@ or committed; listed paths do not expand authorization.
 
 The current V1 includes an editable graphic quotation template, manual rows,
 an optional personal catalogue, a private common catalogue loaded through a
-read-only endpoint, calculations, recovery of one current quotation, private
-catalogue backups, and PNG download or file sharing. Fixed budgets and templates
-remain in Figma. The app has no quotation history, duplicate, or quotation-backup
-restore workflow.
+read-only endpoint, reviewed bulk entry, calculations, recovery of one current
+quotation, a browser-local named quotation library, separate private catalogue
+and quotation backups, and deterministic PNG download or file sharing. Fixed
+budgets and templates remain in Figma. The local library supports explicit save,
+open and duplicate; it is not a backend or cross-device quotation history.
 Read-only common catalogue and DolarAPI blue-sale lookup are the
 authorized server-side features;
 quotation and manual-price synchronization, accounts, Supabase, AI, CRM,
@@ -49,8 +50,11 @@ inventory management, invoicing, and a general backend remain outside this stage
 
 ## Product and pricing rules
 
-- Historical quotations and prices are reference material only. Do not publish
-  or prefill their values as current approved commercial prices.
+- Historical quotations and unapproved price references are not current approved
+  commercial prices. A reviewed private source may explicitly supply a retail
+  list price before supplier discount, with its own provenance and provisional
+  flag. Never infer that approval from a cost, reference, filename or import date;
+  never invent a missing commercial date or apply a supplier discount.
 - Keep internal cost, suggested price, and actual sale price distinct.
 - Preserve the difference between a missing amount and an explicit zero.
 - Represent an included, no-charge concept explicitly; do not infer it from a
@@ -63,10 +67,13 @@ inventory management, invoicing, and a general backend remain outside this stage
   the other. Legacy rows without a currency inherit `quotation.currency`; new
   rows store an explicit currency. Catalogue selections copy approved amounts
   and currencies together; source-only currency defaults never approve prices.
-  The open quotation uses DolarAPI blue sale
-  automatically, refreshing hourly while active and after reload if due,
+  An automatic-mode quotation uses DolarAPI blue sale,
+  refreshing hourly while active and after reload if due,
   independently of local-storage failures or saving pauses. Preserve source/date
-  metadata and recovered values until an automatic lookup succeeds. Discounts
+  metadata and recovered values until an automatic lookup succeeds. Explicitly
+  saving, opening or duplicating a library entry freezes its amounts, currencies
+  and rate. Only the confirmed current-dollar action resumes automatic lookup;
+  it never changes the saved library entry. Discounts
   and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
   calculation contract and remaining decisions.
 - Preserve the approved graphic composition and official brand assets. Private
@@ -74,9 +81,23 @@ inventory management, invoicing, and a general backend remain outside this stage
   or client bundle, including when deployment access is restricted.
 - Keep the current quotation recovery and persistent catalogue separate. New
   replaces only the current quotation after confirmation when it has meaningful
-  content. Catalogue backups preserve approved prices, IDs, and provenance;
-  importing an old workspace backup restores only its catalogue after confirmation.
+  content or an unreadable recovery record. The named quotation library has its
+  own storage key and backup envelope; save only on explicit actions, compare
+  stored bytes before writes, and preserve unreadable bytes and pending in-memory
+  changes on failure. Title, rate or notes alone do not create a new archive.
+  Catalogue backups preserve approved prices, IDs, and provenance;
+  their importer restores only the catalogue from an old workspace backup after
+  confirmation.
+  The separate quotation-library importer extracts only quotations after preview
+  and confirmation, preserving the open quotation and catalogue.
   Never rewrite or delete the legacy `luquisound.workspace.v1` storage key.
+- Respect availability policies at selection, bulk application and image delivery.
+  Protected products require valid prices and positive eligible stock; historical
+  positive observations remain provisional. Explicit blocks, zero, negative,
+  unknown, stale or future observations do not become manual stock overrides.
+  Independent manual concepts remain available. Preserve row provenance and
+  original selected prices when users edit sale amounts or currencies; private
+  source metadata never belongs in customer descriptions or image output.
 
 ## Git, local files, and external effects
 

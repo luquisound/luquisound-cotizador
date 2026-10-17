@@ -624,7 +624,7 @@ test('optional stock preserves unknown and explicit zero with independent proven
 test('stock import rejects invalid quantities, validity intervals and missing independent source provenance', () => {
   const valid = stock(0)
   const invalidSnapshots: unknown[] = [null, [], {},
-    ...[undefined, '0', true, -1, 0.5, Number.MAX_SAFE_INTEGER + 1].map((quantity) => ({ ...valid, quantity })),
+    ...[undefined, '0', true, 0.5, Number.MAX_SAFE_INTEGER + 1].map((quantity) => ({ ...valid, quantity })),
     { ...valid, checkedAt: undefined }, { ...valid, checkedAt: '2026-10-17' },
     { ...valid, checkedAt: '2026-10-17T15:00:00+00:00' },
     { ...valid, checkedAt: '2026-02-30T15:00:00.000Z' },

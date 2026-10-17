@@ -22,8 +22,9 @@ test('stock keeps an explicit zero distinct from unknown without assigning a def
   assert.equal(parseCatalogStockFields(undefined, checkedAt, validUntil), null)
 })
 
-test('stock rejects negative, fractional, coerced and unsafe quantities', () => {
-  for (const quantity of [-1, 0.5, '0', '', false, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+test('stock rejects fractional, coerced and unsafe quantities while preserving signed observations', () => {
+  assert.equal(parseCatalogStockFields(-1, checkedAt, validUntil)?.quantity, -1)
+  for (const quantity of [0.5, '0', '', false, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
     assert.equal(parseCatalogStockFields(quantity, checkedAt, validUntil), null)
   }
 })
@@ -75,6 +76,6 @@ test('classification does not mutate observations or manufacture a new freshness
   assert.equal(classifyCatalogStock(stock, now), 'out-of-stock')
   assert.equal(classifyCatalogStock(stock, Date.parse(validUntil)), 'stale')
   assert.deepEqual(stock, original)
-  assert.equal(classifyCatalogStock({ ...stock, quantity: -1 }, now), 'unknown')
+  assert.equal(classifyCatalogStock({ ...stock, quantity: -1 }, now), 'negative')
   assert.equal(classifyCatalogStock({ ...stock, checkedAt: '' }, now), 'unknown')
 })

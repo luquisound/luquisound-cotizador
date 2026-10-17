@@ -9,8 +9,9 @@ edits, and those edits are not synchronized between devices.
 
 Common records need a complete, unique supplier and SKU key. Merging is atomic:
 local identities, approved prices (including zero), currencies, personal entries,
-and current quotation row values are preserved. Common metadata and historical
-references can be updated. By default, entries absent from the common file remain
+and current quotation row values are preserved. Common metadata, reviewed list
+prices, stock observations, selection policies and historical references can be
+updated. By default, entries absent from the common file remain
 in the local catalogue. Conflicts or limits retain the previous local catalogue
 and show a retry action. Missing configuration retains manual file import and local use.
 
@@ -32,13 +33,28 @@ catalogue after confirmation; an old workspace backup contributes only its
 catalogue and never restores quotations.
 The legacy `luquisound.workspace.v1` storage key remains untouched.
 Startup fetch failures allow continued work with that copy. Loading the common
-catalogue never grants historical references the status of approved sale prices.
+catalogue never approves an ordinary historical reference. A reviewed source can
+explicitly provide a retail list price before supplier discount with provenance
+and a provisional flag. A local manual price takes precedence. The source's
+commercial date stays unknown when not stated; fetching or importing never
+invents it. No automatic 20% deduction or cost-derived sale price is applied.
 
 ## Private source and configuration
 
-The endpoint can carry validated optional stock observations in the existing
-private JSON schema. No spreadsheet connector, credentials, schedule or live
-availability filter is enabled by that support. A future server-side reader can
+The endpoint can carry validated stock, reviewed list prices, availability policy,
+explicit selection blocks, and source kind/version/checksum in the existing
+private JSON schema. Protected product selection is active: positive eligible
+stock and a valid price are required. Historical-positive policy remains
+provisional, while fresh-positive requires an unexpired current observation.
+Zero, negative, unknown, stale or future stock and explicit blocks prevent
+selection. The manager retains excluded entries for review, and independent
+manual concepts remain available. A common update can block image delivery for
+an existing row without changing that row's saved amount, currency or private
+original source trace. Stock quantities and source details never appear in
+customer images; provisional usage adds only an availability warning.
+
+No spreadsheet connector, source credentials, polling job or live-stock guarantee
+is enabled by those fields. A future server-side reader can
 produce the same reviewed private snapshot; see
 [private spreadsheet preparation](CATALOG-SOURCE-ROADMAP.md).
 
@@ -94,8 +110,9 @@ It requires explicit authorization after the code and local checks are reviewed.
 4. Publish the reviewed implementation, then verify anonymous API requests remain
    blocked and an authorized session receives the valid catalogue.
 5. Open two fresh authorized browser profiles. Both must receive the catalogue
-   without importing a file. Confirm reload, manual-price preservation, backup
-   recovery without restoring quotations, and continued local use when the
+   without importing a file. Confirm reload, manual-price preservation,
+   catalogue-backup recovery, reviewed list/manual-price precedence, stock-only
+   updates, blocked-product handling, private row trace and continued local use when the
    source is temporarily unavailable.
 6. Verify the intended access and automatic load on Android and Lucas's iPhone.
 

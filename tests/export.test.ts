@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  createQuotationFile, quotationFileName, renderQuotationCanvas, shareQuotationFile, wrapText,
+  createQuotationFile, LOGO_LOAD_TIMEOUT_MS, quotationFileName, renderQuotationCanvas, shareQuotationFile, wrapText,
+  type QuotationExportOptions,
 } from '../src/features/quotation/export.ts'
 import { exchangeRateDescription } from '../src/features/quotation/exchange-quote.ts'
-import type { Quotation } from '../src/features/quotation/model.ts'
+import type { CatalogItem, Quotation } from '../src/features/quotation/model.ts'
 import { QUOTATION_GRAPHIC } from '../src/features/quotation/graphic.ts'
 
 const measure = (text: string): number => Array.from(text).length
@@ -161,7 +162,7 @@ interface CanvasRectangle {
   color: string
 }
 
-function renderWithRecordedCanvas(quotation: Quotation): {
+function renderWithRecordedCanvas(quotation: Quotation, options: QuotationExportOptions = {}): {
   width: number
   height: number
   texts: CanvasText[]
@@ -194,7 +195,7 @@ function renderWithRecordedCanvas(quotation: Quotation): {
     value: { createElement: () => canvas },
   })
   try {
-    const result = renderQuotationCanvas(quotation, {} as CanvasImageSource)
+    const result = renderQuotationCanvas(quotation, {} as CanvasImageSource, options)
     const footer = rectangles.at(-1)
     assert.ok(footer)
     return { width: result.width, height: result.height, texts, rectangles, footerY: footer.y }
@@ -363,4 +364,151 @@ test('exports categorized concepts in display order without empty suggestions or
   ]
   assert.ok(!result.texts.some(({ text }) => labels.includes(text)))
   assert.deepEqual(quotation, snapshot)
+})
+
+function provisionalQuotation(): Quotation {
+  const quotation = exportableQuotation()
+  const source = {
+    document: 'PRIVATE-SOURCE-ONLY.xlsx', sheet: 'PRIVATE-SHEET', row: 123, date: null,
+    version: 'PRIVATE-VERSION', checksum: 'f'.repeat(64),
+  }
+  quotation.rows[0].provenance = {
+    catalogItemId: 'private-item', supplier: 'PRIVATE-SUPPLIER', sku: 'PRIVATE-SKU', source,
+    originalUnitPrice: '2400', originalCurrency: 'ARS', priceBasis: 'provisional-list',
+    listPrice: { amount: '2400', currency: 'ARS', basis: 'retail-list-before-discount', provisional: true, source },
+    stock: { quantity: 4, checkedAt: null, validUntil: null, observation: 'historical', source },
+    availabilityPolicy: 'historical-positive',
+  }
+  return quotation
+}
+
+test('exports only the customer availability warning while retaining private trace outside the image', () => {
+  const quotation = provisionalQuotation()
+  const result = renderWithRecordedCanvas(quotation, { availabilityWarning: false })
+  const texts = result.texts.map(({ text }) => text).join(' ')
+  assert.equal(result.texts.filter(({ text }) => text === 'Disponibilidad a confirmar.').length, 1)
+  assert.doesNotMatch(texts, /PRIVATE-|ffff|private-item|Stock|Histórico/)
+  assert.ok(texts.includes('ARS 2.400,00'))
+  const warning = result.texts.find(({ text }) => text === 'Disponibilidad a confirmar.')!
+  assert.ok(warning.x + warning.width <= 1016)
+  assert.ok(warning.y + 30 <= result.footerY)
+})
+
+test('supports an explicit availability warning without adding private metadata to manual quotations', () => {
+  const quotation = exportableQuotation()
+  const ordinary = renderWithRecordedCanvas(quotation)
+  const warning = renderWithRecordedCanvas(quotation, { availabilityWarning: true })
+  assert.ok(!ordinary.texts.some(({ text }) => text === 'Disponibilidad a confirmar.'))
+  assert.ok(warning.texts.some(({ text }) => text === 'Disponibilidad a confirmar.'))
+  assert.equal(ordinary.rectangles[1].color, warning.rectangles[1].color)
+  assert.equal(ordinary.rectangles[1].height, warning.rectangles[1].height)
+  assert.equal(ordinary.rectangles.at(-1)?.color, warning.rectangles.at(-1)?.color)
+})
+
+test('grows an extensive image to reserve the availability warning above the contact footer', () => {
+  const quotation = provisionalQuotation()
+  quotation.rows = Array.from({ length: 30 }, (_, index) => ({
+    ...quotation.rows[0], id: `synthetic-provisional-${index}`,
+  }))
+  const provisional = renderWithRecordedCanvas(quotation)
+  const ordinary = renderWithRecordedCanvas({
+    ...quotation, rows: quotation.rows.map(({ provenance: _provenance, ...row }) => row),
+  })
+  assert.equal(provisional.height - ordinary.height, 44)
+  const warning = provisional.texts.find(({ text }) => text === 'Disponibilidad a confirmar.')!
+  assert.ok(warning.y + 30 <= provisional.footerY)
+  assert.ok(provisional.texts.filter(({ y }) => y < provisional.footerY).every(({ y }) => y + 30 <= provisional.footerY))
+})
+
+test('blocks zero, negative, unknown, stale and quarantined source rows before accessing browser APIs', async () => {
+  for (const quantity of [0, -1, null]) {
+    const quotation = provisionalQuotation()
+    quotation.rows[0].provenance!.stock!.quantity = quantity
+    await assert.rejects(createQuotationFile(quotation), /stock/)
+    assert.throws(() => renderQuotationCanvas(quotation, {} as CanvasImageSource), /stock/)
+  }
+  const stale = provisionalQuotation()
+  stale.rows[0].provenance!.availabilityPolicy = 'fresh-positive'
+  stale.rows[0].provenance!.stock = {
+    ...stale.rows[0].provenance!.stock!, observation: 'current',
+    checkedAt: '2020-01-01T00:00:00.000Z', validUntil: '2020-01-01T00:15:00.000Z',
+  }
+  await assert.rejects(createQuotationFile(stale), /venció/)
+  const blocked = provisionalQuotation()
+  blocked.rows[0].provenance!.selectionBlock = 'Synthetic source conflict'
+  await assert.rejects(createQuotationFile(blocked), /Synthetic source conflict/)
+})
+
+test('a logo that never settles times out after fifteen seconds and releases handlers', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'Image')
+  const images: HangingLogo[] = []
+  class HangingLogo {
+    onload: (() => void) | null = null
+    onerror: (() => void) | null = null
+    constructor() { images.push(this) }
+    set src(_value: string) {}
+  }
+  Object.defineProperty(globalThis, 'Image', { configurable: true, value: HangingLogo })
+  try {
+    const pending = createQuotationFile(exportableQuotation())
+    const rejected = assert.rejects(pending, /logo tardó demasiado/)
+    const lateLoad = images[0].onload
+    context.mock.timers.tick(LOGO_LOAD_TIMEOUT_MS - 1)
+    assert.notEqual(images[0].onload, null)
+    context.mock.timers.tick(1)
+    await rejected
+    assert.equal(images[0].onload, null)
+    assert.equal(images[0].onerror, null)
+    lateLoad?.()
+    context.mock.timers.tick(60_000)
+  } finally {
+    context.mock.timers.reset()
+    if (previous) Object.defineProperty(globalThis, 'Image', previous)
+    else Reflect.deleteProperty(globalThis, 'Image')
+  }
+})
+
+test('a verified latest observation can replace expired stored stock while current zero and expiry still block export', async (context) => {
+  context.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-17T10:05:00.000Z') })
+  const quotation = provisionalQuotation()
+  const provenance = quotation.rows[0].provenance!
+  provenance.availabilityPolicy = 'fresh-positive'
+  provenance.stock = {
+    ...provenance.stock!, observation: 'current',
+    checkedAt: '2020-01-01T00:00:00.000Z', validUntil: '2020-01-01T00:15:00.000Z',
+  }
+  const latest: CatalogItem = {
+    id: provenance.catalogItemId, concept: quotation.rows[0].concept, detail: '', section: 'equipment',
+    supplier: provenance.supplier, sku: provenance.sku, currency: 'ARS', unitPrice: '2400',
+    availabilityPolicy: 'fresh-positive', stock: {
+      ...provenance.stock, checkedAt: '2026-10-17T10:00:00.000Z', validUntil: '2026-10-17T10:15:00.000Z',
+    },
+  }
+  const before = structuredClone(quotation)
+  assert.throws(() => renderWithRecordedCanvas(quotation), /venció/)
+  assert.ok(renderWithRecordedCanvas(quotation, { availabilityCatalog: [latest] }).width > 0)
+  const previousImage = Object.getOwnPropertyDescriptor(globalThis, 'Image')
+  let requests = 0
+  class FailedLogo {
+    onload: (() => void) | null = null
+    onerror: (() => void) | null = null
+    set src(_value: string) { requests += 1; queueMicrotask(() => this.onerror?.()) }
+  }
+  Object.defineProperty(globalThis, 'Image', { configurable: true, value: FailedLogo })
+  try {
+    await assert.rejects(createQuotationFile(quotation, { availabilityCatalog: [latest] }), /logo/)
+    assert.equal(requests, 1)
+    const zero = { ...latest, stock: { ...latest.stock!, quantity: 0 } }
+    await assert.rejects(createQuotationFile(quotation, { availabilityCatalog: [zero] }), /cero/)
+    assert.throws(() => renderWithRecordedCanvas(quotation, { availabilityCatalog: [zero] }), /cero/)
+    context.mock.timers.tick(10 * 60_000)
+    await assert.rejects(createQuotationFile(quotation, { availabilityCatalog: [latest] }), /venció/)
+    assert.equal(requests, 1)
+    assert.deepEqual(quotation, before)
+  } finally {
+    context.mock.timers.reset()
+    if (previousImage) Object.defineProperty(globalThis, 'Image', previousImage)
+    else Reflect.deleteProperty(globalThis, 'Image')
+  }
 })

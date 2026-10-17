@@ -2,7 +2,8 @@
 
 Mobile-first graphic quotation editor for Luquisound. V1 provides manual concepts
 and editable prices, an optional personal catalogue, automatic ARS/USD totals,
-recovery of one current quotation, private catalogue backups, and PNG file sharing.
+recovery of one current quotation, a named browser-local quotation library,
+separate private backups, reviewed bulk entry, and deterministic PNG file sharing.
 Fixed budgets and templates remain in Figma; this app builds a custom quotation.
 
 The app starts with a blank quotation and loads the private common catalogue
@@ -74,6 +75,11 @@ src/
       model.ts
       calculation.ts
       persistence.ts
+      bulk-entry.ts
+      catalog-stock.ts
+      row-provenance.ts
+      quotation-library.ts
+      useQuotationLibrary.ts
       export.ts
   styles/
     global.css
@@ -111,7 +117,8 @@ fixed at the bottom and are excluded from the PNG along with other editing contr
 "Mi catalogo" is always available above the quotation. "Nuevo presupuesto"
 starts a blank current quotation after confirmation when it would replace content
 or an unreadable recovery record; the catalogue and its prices are preserved.
-There is no quotation list, duplicate or quotation-backup control yet.
+"Presupuestos guardados" explicitly saves named snapshots and can open or
+duplicate them. New quotations do not remove that library.
 Downloading or sharing a PNG leaves the current quotation open.
 
 Both sections offer optional audio categories: amplifier/DSP, additional
@@ -141,8 +148,35 @@ never rewritten or deleted. Corrupt stored data is not automatically overwritten
 An unreadable current recovery record remains intact. A catalogue reset or
 resuming paused saving requires an explicit user action. Save failures remain
 visible; changes from another tab pause saving for the affected store to avoid
-overwriting that tab's work. Failures in one
-store do not disable the other, and exchange-rate updates continue independently.
+overwriting that tab's work. Current recovery and catalogue writes also compare
+their expected raw value immediately before writing, so a delayed storage event
+does not silently overwrite an already detected external change. These optimistic
+checks are not a transactional cross-tab database. Failures in one
+store do not disable the others. Automatic-mode exchange-rate updates continue
+independently.
+
+The saved quotation library uses `luquisound.quotation-library.v1`, independently
+of current recovery and catalogue storage. Saving records a name and date, makes
+a deep snapshot and freezes the rate; opening or duplicating retains its amounts,
+currencies and saved rate without fetching a replacement. New quote and row IDs
+keep edits separate from the saved entry. Same-name replacement requires explicit
+confirmation. Partial concepts can be archived, but title, notes, rate or quantity
+alone cannot create a new entry. The limits are 100 entries and 5 MiB.
+
+The library writes only after explicit actions and compares expected stored bytes
+before each write. Concurrent-tab changes pause its writes without discarding the
+visible library. A failed save remains visible in memory for a private backup and
+is not reported as persisted. Corrupt stored bytes are not overwritten silently;
+their recovery download preserves the original text. Resuming saving explicitly
+replaces the stored library with the visible version. Keep both versions privately
+before confirming that action when necessary.
+
+The library's own JSON backup contains saved quotations and their private row
+provenance, not the catalogue. Import first validates and previews the entries,
+then asks before replacing the library. It leaves the open quotation and catalogue
+unchanged. Its separate legacy-backup importer can extract quotations from an old
+workspace file without touching the legacy storage key. Catalogue-backup import
+continues to extract only catalogue data.
 
 All local data belongs to the current browser and origin. It is not uploaded,
 synchronized between devices, or encrypted by the app. Clearing browser data,
@@ -163,8 +197,9 @@ Manual file import remains available alongside automatic common catalogue loadin
 Filter by product category and search by SKU, brand, or name at the same time.
 Categories come from imported data; "Todas" clears the filter and "Sin clasificar"
 groups entries without a category. Manual concepts remain available.
-New imported products have no approved sale price;
-historical references remain separate. Reimporting matches supplier and SKU,
+New imported products have no manually approved sale price. A reviewed private
+source may explicitly provide a retail `listPrice` before supplier discount;
+ordinary historical references remain separate. Reimporting matches supplier and SKU,
 preserving existing manually approved prices and the current quotation's row
 values. A reviewed source-replacement file can also retire imported entries from
 its explicit document scope, while preserving manual entries and retained sale
@@ -172,36 +207,69 @@ prices. Replacement previews show the removals before confirmation. See the
 [private import contract](docs/CATALOG-IMPORT.md).
 Keep catalogue files private.
 
-The optional stock observation contract is prepared for a future private
-spreadsheet source. No Sheets connection or availability filtering is active;
-the approved Excel snapshot remains unchanged. See the
+The picker ranks exact SKU matches first and combines text with category filters.
+"Pegar codigos o nombres" reviews up to 50 lines, one code or name per line.
+A unique exact code or name can be proposed automatically; partial or ambiguous
+matches require a choice. Review quantity and section for each line, skip it, or
+create an independent manual concept. Repeated queries or products require
+confirmation. No fuzzy match, pasted price or supplier discount is applied.
+The whole selection is revalidated against the current catalogue and availability
+before any rows are added; a changed source requires a new review.
+
+Availability policies are active for protected catalogue products. They require a
+valid manual or reviewed list price and positive eligible stock. `fresh-positive`
+requires an unexpired current observation; `historical-positive` can use a positive
+historical record provisionally. Zero, negative, unknown, stale and future stock,
+and explicitly blocked products cannot be selected. The catalogue manager still
+can show those entries through "Mostrar no habilitados", with text explaining the
+reason. Independent manual concepts
+remain available. Stock is checked again as time passes, before bulk application,
+and before preparing, downloading or sharing an image. Existing row prices are
+never replaced by a catalogue refresh. A newly blocked row must be reviewed before
+export. Provisional images include "Disponibilidad a confirmar."
+No Sheets connector or live-stock promise is implemented. See the
 [source preparation and activation boundaries](docs/CATALOG-SOURCE-ROADMAP.md).
 
 Each row has its own editable ARS or USD currency. New manual rows default to ARS;
 legacy quotations retain their previous currency as the row default. A catalogue
-selection copies an approved price and its currency together, including zero.
+selection copies its manual price first, otherwise an explicitly reviewed list
+price, and its currency together, including zero. Provisional historical list
+prices remain labelled as such and are used before the supplier discount;
+there is no automatic 20% deduction.
 Without an approved price, a single explicit source currency can preselect the
 row currency without approving or copying historical amounts.
 Rounded row amounts are summed separately by currency. Each displayed total adds
 its native subtotal to one conversion of the other subtotal; neither total is
-derived from the other. The open quotation automatically uses the DolarAPI blue
+derived from the other. An automatic-mode quotation uses the DolarAPI blue
 sale rate through a same-origin server endpoint.
 Both totals, the rate, its source, and the source date appear in the preview and
 PNG. Rates refresh hourly while the app is visible and online. Reloading the
-current quotation, returning to the app, and reconnecting check whether its
+automatic-mode current quotation, returning to the app, and reconnecting check whether its
 saved reference is due. Fresh references are reused until their fetch-hour boundary.
-There is no manual update button.
+Saved library snapshots stay frozen even after reload. "Actualizar dolar guardado"
+asks for confirmation before switching the open copy back to automatic lookup;
+it preserves row prices and the saved library entry. Converted totals can change.
 A lookup failure keeps the existing rate and retries automatically after one hour
 when active; a quotation without a rate stays editable but cannot export yet.
 Recovered manual rates remain labelled without invented source dates until a
 successful automatic lookup replaces them. Automatic updates can change converted
 contributions to both totals and invalidate a prepared image; downloaded files
 remain unchanged.
-Automatic updates continue when local saving is unavailable or paused. See
+Automatic-mode updates continue when local saving is unavailable or paused. See
 [exchange-rate behavior](docs/EXCHANGE-RATE.md).
 Changing a row's currency preserves its entered price.
 
-Prepare an image after completing pending rows, then download or share it. File
+Selecting a catalogue product snapshots its private source, stock, price basis,
+original amount and currency into the row. The row editor shows that provenance
+and marks later manual amount, currency or included-state changes. Editing a row
+does not change the catalogue. Source names, identifiers, checksums and stock
+quantities are excluded from customer-facing image text.
+
+Prepare an image after completing pending rows and availability review, then
+download or share the same deterministic Canvas-generated PNG. No image model
+generates or rewrites quotation text or prices. Editing the quotation, changing
+its rate, or invalidating its availability requires preparing the image again.
+Logo and font loading have bounded failures. File
 sharing depends on browser support and requires the user's action. Unsupported
 browsers download the PNG; cancelling sharing does not send or download anything.
 The app cannot confirm delivery to a recipient.
@@ -242,7 +310,8 @@ Review automatic deployment behavior before pushing changes.
 Read `AGENTS.md`, this README, `docs/PRODUCTO.md`, and the local project context
 before planning the next bounded feature. Preserve the approved visual
 composition and keep commercial source material outside the public repository.
-Historical prices are reference material, never approved current prices.
+Unapproved historical references are never approved current prices. Explicitly
+reviewed historical list prices remain provisional and retain their provenance.
 
 Official references: [Vite](https://vite.dev/guide/),
 [Tailwind with Vite](https://tailwindcss.com/docs/installation/using-vite), and

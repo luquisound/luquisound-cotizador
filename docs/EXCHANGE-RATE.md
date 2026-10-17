@@ -2,7 +2,7 @@
 
 ## Behavior
 
-The open quotation requests `GET /api/exchange-rate` automatically. The server reads
+An automatic-mode quotation requests `GET /api/exchange-rate`. The server reads
 only `venta` for `moneda: USD` and `casa: blue` from the fixed HTTPS endpoint
 `https://dolarapi.com/v1/dolares/blue`. It never substitutes purchase, average,
 official, or another provider's value. There are no client-provided source URLs,
@@ -19,11 +19,19 @@ is derived from the other, and individual rows are never converted.
 source update timestamp, and fetch timestamp. The source date is displayed in
 America/Argentina/Buenos_Aires in the editor, preview, and exported PNG.
 
-The current quotation refreshes when its saved reference was fetched at least
+An automatic-mode current quotation refreshes when its saved reference was fetched at least
 one hour ago, or when it has no automatic reference. This includes recovering
 the current quotation after reload. A fresh recovered reference is reused
-until its fetch-hour boundary. There is no manual update or retry button.
-The app has no quotation history or quotation restoration from backup.
+until its fetch-hour boundary. Missing legacy `exchangeRateMode` means automatic.
+
+Explicitly saving a named quotation stores a frozen snapshot and also freezes the
+current copy. Opening, duplicating or importing saved library quotations preserves
+their row amounts, currencies, rate and source metadata with
+`exchangeRateMode: "frozen"`. A frozen recovered current quotation stays frozen
+after reload. There is no automatic lookup for those snapshots, even when their
+saved reference is old. "Actualizar dolar guardado" asks before switching the
+open copy to automatic mode and requesting the shared current reference. It does
+not change the saved library entry; saving a replacement requires its own action.
 No update changes row prices, currencies, or quantities.
 An in-flight response applies to the latest quotation state and cannot replace
 a newly started quotation or overwrite local edits. Header edits preserve an
@@ -38,15 +46,17 @@ schedule server work. Requests are bounded and deduplicated within the active
 quotation. Failures keep the saved rate and schedule an automatic retry after
 one hour, when the app is active. Source timestamps may legitimately remain
 unchanged even after a successful fetch.
-Local-storage errors and cross-tab saving pauses do not disable these checks;
+Local-storage errors and cross-tab saving pauses do not disable automatic-mode checks;
 the current quotation can receive a rate in memory even when it cannot be saved.
 
 Automatically attaching a rate alone does not save an otherwise blank proposal.
 The current recovery snapshot retains compatible rate metadata. Manual rates
 remain labelled as manual without an invented source/date until a successful
-automatic lookup replaces them. Legacy workspace backups restore only catalogue
-data and never reopen a quotation. The editor obtains replacement rates through
-DolarAPI rather than manual overrides.
+automatic lookup replaces them. Catalogue-backup import extracts only catalogue
+data from a legacy workspace; the separate saved-quotation importer can extract
+its quotations after preview and confirmation, with frozen rates. Neither importer
+rewrites or deletes the legacy storage key. The editor obtains replacement rates
+through DolarAPI rather than manual overrides.
 
 ## Validation and availability
 
@@ -78,7 +88,8 @@ Runtime Cache is regional and ephemeral. Concurrent requests in one instance are
 coalesced; eviction, cold misses, and different regions can still produce additional
 upstream requests. This is a cache policy, not a globally atomic rate limiter.
 Cache failures fail closed instead of falling back to repeated uncached requests.
-The existing Vercel Authentication deployment protection remains in place.
+The rate endpoint does not alter Vercel Authentication settings; deployment
+protection must be verified separately for the target environment.
 
 Local Vite development and preview only serve the frontend. Full local checks use
 a temporary harness with the real handler, a fake cache, and synthetic rate data.

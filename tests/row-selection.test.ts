@@ -1,0 +1,184 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import type { CatalogItem, QuotationRow } from '../src/features/quotation/model.ts'
+import { getRowPriceOverride } from '../src/features/quotation/row-provenance.ts'
+import { selectCatalogForRow } from '../src/features/quotation/row-selection.ts'
+
+const now = Date.parse('2026-10-17T10:05:00.000Z')
+const source = {
+  document: 'synthetic-catalog.xlsx', sheet: 'Products', row: 2, date: null,
+  kind: 'snapshot' as const, version: 'synthetic-v1', checksum: 'a'.repeat(64),
+}
+
+function item(changes: Partial<CatalogItem> = {}): CatalogItem {
+  return {
+    id: 'synthetic-catalog-item', concept: 'Synthetic selected component', detail: 'Selected description',
+    section: 'equipment', currency: 'ARS', unitPrice: '', supplier: 'Synthetic Supplier', sku: 'SYN-1',
+    source, listPrice: {
+      amount: '12.50', currency: 'USD', basis: 'retail-list-before-discount', provisional: true, source,
+    },
+    availabilityPolicy: 'fresh-positive', stock: {
+      quantity: 3, checkedAt: '2026-10-17T10:00:00.000Z', validUntil: '2026-10-17T10:15:00.000Z', source,
+    },
+    ...changes,
+  }
+}
+
+function row(changes: Partial<QuotationRow> = {}): QuotationRow {
+  return {
+    id: 'synthetic-row', section: 'extras', audioCategory: 'cables', quantity: '2,500',
+    concept: 'Previous manual description', detail: 'Previous manual detail',
+    currency: 'ARS', unitPrice: '99', priceState: 'priced', ...changes,
+  }
+}
+
+test('selection preserves row identity, quantity, section and category while using the native list price', () => {
+  const draft = row()
+  const selectedItem = item()
+  const selected = selectCatalogForRow(draft, selectedItem, 'ARS', now)
+  assert.notEqual(selected, draft)
+  assert.equal(selected.id, draft.id)
+  assert.equal(selected.quantity, '2,500')
+  assert.equal(selected.section, 'extras')
+  assert.equal(selected.audioCategory, 'cables')
+  assert.equal(selected.concept, selectedItem.concept)
+  assert.equal(selected.detail, selectedItem.detail)
+  assert.equal(selected.currency, 'USD')
+  assert.equal(selected.unitPrice, '12,50')
+  assert.equal(selected.priceState, 'priced')
+  assert.deepEqual(selected.provenance, {
+    catalogItemId: selectedItem.id, supplier: 'Synthetic Supplier', sku: 'SYN-1',
+    source, originalUnitPrice: '12,50', originalCurrency: 'USD', priceBasis: 'provisional-list',
+    listPrice: selectedItem.listPrice, stock: selectedItem.stock, availabilityPolicy: 'fresh-positive',
+  })
+  assert.equal(getRowPriceOverride(selected), false)
+})
+
+test('a previous manual override and previous product provenance never migrate to the selected product', () => {
+  const draft = row({
+    currency: 'ARS', unitPrice: '99', priceState: 'included', provenance: {
+      catalogItemId: 'previous-product', originalUnitPrice: '1', originalCurrency: 'ARS',
+      priceBasis: 'manual', supplier: 'Previous synthetic supplier', sku: 'PREVIOUS',
+    },
+  })
+  assert.equal(getRowPriceOverride(draft), true)
+  const selected = selectCatalogForRow(draft, item(), 'ARS', now)
+  assert.equal(selected.priceState, 'priced')
+  assert.equal(selected.unitPrice, '12,50')
+  assert.equal(selected.currency, 'USD')
+  assert.equal(selected.provenance?.catalogItemId, 'synthetic-catalog-item')
+  assert.equal(selected.provenance?.sku, 'SYN-1')
+  assert.equal(getRowPriceOverride(selected), false)
+  assert.equal(draft.priceState, 'included')
+  assert.equal(draft.unitPrice, '99')
+  assert.equal(draft.provenance?.catalogItemId, 'previous-product')
+})
+
+test('an independent manual pending selection clears an old price without using historical references or inventing a category', () => {
+  const draft = row({ audioCategory: undefined, priceState: 'included' })
+  const selectedItem = item({
+    currency: 'USD', listPrice: undefined, availabilityPolicy: undefined, stock: undefined, source: undefined,
+    referencePrices: [{ amount: '999', currency: 'USD', role: 'cost', date: null, historical: true }],
+  })
+  const selected = selectCatalogForRow(draft, selectedItem, 'ARS', now)
+  assert.equal(selected.unitPrice, '')
+  assert.equal(selected.currency, 'USD')
+  assert.equal(selected.priceState, 'pending')
+  assert.equal(selected.audioCategory, undefined)
+  assert.equal(Object.hasOwn(selected, 'audioCategory'), false)
+  assert.equal(selected.provenance?.originalUnitPrice, '')
+  assert.equal(selected.provenance?.priceBasis, 'pending')
+  assert.equal(selected.quantity, draft.quantity)
+})
+
+test('a protected pending product cannot be selected even with positive stock and a historical reference', () => {
+  const draft = row()
+  const selectedItem = item({
+    listPrice: undefined,
+    referencePrices: [{ amount: '999', currency: 'USD', role: 'list', date: null, historical: true }],
+  })
+  const before = structuredClone({ draft, selectedItem })
+  assert.throws(() => selectCatalogForRow(draft, selectedItem, 'ARS', now), /precio|disponibilidad/)
+  assert.deepEqual({ draft, selectedItem }, before)
+})
+
+test('an approved manual zero takes priority over the list and remains an ordinary priced row', () => {
+  const selected = selectCatalogForRow(row({ priceState: 'included' }), item({
+    currency: 'ARS', unitPrice: ' 0,00 ',
+  }), 'USD', now)
+  assert.equal(selected.unitPrice, '0,00')
+  assert.equal(selected.currency, 'ARS')
+  assert.equal(selected.priceState, 'priced')
+  assert.equal(selected.provenance?.originalUnitPrice, '0,00')
+  assert.equal(selected.provenance?.priceBasis, 'manual')
+  assert.equal(getRowPriceOverride(selected), false)
+})
+
+test('availability is checked again at the supplied selection time including the exact expiry boundary', () => {
+  const draft = row()
+  const selectedItem = item()
+  const before = structuredClone({ draft, selectedItem })
+  assert.equal(selectCatalogForRow(draft, selectedItem, 'ARS', now).provenance?.catalogItemId, selectedItem.id)
+  for (const time of [
+    Date.parse('2026-10-17T10:15:00.000Z'), Date.parse('2026-10-17T11:00:00.000Z'),
+    Date.parse('2026-10-17T09:59:59.999Z'), Number.NaN,
+  ]) {
+    assert.throws(() => selectCatalogForRow(draft, selectedItem, 'ARS', time), /disponibilidad/)
+    assert.deepEqual({ draft, selectedItem }, before)
+  }
+})
+
+test('the default clock is read for every selection rather than retaining an earlier availability check', (context) => {
+  const draft = row()
+  const selectedItem = item()
+  context.mock.method(Date, 'now', () => now)
+  assert.equal(selectCatalogForRow(draft, selectedItem, 'ARS').priceState, 'priced')
+  context.mock.method(Date, 'now', () => Date.parse('2026-10-17T10:15:00.000Z'))
+  assert.throws(() => selectCatalogForRow(draft, selectedItem, 'ARS'), /disponibilidad/)
+})
+
+test('blocked, zero, negative and unknown-stock selections throw without changing the existing draft', () => {
+  const draft = row()
+  const original = structuredClone(draft)
+  const candidates = [item({ selectionBlock: 'Synthetic source conflict' })]
+  for (const quantity of [0, -1, null]) {
+    const candidate = item()
+    candidate.stock!.quantity = quantity
+    candidates.push(candidate)
+  }
+  for (const candidate of candidates) {
+    const before = structuredClone(candidate)
+    assert.throws(() => selectCatalogForRow(draft, candidate, 'ARS', now), /disponibilidad/)
+    assert.deepEqual(draft, original)
+    assert.deepEqual(candidate, before)
+  }
+})
+
+test('invalid manual prices throw instead of falling back to a list price or altering the draft', () => {
+  const draft = Object.freeze(row())
+  const before = structuredClone(draft)
+  for (const unitPrice of ['-1', '1.23', '1,234', '90071992547409,92']) {
+    const selectedItem = item({ unitPrice })
+    const itemBefore = structuredClone(selectedItem)
+    assert.throws(() => selectCatalogForRow(draft, selectedItem, 'ARS', now), /precio|disponibilidad/)
+    assert.deepEqual(draft, before)
+    assert.deepEqual(selectedItem, itemBefore)
+  }
+})
+
+test('selected provenance is independent of both the original item and the existing draft', () => {
+  const draft = Object.freeze(row())
+  const selectedItem = item()
+  const before = structuredClone({ draft, selectedItem })
+  const selected = selectCatalogForRow(draft, selectedItem, 'ARS', now)
+  assert.deepEqual({ draft, selectedItem }, before)
+  assert.notEqual(selected.provenance?.source, selectedItem.source)
+  assert.notEqual(selected.provenance?.listPrice, selectedItem.listPrice)
+  assert.notEqual(selected.provenance?.listPrice?.source, selectedItem.listPrice?.source)
+  assert.notEqual(selected.provenance?.stock, selectedItem.stock)
+  assert.notEqual(selected.provenance?.stock?.source, selectedItem.stock?.source)
+  selected.provenance!.source!.document = 'Changed returned source'
+  selected.provenance!.listPrice!.source.document = 'Changed returned list source'
+  selected.provenance!.stock!.source.document = 'Changed returned stock source'
+  assert.deepEqual({ draft, selectedItem }, before)
+})
