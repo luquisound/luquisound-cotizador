@@ -99,8 +99,10 @@ that library; do not commit the local routing file.
 
 The main screen opens directly on the editable quotation, with "Catalogo" and
 "Nuevo" integrated into its header and exchange-rate details beside the totals.
-On mobile, the sheet fills the screen width. Image export controls remain fixed
-at the bottom and are excluded from the PNG along with other editing controls.
+On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
+compact header and readable row sizes; wide screens place totals beside the
+concepts and expand the workspace up to 1680 pixels. Image export controls remain
+fixed at the bottom and are excluded from the PNG along with other editing controls.
 There is no quotation list, saved-status label, duplicate, delete, or
 quotation-backup control. "Nuevo" asks for confirmation when the current
 quotation has meaningful content, then replaces it with a blank one. Downloading

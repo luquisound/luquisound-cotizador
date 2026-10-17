@@ -396,6 +396,180 @@
   flex-shrink: 0;
 }
 
+@media (min-width: 40rem) {
+  .quotation-preview {
+    max-width: none;
+  }
+
+  .quotation-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 20px 32px;
+    min-height: 0;
+    padding: calc(24px + env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-right, 0px)) 24px max(32px, env(safe-area-inset-left, 0px));
+    border-bottom-width: 3px;
+  }
+
+  .quotation-brand-line {
+    align-items: center;
+    justify-content: flex-start;
+    gap: 24px;
+    min-width: 0;
+  }
+
+  .quotation-logo {
+    width: 300px;
+    max-width: 65%;
+  }
+
+  .quotation-document-label {
+    font-size: 11px;
+    text-align: left;
+  }
+
+  .quotation-heading {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .quotation-title {
+    font-size: clamp(2rem, 3vw, 3rem);
+  }
+
+  .quotation-subtitle {
+    margin-top: 8px;
+    font-size: 18px;
+  }
+
+  .quotation-header-actions {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+  }
+
+  .quotation-content {
+    min-width: 0;
+    padding: 24px max(32px, env(safe-area-inset-right, 0px)) 0 max(32px, env(safe-area-inset-left, 0px));
+  }
+
+  .quotation-edit-hint {
+    margin-bottom: 20px;
+  }
+
+  .quotation-section + .quotation-section {
+    margin-top: 24px;
+  }
+
+  .quotation-section-title {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .quotation-row {
+    gap: 20px;
+    min-height: 64px;
+    padding-block: 12px;
+  }
+
+  .quotation-row-description {
+    gap: 4px;
+  }
+
+  .quotation-row-concept,
+  .quotation-row-price {
+    font-size: 18px;
+  }
+
+  .quotation-row-detail,
+  .quotation-price-pending {
+    font-size: 16px;
+  }
+
+  .quotation-row-quantity {
+    font-size: 13px;
+  }
+
+  .quotation-row-price {
+    max-width: min(40vw, 260px);
+  }
+
+  .quotation-empty-row,
+  .quotation-add-row {
+    font-size: 16px;
+  }
+
+  .quotation-notes {
+    gap: 8px;
+    margin-top: 24px;
+    font-size: 16px;
+  }
+
+  .quotation-total {
+    min-width: 0;
+    min-height: 0;
+    margin: 24px max(32px, env(safe-area-inset-right, 0px)) 0 max(32px, env(safe-area-inset-left, 0px));
+    border-top-width: 2px;
+  }
+
+  .quotation-total-label {
+    font-size: 16px;
+  }
+
+  .quotation-footer {
+    gap: 12px 24px;
+    min-height: 56px;
+    padding: 16px max(32px, env(safe-area-inset-right, 0px)) 16px max(32px, env(safe-area-inset-left, 0px));
+  }
+
+  .quotation-contact {
+    gap: 8px;
+    font-size: 16px;
+  }
+
+  .quotation-contact svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+@media (min-width: 64rem) {
+  .quotation-sheet {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 26vw, 400px);
+  }
+
+  .quotation-header,
+  .quotation-footer {
+    grid-column: 1 / -1;
+  }
+
+  .quotation-content {
+    grid-column: 1;
+    grid-row: 2;
+    padding-bottom: 32px;
+  }
+
+  .quotation-total {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    margin: 24px max(32px, env(safe-area-inset-right, 0px)) 32px 0;
+    border: 1px solid var(--quotation-rule);
+    border-top: 3px solid var(--quotation-yellow);
+    background: #fafaf8;
+  }
+}
+
+@media (min-width: 64rem) and (min-height: 48rem) {
+  .quotation-total {
+    position: sticky;
+    top: 24px;
+  }
+}
+
 @media (hover: hover) {
   .quotation-preview button:hover {
     background-color: #ffda0014;
