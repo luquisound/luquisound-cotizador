@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import {
   calculateQuotation,
   formatMoney,
@@ -10,8 +10,14 @@ import { getAudioCategories, orderQuotationRows, readAudioCategory } from './aud
 import type { AudioCategory } from './audio-categories.ts'
 import type { Quotation, QuotationRow, RowSection } from './model.ts'
 import { exchangeRateDescription } from './exchange-quote'
+import { QUOTATION_GRAPHIC } from './graphic.ts'
 import './preview.css'
 import './exchange-ui.css'
+
+const graphicStyle = {
+  '--quotation-yellow': QUOTATION_GRAPHIC.yellow,
+  '--quotation-black': QUOTATION_GRAPHIC.black,
+} as CSSProperties
 
 export interface QuotationPreviewProps {
   quotation: Quotation
@@ -99,7 +105,7 @@ export function QuotationPreview({
   const visibleRows = orderQuotationRows(quotation.rows).filter((row) => !isEmptyRow(row))
 
   return (
-    <div className="quotation-preview">
+    <div className="quotation-preview" style={graphicStyle}>
       <article
         className="quotation-sheet"
         aria-label="Vista previa editable del presupuesto"
@@ -108,7 +114,7 @@ export function QuotationPreview({
           <div className="quotation-brand-line">
             <img
               className="quotation-logo"
-              src="/brand/luquisound-horizontal.svg"
+              src={QUOTATION_GRAPHIC.logoUrl}
               width="670"
               height="76"
               alt="Luquisound"

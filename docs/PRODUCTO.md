@@ -35,11 +35,14 @@ not substituted for the actual sale price of a quotation.
 
 ## Graphic contract
 
-Preserve the approved composition: dark header with the official full horizontal
-logo, a single title area with yellow accent, optional subtitle, white body with
-two sections, right-aligned amounts, total, and dark contact footer. Use the
-official yellow #FFDA00. The approved public contact footer is 11 7358-1958 and
-@luquisound.ok.
+Custom quotations use a yellow #FFDA00 header with the approved black derivative
+of the official full horizontal logo, dark title and optional subtitle, and a dark
+separator. Labels, empty-title hints, and keyboard focus also remain dark for
+contrast. The responsive preview and PNG renderer share their palette and logo
+resource through `graphic.ts`. Preserve the white body with two sections,
+right-aligned amounts, totals, and dark contact footer. The approved public contact
+footer is 11 7358-1958 and @luquisound.ok. Fixed quotations remain in Figma with
+their existing dark headers; this app change does not modify those assets.
 
 PNG width is 1080 pixels. Height grows with content; long descriptions wrap and
 blank details do not reserve a line. Controls, pending validation, and editing

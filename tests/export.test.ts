@@ -5,6 +5,7 @@ import {
 } from '../src/features/quotation/export.ts'
 import { exchangeRateDescription } from '../src/features/quotation/exchange-quote.ts'
 import type { Quotation } from '../src/features/quotation/model.ts'
+import { QUOTATION_GRAPHIC } from '../src/features/quotation/graphic.ts'
 
 const measure = (text: string): number => Array.from(text).length
 const file = new File(['synthetic image data'], 'luquisound-test.png', { type: 'image/png' })
@@ -149,16 +150,26 @@ interface CanvasText {
   y: number
   width: number
   align: string
+  color: string
+}
+
+interface CanvasRectangle {
+  x: number
+  y: number
+  width: number
+  height: number
+  color: string
 }
 
 function renderWithRecordedCanvas(quotation: Quotation): {
   width: number
   height: number
   texts: CanvasText[]
+  rectangles: CanvasRectangle[]
   footerY: number
 } {
   const texts: CanvasText[] = []
-  const rectangles: { y: number; height: number }[] = []
+  const rectangles: CanvasRectangle[] = []
   const noop = () => {}
   const context = {
     font: '', fillStyle: '', strokeStyle: '', textAlign: '', textBaseline: '', lineWidth: 0,
@@ -167,10 +178,10 @@ function renderWithRecordedCanvas(quotation: Quotation): {
       return { width: Array.from(text).length * size * 0.75 }
     },
     fillText(text: string, x: number, y: number) {
-      texts.push({ text, x, y, width: this.measureText(text).width, align: this.textAlign })
+      texts.push({ text, x, y, width: this.measureText(text).width, align: this.textAlign, color: this.fillStyle })
     },
-    fillRect(_x: number, y: number, _width: number, height: number) {
-      rectangles.push({ y, height })
+    fillRect(x: number, y: number, width: number, height: number) {
+      rectangles.push({ x, y, width, height, color: this.fillStyle })
     },
     beginPath: noop, moveTo: noop, lineTo: noop, quadraticCurveTo: noop,
     stroke: noop, arc: noop, fill: noop, bezierCurveTo: noop, closePath: noop,
@@ -186,7 +197,7 @@ function renderWithRecordedCanvas(quotation: Quotation): {
     const result = renderQuotationCanvas(quotation, {} as CanvasImageSource)
     const footer = rectangles.at(-1)
     assert.ok(footer)
-    return { width: result.width, height: result.height, texts, footerY: footer.y }
+    return { width: result.width, height: result.height, texts, rectangles, footerY: footer.y }
   } finally {
     if (previous) Object.defineProperty(globalThis, 'document', previous)
     else Reflect.deleteProperty(globalThis, 'document')
@@ -208,6 +219,48 @@ function exportableQuotation(): Quotation {
     }],
   }
 }
+
+test('renders a yellow custom header with dark text and keeps the contact footer dark', () => {
+  const quotation = { ...exportableQuotation(), title: 'AUDIO A MEDIDA', subtitle: 'Vehiculo de prueba' }
+  const result = renderWithRecordedCanvas(quotation)
+  const header = result.rectangles[1]
+  assert.ok(header)
+  assert.equal(header.y, 0)
+  assert.equal(header.width, 1080)
+  assert.equal(header.color, '#FFDA00')
+  const headerTexts = result.texts.filter(({ y }) => y < header.height)
+  assert.deepEqual(headerTexts.map(({ text }) => text), [
+    'PRESUPUESTO', 'DE AUDIO', 'AUDIO A MEDIDA', 'Vehiculo de prueba',
+  ])
+  assert.ok(headerTexts.every(({ color }) => color === '#141414'))
+  assert.ok(result.rectangles.some(({ y, height, color }) => y === header.height && height === 5 && color === '#141414'))
+  assert.equal(result.rectangles.at(-1)?.color, '#141414')
+  const contacts = result.texts.filter(({ y }) => y > result.footerY)
+  assert.deepEqual(contacts.map(({ text }) => text), ['11 7358-1958', '@luquisound.ok'])
+  assert.ok(contacts.every(({ color }) => color === '#FFDA00'))
+})
+
+test('loads the shared black logo resource before preparing the PNG', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'Image')
+  const requested: string[] = []
+  class LogoImage {
+    onload: (() => void) | null = null
+    onerror: (() => void) | null = null
+    set src(value: string) {
+      requested.push(value)
+      queueMicrotask(() => this.onerror?.())
+    }
+  }
+  Object.defineProperty(globalThis, 'Image', { configurable: true, value: LogoImage })
+  try {
+    await assert.rejects(createQuotationFile(exportableQuotation()), /logo/)
+    assert.equal(QUOTATION_GRAPHIC.logoUrl, '/brand/luquisound-horizontal-black.svg')
+    assert.deepEqual(requested, [QUOTATION_GRAPHIC.logoUrl])
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'Image', previous)
+    else Reflect.deleteProperty(globalThis, 'Image')
+  }
+})
 
 test('renders the stored source and date completely between the rate and footer', () => {
   const quotation = exportableQuotation()

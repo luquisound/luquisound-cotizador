@@ -1,6 +1,4 @@
 .quotation-preview {
-  --quotation-yellow: #ffda00;
-  --quotation-black: #141414;
   --quotation-muted: #626262;
   --quotation-rule: #d5d5d5;
   container-type: inline-size;
@@ -49,9 +47,9 @@
 .quotation-header {
   min-height: 32.2222cqw;
   padding: calc(3.7037cqw + env(safe-area-inset-top, 0px)) max(5.9259cqw, env(safe-area-inset-right, 0px)) 3.1481cqw max(5.9259cqw, env(safe-area-inset-left, 0px));
-  border-bottom: max(2px, 0.463cqw) solid var(--quotation-yellow);
-  background: var(--quotation-black);
-  color: #fff;
+  border-bottom: max(2px, 0.463cqw) solid var(--quotation-black);
+  background: var(--quotation-yellow);
+  color: var(--quotation-black);
 }
 
 .quotation-brand-line {
@@ -62,7 +60,11 @@
 }
 
 .quotation-header button:focus-visible {
-  outline-color: var(--quotation-yellow);
+  outline-color: var(--quotation-black);
+}
+
+.quotation-header button:active {
+  background-color: #00000014;
 }
 
 .quotation-logo {
@@ -76,7 +78,7 @@
 .quotation-document-label {
   flex-shrink: 0;
   margin: 0;
-  color: #d1d1d1;
+  color: var(--quotation-black);
   font-size: clamp(0.5rem, 1.8519cqw, 1.25rem);
   font-weight: 400;
   line-height: 1.25;
@@ -121,13 +123,13 @@
 }
 
 .quotation-title-placeholder {
-  color: #d1d1d1;
+  color: var(--quotation-black);
 }
 
 .quotation-subtitle {
   display: block;
   margin-top: 1.3889cqw;
-  color: #d1d1d1;
+  color: var(--quotation-black);
   font-size: clamp(0.8125rem, 2.7778cqw, 1.875rem);
   font-weight: 400;
   line-height: 1.35;

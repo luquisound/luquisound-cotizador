@@ -2,12 +2,12 @@ import { calculateQuotation, formatMoney, parseMoney, parseQuantity } from './ca
 import type { Quotation, QuotationRow, RowSection } from './model.ts'
 import { BODY_FONT, HEADING_FONT, loadQuotationFonts } from './typography.ts'
 import { exchangeRateDescription } from './exchange-quote.ts'
+import { QUOTATION_GRAPHIC } from './graphic.ts'
 
 const WIDTH = 1080
 const MARGIN = 64
 const CONTENT_WIDTH = WIDTH - MARGIN * 2
-const YELLOW = '#FFDA00'
-const BLACK = '#141414'
+const { yellow: YELLOW, black: BLACK } = QUOTATION_GRAPHIC
 const FOOTER_HEIGHT = 84
 const MAX_CANVAS_PIXELS = 16_000_000
 
@@ -237,21 +237,21 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   canvas.height = height
   context.fillStyle = '#FFFFFF'
   context.fillRect(0, 0, WIDTH, height)
-  context.fillStyle = BLACK
+  context.fillStyle = YELLOW
   context.fillRect(0, 0, WIDTH, headerHeight)
   context.drawImage(logo, MARGIN, 40, 670, 670 * 393.05 / 3469.76)
   context.textAlign = 'right'
-  context.fillStyle = '#A3A3A3'
+  context.fillStyle = BLACK
   setFont(context, 20, BODY_FONT)
   drawLines(context, ['PRESUPUESTO', 'DE AUDIO'], WIDTH - MARGIN, 45, 25)
   context.textAlign = 'left'
   setFont(context, 84)
-  context.fillStyle = '#FFFFFF'
+  context.fillStyle = BLACK
   drawLines(context, titleLines, MARGIN, 174, 92)
-  context.fillStyle = '#B3B3B3'
+  context.fillStyle = BLACK
   setFont(context, 30, BODY_FONT)
   drawLines(context, subtitleLines, MARGIN, subtitleY, 38)
-  context.fillStyle = YELLOW
+  context.fillStyle = BLACK
   context.fillRect(0, headerHeight, WIDTH, 5)
 
   let y = headerHeight + 5 + 44
@@ -352,7 +352,7 @@ export async function createQuotationFile(quotation: Quotation): Promise<File> {
     const image = new Image()
     image.onload = () => resolve(image)
     image.onerror = () => reject(new Error('No se pudo cargar el logo. Intentá preparar la imagen nuevamente.'))
-    image.src = '/brand/luquisound-horizontal.svg'
+    image.src = QUOTATION_GRAPHIC.logoUrl
   })
   await loadQuotationFonts()
   const canvas = renderQuotationCanvas(quotation, logo)
