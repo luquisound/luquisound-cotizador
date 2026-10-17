@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
-import { calculateQuotation } from './calculation'
-import { createQuotation, createRow, type CatalogItem, type Quotation, type RowSection } from './model'
+import { calculateQuotation, isEmptyRow } from './calculation'
+import { createQuotation, createRow, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
+import type { AudioCategory } from './audio-categories'
 import { serializeWorkspace, type WorkspaceSaveResult } from './persistence'
 import {
   CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
@@ -28,6 +29,8 @@ function initialData() {
   }
 }
 
+type RowEditingState = { kind: 'new'; row: QuotationRow } | { kind: 'existing'; rowId: string }
+
 export default function QuotationApp() {
   const [initial] = useState(initialData)
   const [quotation, setQuotation] = useState(initial.current.quotation)
@@ -42,7 +45,7 @@ export default function QuotationApp() {
   const [recoveryError, setRecoveryError] = useState(initial.current.error)
   const [savedCatalog, setSavedCatalog] = useState<CatalogItem[] | null>(initial.catalog.stored ? initial.catalog.catalog : null)
   const [dialog, setDialog] = useState<'header' | 'catalog' | null>(null)
-  const [editingRowId, setEditingRowId] = useState<string | null>(null)
+  const [rowEditing, setRowEditing] = useState<RowEditingState | null>(null)
   const [message, setMessage] = useState('')
   const [prepared, setPrepared] = useState<{ file: File; quotation: Quotation } | null>(null)
   const [preparing, setPreparing] = useState(false)
@@ -52,11 +55,14 @@ export default function QuotationApp() {
   const [rateState, setRateState] = useState<(ExchangeRefreshState & { id: string }) | null>(null)
   const [rateCheckedAt, setRateCheckedAt] = useState(Date.now)
   const catalogButton = useRef<HTMLButtonElement>(null)
+  const rowEditorTrigger = useRef<HTMLElement | null>(null)
   const generation = useRef(0)
   const preparedFile = prepared?.quotation === quotation ? prepared.file : null
   const catalogSaveStatus = !catalogStorageEnabled ? 'Guardado del catálogo pausado' : catalogError ? 'No se pudo guardar el catálogo' : savedCatalog === catalog ? 'Catálogo y precios conservados en este navegador' : 'Guardando catálogo…'
   const calculation = calculateQuotation(quotation)
-  const editingRow = quotation.rows.find((row) => row.id === editingRowId)
+  const editingRow = rowEditing?.kind === 'new'
+    ? rowEditing.row
+    : quotation.rows.find((row) => row.id === rowEditing?.rowId)
   const rateLoading = rateState?.id === quotation.id && rateState.loading
   const rateError = rateState?.id === quotation.id ? rateState.error : null
   const displayedRate = parseExchangeRate(quotation.exchangeRate ?? '')
@@ -216,10 +222,52 @@ export default function QuotationApp() {
     }
   }, [catalog, quotation])
 
-  function addRow(section: RowSection) {
-    if (quotation.rows.length >= 1000) { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
-    const row = createRow(section, quotation.currency)
-    if (updateQuotation({ ...quotation, rows: [...quotation.rows, row] })) setEditingRowId(row.id)
+  function rememberRowTrigger() {
+    rowEditorTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  }
+
+  function closeRowEditor(rowId?: string) {
+    setRowEditing(null)
+    window.requestAnimationFrame(() => {
+      const rowButton = rowId
+        ? document.querySelector<HTMLElement>(`[data-row-id="${rowId}"]`)
+        : null
+      const previous = rowEditorTrigger.current
+      const target = rowButton ?? (previous?.isConnected ? previous : document.querySelector<HTMLElement>('.quotation-add-row'))
+      target?.focus()
+    })
+  }
+
+  function editRow(rowId: string) {
+    rememberRowTrigger()
+    setRowEditing({ kind: 'existing', rowId })
+  }
+
+  function addRow(section: RowSection, audioCategory?: AudioCategory) {
+    if (quotationRef.current.rows.length >= 1000) { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
+    rememberRowTrigger()
+    const row = createRow(section, quotationRef.current.currency)
+    setRowEditing({ kind: 'new', row: { ...row, ...(audioCategory ? { audioCategory } : {}) } })
+  }
+
+  function saveRow(row: QuotationRow) {
+    if (!rowEditing) return
+    if (rowEditing.kind === 'new' && isEmptyRow(row)) { closeRowEditor(); return }
+    const current = quotationRef.current
+    if (rowEditing.kind === 'new' && current.rows.length >= 1000) {
+      window.alert('Llegaste al máximo de 1000 conceptos en este presupuesto.')
+      return
+    }
+    const rows = rowEditing.kind === 'new'
+      ? [...current.rows, row]
+      : current.rows.map((entry) => entry.id === row.id ? row : entry)
+    if (updateQuotation({ ...current, rows })) closeRowEditor(row.id)
+  }
+
+  function removeRow() {
+    if (rowEditing?.kind !== 'existing') return
+    const current = quotationRef.current
+    if (updateQuotation({ ...current, rows: current.rows.filter((row) => row.id !== rowEditing.rowId) })) closeRowEditor()
   }
 
   function exportCatalogBackup() {
@@ -310,7 +358,7 @@ export default function QuotationApp() {
           <QuotationPreview
             quotation={quotation}
             onEditHeader={() => setDialog('header')}
-            onEditRow={setEditingRowId}
+            onEditRow={editRow}
             onAddRow={addRow}
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
@@ -336,7 +384,7 @@ export default function QuotationApp() {
       </footer>
       {dialog === 'header' && <HeaderEditor quotation={quotation} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
       {dialog === 'catalog' && <CatalogEditor catalog={catalog} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onRetrySharedCatalog={retrySharedCatalog} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
-      {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} onClose={() => setEditingRowId(null)} onSave={(row) => { if (updateQuotation({ ...quotation, rows: quotation.rows.map((entry) => entry.id === row.id ? row : entry) })) setEditingRowId(null) }} onRemove={() => { if (updateQuotation({ ...quotation, rows: quotation.rows.filter((entry) => entry.id !== editingRow.id) })) setEditingRowId(null) }} />}
+      {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} />}
     </div>
   )
 }

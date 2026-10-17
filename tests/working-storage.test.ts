@@ -52,6 +52,63 @@ function legacyFixture(): Workspace {
   return { version: 1, activeQuotationId: second.id, quotations: [first, second], catalog: catalogFixture() }
 }
 
+test('categorized current recovery preserves all row data without modifying catalogue or legacy stores', () => {
+  const legacyText = `\ufeff${JSON.stringify(legacyFixture())}`
+  const catalog = catalogFixture()
+  const catalogText = serializeCatalogBackup(catalog)
+  const memory = memoryStorage({ [STORAGE_KEY]: legacyText, [CATALOG_STORAGE_KEY]: catalogText })
+  const quotation = createQuotation()
+  quotation.rows = [
+    { ...createRow('equipment', 'USD'), audioCategory: 'speakers', concept: 'Synthetic first speaker', quantity: '2', unitPrice: '10,25', priceState: 'priced' },
+    { ...createRow('equipment', 'ARS'), audioCategory: 'speakers', concept: 'Synthetic second speaker', unitPrice: '0', priceState: 'priced' },
+    { ...createRow('extras', 'ARS'), audioCategory: 'labor', concept: 'Synthetic included labor', priceState: 'included' },
+    { ...createRow('extras', 'USD'), audioCategory: 'harness', concept: 'Synthetic pending harness', quantity: 'quantity pending' },
+    { ...createRow('extras'), concept: 'Synthetic free work', detail: 'Unclassified retained detail' },
+  ]
+  const snapshot = structuredClone(quotation)
+  assert.equal(saveCurrentQuotation(memory.storage, quotation).ok, true)
+  assert.deepEqual(loadCurrentQuotation(memory.storage), { quotation: snapshot, error: null })
+  assert.deepEqual(quotation, snapshot)
+  assert.deepEqual(loadCatalog(memory.storage).catalog, catalog)
+  assert.equal(memory.values.get(CATALOG_STORAGE_KEY), catalogText)
+  assert.equal(memory.values.get(STORAGE_KEY), legacyText)
+  assert.deepEqual(memory.writes, [CURRENT_QUOTATION_STORAGE_KEY])
+})
+
+test('category-only suggestions never persist as current work or alter catalogue and legacy bytes', () => {
+  const legacyText = serializeWorkspace(legacyFixture())
+  const catalogText = serializeCatalogBackup(catalogFixture())
+  const memory = memoryStorage({ [STORAGE_KEY]: legacyText, [CATALOG_STORAGE_KEY]: catalogText })
+  const quotation = createQuotation()
+  quotation.rows[0].audioCategory = 'subwoofer'
+  quotation.rows[1].audioCategory = 'labor'
+  assert.equal(saveCurrentQuotation(memory.storage, quotation).ok, true)
+  assert.deepEqual(parseWorkspace(memory.values.get(CURRENT_QUOTATION_STORAGE_KEY)!), {
+    version: 1, activeQuotationId: null, quotations: [], catalog: [],
+  })
+  assert.equal(hasQuotationContent(loadCurrentQuotation(memory.storage).quotation), false)
+  assert.equal(memory.values.get(CATALOG_STORAGE_KEY), catalogText)
+  assert.equal(memory.values.get(STORAGE_KEY), legacyText)
+  assert.deepEqual(memory.writes, [CURRENT_QUOTATION_STORAGE_KEY])
+})
+
+test('invalid optional category metadata recovers the item without changing stored bytes', () => {
+  for (const audioCategory of ['labor', 'unknown-category', null, {}, 1]) {
+    const quotation = createQuotation()
+    quotation.rows[0].concept = 'Synthetic retained equipment'
+    quotation.rows[0].currency = 'USD'
+    quotation.rows[0].unitPrice = '0'
+    quotation.rows[0].priceState = 'priced'
+    const raw = JSON.stringify({ version: 1, activeQuotationId: quotation.id, catalog: [], quotations: [{
+      ...quotation, rows: [{ ...quotation.rows[0], audioCategory }, quotation.rows[1]],
+    }] })
+    const memory = memoryStorage({ [CURRENT_QUOTATION_STORAGE_KEY]: raw })
+    assert.deepEqual(loadCurrentQuotation(memory.storage), { quotation, error: null })
+    assert.equal(memory.values.get(CURRENT_QUOTATION_STORAGE_KEY), raw)
+    assert.deepEqual(memory.writes, [])
+  }
+})
+
 test('legacy current recovery migrates row currencies and stores mixed work without touching the old workspace', () => {
   const quotation = createQuotation()
   quotation.title = 'Synthetic old USD quotation'

@@ -14,7 +14,8 @@ current custom quotation, rather than managing a quotation archive.
 - Editable title, optional subtitle, and manual quotation rows. Existing notes
   remain in recovered quotations and images; the details form edits only title
   and subtitle. Exchange-rate information stays beside the totals.
-- Equipment and installation/accessory sections, including arbitrary work.
+- Equipment and installation/accessory sections with optional audio categories,
+  multiple concepts per category, and arbitrary work.
 - Private common catalogue loaded automatically on each device when configured,
   plus optional personal entries; every selected description and price remains
   editable. A field may be left blank without requiring a catalogue selection.
@@ -51,6 +52,53 @@ requires both actual faces to load and reports an error when they are unavailabl
 The source quotation examples remain private and are not copied into the repo.
 The displayed/exported title preserves the entered text. No decorative plus sign
 is inserted; a plus sign explicitly typed as part of the title is retained.
+
+## Optional audio categories
+
+The two quotation sections offer the following category order, with Spanish
+labels in the interface:
+
+| Equipment | Installation and accessories |
+| --- | --- |
+| Amplifier / DSP | Cables and accessories |
+| Additional amplifier | Connector / harness |
+| Subwoofer | Rings / 3D adapters |
+| Speakers or component sets | Labour |
+
+Each category is optional and supports several independently editable concepts,
+including separate front and rear speakers with their own prices and currencies.
+Each section also provides a repeatable action to add a free-form concept.
+Category names are editor hints, never prefilled commercial descriptions.
+Unused suggestions create no quotation rows, pending prices, totals, image
+content, or recoverable content. Compatible legacy blank rows also remain inert.
+
+Opening a category or adding another concept starts a temporary draft. Applying
+it adds the row; cancelling, closing, or pressing Escape discards it without
+changing the quotation or invalidating a prepared image. Applying an entirely
+empty new draft adds nothing. Saving a new row rechecks the 1000-row limit.
+Existing rows can be edited, classified or reclassified within their section,
+or changed to a free-form concept. Removing the final item from a category
+restores its empty suggestion. Applied changes invalidate a prepared image.
+
+Optional `audioCategory` metadata is saved with a row and restored on reload,
+alongside its identity, amounts, currency, and price state. Rows without that
+metadata remain compatible; categories are never inferred from their wording
+or a catalogue selection. Unknown values or categories incompatible with the
+row's section are discarded without losing the row or its other fields.
+Category metadata alone is not meaningful quotation content.
+
+The preview and PNG use the table's category order within each section, keeping
+the existing relative order of items in each category. Free-form and legacy
+unclassified concepts appear after categorized items, preserving their own
+relative order. Validation issue numbers refer to that order of nonempty
+concepts. PNG output contains only entered concepts under the existing two
+section headings; category labels, empty suggestions, and controls are omitted.
+
+Quotation categories are independent of imported catalogue categories. Product
+selection preserves the chosen quotation category and follows the existing
+approved-price and currency rules. No category approves a price, infers an
+included-without-charge item, or converts a row's currency. Pending prices,
+explicit zero, and included states retain their distinct meanings.
 
 ## Calculation contract
 

@@ -268,3 +268,46 @@ test('renders mixed row currencies, unit prices and converted totals without cli
     ? entry.x - entry.width >= 64
     : entry.x + entry.width <= 1016))
 })
+
+test('exports categorized concepts in display order without empty suggestions or category controls', () => {
+  const quotation = exportableQuotation()
+  const sample = quotation.rows[0]
+  quotation.rows = [
+    { ...sample, id: 'labor', section: 'extras', audioCategory: 'labor', concept: 'Labor item' },
+    { ...sample, id: 'free-a', concept: 'Custom unit A' },
+    { ...sample, id: 'front', audioCategory: 'speakers', concept: 'Front set' },
+    { ...sample, id: 'cables', section: 'extras', audioCategory: 'cables', concept: 'Wire kit' },
+    { ...sample, id: 'bass', audioCategory: 'subwoofer', concept: 'Bass unit' },
+    { ...sample, id: 'rear', audioCategory: 'speakers', concept: 'Rear set' },
+    { ...sample, id: 'dsp', audioCategory: 'amplifier-dsp', concept: 'DSP unit' },
+    { ...sample, id: 'extra', section: 'extras', concept: 'Custom work' },
+    { ...sample, id: 'free-b', concept: 'Custom unit B' },
+  ]
+  const populated = renderWithRecordedCanvas(quotation)
+  quotation.rows.push(
+    {
+      ...sample, id: 'empty-amplifier', audioCategory: 'additional-amplifier',
+      concept: '', unitPrice: '', priceState: 'pending',
+    },
+    {
+      ...sample, id: 'empty-adapters', section: 'extras', audioCategory: 'adapters',
+      concept: '', unitPrice: '', priceState: 'pending',
+    },
+  )
+  const snapshot = structuredClone(quotation)
+  const result = renderWithRecordedCanvas(quotation)
+  const concepts = [
+    'DSP unit', 'Bass unit', 'Front set', 'Rear set', 'Custom unit A', 'Custom unit B',
+    'Wire kit', 'Labor item', 'Custom work',
+  ]
+  assert.deepEqual(result.texts.filter(({ text }) => concepts.includes(text)).map(({ text }) => text), concepts)
+  assert.equal(result.height, populated.height)
+  assert.equal(result.width, 1080)
+  const labels = [
+    'Amplificador / DSP', 'Amplificador adicional', 'Subwoofer', 'Parlantes o componentes',
+    'Cables y accesorios', 'Ficha / arnés', 'Aros / adaptadores 3D', 'Mano de obra',
+    'Agregar otro',
+  ]
+  assert.ok(!result.texts.some(({ text }) => labels.includes(text)))
+  assert.deepEqual(quotation, snapshot)
+})

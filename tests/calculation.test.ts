@@ -167,14 +167,74 @@ test('a blank title or no nonempty rows blocks export', () => {
   }
 })
 
-test('empty rows are excluded and issue numbering refers to the original row', () => {
+test('empty rows are excluded from displayed issue numbering', () => {
   const result = calculateQuotation(quotation([
     row({ concept: '', unitPrice: '', priceState: 'pending' }),
     row({ id: 'pending', priceState: 'pending', unitPrice: '' }),
   ]))
   assert.equal(result.rows.length, 1)
   assert.equal(result.rows[0].row.id, 'pending')
-  assert.match(result.issues[0], /^Fila 2:/)
+  assert.match(result.issues[0], /^Fila 1:/)
+})
+
+test('category metadata alone neither creates a concept nor changes a complete total', () => {
+  const suggestion = row({
+    id: 'empty-speakers', audioCategory: 'speakers', concept: '',
+    detail: '', unitPrice: '', priceState: 'pending',
+  })
+  assert.equal(isEmptyRow(suggestion), true)
+  const blank = calculateQuotation(quotation([suggestion]))
+  assert.equal(blank.rows.length, 0)
+  assert.equal(blank.canExport, false)
+  assert.deepEqual(blank.nativeTotals, { ARS: 0, USD: 0 })
+
+  const complete = calculateQuotation(quotation([row(), suggestion]))
+  assert.equal(complete.rows.length, 1)
+  assert.equal(complete.canExport, true)
+  assert.deepEqual(complete.totals, { ARS: 1000, USD: 1000 })
+})
+
+test('categorized pending, zero, and included concepts retain their commercial states', () => {
+  const result = calculateQuotation(quotation([
+    row({ id: 'zero', audioCategory: 'speakers', unitPrice: '0' }),
+    row({ id: 'included', audioCategory: 'speakers', priceState: 'included', unitPrice: '' }),
+    row({ id: 'pending', audioCategory: 'amplifier-dsp', priceState: 'pending', unitPrice: '10' }),
+  ]))
+  assert.deepEqual(result.rows.map(({ row, lineTotalCents }) => [row.id, row.priceState, lineTotalCents]), [
+    ['pending', 'pending', null], ['zero', 'priced', 0], ['included', 'included', 0],
+  ])
+  assert.equal(result.canExport, false)
+  assert.match(result.issues[0], /^Fila 1:.*pendiente/)
+  const complete = calculateQuotation(quotation(result.rows.slice(1).map(({ row }) => row)))
+  assert.equal(complete.canExport, true)
+  assert.deepEqual(complete.totals, { ARS: 0, USD: 0 })
+})
+
+test('multiple speakers retain native amounts and mixed totals independent of category and storage order', () => {
+  const speakers = [
+    row({ id: 'front', audioCategory: 'speakers', unitPrice: '1.000' }),
+    row({ id: 'rear', audioCategory: 'speakers', currency: 'USD', unitPrice: '20' }),
+  ]
+  const input = quotation(speakers, { exchangeRate: '1.000' })
+  const snapshot = structuredClone(input)
+  const result = calculateQuotation(input)
+  assert.deepEqual(result.nativeTotals, { ARS: 100000, USD: 2000 })
+  assert.deepEqual(result.totals, { ARS: 2100000, USD: 2100 })
+  assert.deepEqual(result.rows.map(({ row }) => [row.id, row.currency, row.unitPrice]), [
+    ['front', 'ARS', '1.000'], ['rear', 'USD', '20'],
+  ])
+  assert.equal(result.canExport, true)
+  assert.deepEqual(input, snapshot)
+
+  const reordered = calculateQuotation({ ...input, rows: [...speakers].reverse() })
+  const unclassified = calculateQuotation({
+    ...input, rows: speakers.map((item) => ({ ...item, audioCategory: undefined })),
+  })
+  for (const variant of [reordered, unclassified]) {
+    assert.deepEqual(variant.nativeTotals, result.nativeTotals)
+    assert.deepEqual(variant.totals, result.totals)
+    assert.equal(variant.canExport, true)
+  }
 })
 
 test('line overflow is rejected even when both parsed inputs are safe', () => {

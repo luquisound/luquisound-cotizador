@@ -109,6 +109,20 @@ There is no quotation list, saved-status label, new-quotation, duplicate, delete
 or quotation-backup control. Downloading or sharing a PNG leaves the current
 quotation open.
 
+Both sections offer optional audio categories: amplifier/DSP, additional
+amplifier, subwoofer, and speakers for equipment; cables/accessories,
+connector/harness, rings/3D adapters, and labour for installation. A category can
+contain several independent concepts, and each section also allows repeated
+free-form concepts. Empty category suggestions exist only in the editor; they
+create no pending prices or image content. Opening a new row uses a temporary
+draft: cancelling leaves the quotation and any prepared image unchanged.
+Categories are recovered with their rows and can be changed within the section.
+Existing and free-form rows remain after categorized rows in their section,
+preserving their relative order. PNG output uses the same concept order and
+omits category labels and controls. Catalogue categories remain independent;
+choosing a category neither approves a price nor changes currency rules. See
+[the optional audio row contract](docs/PRODUCTO.md#optional-audio-categories).
+
 The current quotation is recovered across reloads from
 `luquisound.current-quotation.v1`. The persistent catalogue and approved sale
 prices use the separate `luquisound.catalog.v1` key. Catalogue persistence remains

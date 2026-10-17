@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { calculateQuotation } from './calculation'
+import { getAudioCategories, readAudioCategory } from './audio-categories'
 import { getCatalogDefaultCurrency } from './catalog'
 import { CatalogPicker } from './CatalogTools'
 import { Dialog } from './QuotationDialog'
@@ -32,9 +33,10 @@ export function HeaderEditor({ quotation, onSave, onClose }: HeaderEditorProps) 
 interface RowEditorProps {
   row: QuotationRow; quotation: Quotation; catalog: CatalogItem[]
   onSave: (row: QuotationRow) => void; onRemove: () => void; onClose: () => void
+  isNew?: boolean
 }
 
-export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose }: RowEditorProps) {
+export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, isNew = false }: RowEditorProps) {
   const [draft, setDraft] = useState(row)
   const validation = calculateQuotation({ ...quotation, rows: [draft] }).rows[0]?.errors ?? []
   function chooseCatalog(item: CatalogItem) {
@@ -46,10 +48,18 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose }
     if (draft.unitPrice.trim() && !window.confirm('Cambiar la moneda conserva el importe escrito, sin convertirlo. ¿Continuar?')) return
     setDraft({ ...draft, currency })
   }
+  function changeAudioCategory(value: string) {
+    const audioCategory = readAudioCategory(value, draft.section)
+    const nextDraft = { ...draft }
+    if (audioCategory) nextDraft.audioCategory = audioCategory
+    else delete nextDraft.audioCategory
+    setDraft(nextDraft)
+  }
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); onSave(draft) }
   return (
-    <Dialog title={row.section === 'equipment' ? 'Editar equipamiento' : 'Editar instalación o accesorio'} onClose={onClose}>
+    <Dialog title={row.section === 'equipment' ? `${isNew ? 'Agregar' : 'Editar'} equipamiento` : `${isNew ? 'Agregar' : 'Editar'} instalación o accesorio`} onClose={onClose}>
       <form className="form-stack" onSubmit={submit}>
+        <label>Categoría del presupuesto<select value={draft.audioCategory ?? ''} onChange={(event) => changeAudioCategory(event.target.value)}>{getAudioCategories(draft.section).map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}<option value="">Otro</option></select></label>
         <CatalogPicker catalog={catalog} section={row.section} onChoose={chooseCatalog} />
         <label>Concepto<input autoFocus value={draft.concept} maxLength={500} list={row.section === 'extras' ? 'extra-suggestions' : undefined} onChange={(event) => setDraft({ ...draft, concept: event.target.value })} placeholder={row.section === 'extras' ? 'Cables, mano de obra o trabajo libre' : 'Escribí un producto o trabajo'} /></label>
         <datalist id="extra-suggestions"><option value="Cables" /><option value="Mano de obra" /><option value="Aros adaptadores" /><option value="Insonorización" /><option value="Chapa y pintura" /></datalist>
@@ -59,7 +69,7 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose }
         <label>Precio unitario · {draft.currency}<input inputMode="decimal" value={draft.priceState === 'included' ? '0' : draft.unitPrice} disabled={draft.priceState === 'included'} maxLength={30} placeholder="Sin precio asignado" onChange={(event) => setDraft({ ...draft, unitPrice: event.target.value, priceState: event.target.value.trim() ? 'priced' : 'pending' })} /></label>
         <p className="field-help">Usá coma para decimales: 1.234,56. Cero es un precio válido; «Incluido sin cargo» se indica por separado. Podés guardar un precio pendiente.</p>
         {draft.concept.trim() && validation.length > 0 && <ul className="field-errors">{validation.map((error) => <li key={error}>{error}</li>)}</ul>}
-        <div className="dialog-actions"><button type="button" className="button danger" onClick={() => { if (window.confirm('¿Eliminar este concepto del presupuesto?')) onRemove() }}>Eliminar</button><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button primary">Aplicar cambios</button></div>
+        <div className="dialog-actions">{!isNew && <button type="button" className="button danger" onClick={() => { if (window.confirm('¿Eliminar este concepto del presupuesto?')) onRemove() }}>Eliminar</button>}<button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button primary">Aplicar cambios</button></div>
       </form>
     </Dialog>
   )

@@ -1,5 +1,6 @@
 import type { Currency, Quotation, QuotationRow } from './model.ts'
 import { convertMixedTotals, type ConvertedTotalsResult } from './exchange.ts'
+import { orderQuotationRows } from './audio-categories.ts'
 
 type ParseFailure = { ok: false; reason: string }
 export type MoneyResult = { ok: true; cents: number } | ParseFailure
@@ -111,8 +112,8 @@ export function calculateQuotation(quotation: Quotation): QuotationCalculation {
   if (!quotation.title.trim()) issues.push('Ingresá un título para el presupuesto.')
   const rows: CalculatedRow[] = []
   const subtotals = { ARS: 0n, USD: 0n }
-  for (const [index, row] of quotation.rows.entries()) {
-    if (isEmptyRow(row)) continue
+  const orderedRows = orderQuotationRows(quotation.rows).filter((row) => !isEmptyRow(row))
+  for (const [index, row] of orderedRows.entries()) {
     const calculated = calculateRow(row)
     rows.push(calculated)
     for (const error of calculated.errors) issues.push(`Fila ${index + 1}: ${error}`)

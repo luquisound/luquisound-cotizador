@@ -6,6 +6,8 @@ import {
   parseQuantity,
 } from './calculation.ts'
 import type { CalculatedRow } from './calculation.ts'
+import { getAudioCategories, orderQuotationRows, readAudioCategory } from './audio-categories.ts'
+import type { AudioCategory } from './audio-categories.ts'
 import type { Quotation, QuotationRow, RowSection } from './model.ts'
 import { exchangeRateDescription } from './exchange-quote'
 import './preview.css'
@@ -15,7 +17,7 @@ export interface QuotationPreviewProps {
   quotation: Quotation
   onEditHeader: () => void
   onEditRow: (rowId: string) => void
-  onAddRow: (section: RowSection) => void
+  onAddRow: (section: RowSection, audioCategory?: AudioCategory) => void
   notices: ReactNode
   exchangeDetails: ReactNode
 }
@@ -26,26 +28,12 @@ interface PreviewRowProps {
   onEdit: () => void
 }
 
-const sections: { section: RowSection; label: string; addLabel: string }[] = [
-  { section: 'equipment', label: 'EQUIPAMIENTO', addLabel: 'Agregar concepto' },
-  { section: 'extras', label: 'INSTALACIÓN Y ACCESORIOS', addLabel: 'Agregar extra' },
+const sections: { section: RowSection; label: string; accessibleLabel: string }[] = [
+  { section: 'equipment', label: 'EQUIPAMIENTO', accessibleLabel: 'equipamiento' },
+  { section: 'extras', label: 'INSTALACIÓN Y ACCESORIOS', accessibleLabel: 'instalación y accesorios' },
 ]
 
 function PreviewRow({ row, calculated, onEdit }: PreviewRowProps) {
-  if (isEmptyRow(row)) {
-    return (
-      <button
-        type="button"
-        className="quotation-empty-row"
-        onClick={onEdit}
-        aria-label={row.section === 'equipment' ? 'Completar concepto vacío' : 'Completar extra vacío'}
-      >
-        <span aria-hidden="true">+</span>
-        {row.section === 'equipment' ? 'Completar concepto' : 'Completar extra'}
-      </button>
-    )
-  }
-
   const quantity = parseQuantity(row.quantity)
   const quantityLabel = quantity.ok && quantity.thousandths === 1000
     ? ''
@@ -62,6 +50,7 @@ function PreviewRow({ row, calculated, onEdit }: PreviewRowProps) {
     <button
       type="button"
       className={`quotation-row${hasErrors ? ' quotation-row-pending' : ''}`}
+      data-row-id={row.id}
       onClick={onEdit}
       aria-label={`Editar ${concept}. ${amount}`}
       title="Tocá para editar el concepto, la cantidad y el precio"
@@ -107,6 +96,7 @@ export function QuotationPreview({
 }: QuotationPreviewProps) {
   const calculation = calculateQuotation(quotation)
   const calculatedById = new Map(calculation.rows.map((row) => [row.row.id, row]))
+  const visibleRows = orderQuotationRows(quotation.rows).filter((row) => !isEmptyRow(row))
 
   return (
     <div className="quotation-preview">
@@ -147,25 +137,76 @@ export function QuotationPreview({
 
         <div className="quotation-content">
           {notices}
-          {sections.map(({ section, label, addLabel }) => (
-            <section className="quotation-section" key={section} aria-label={label}>
-              <h2 className="quotation-section-title">{label}</h2>
-              <ul className="quotation-rows">
-                {quotation.rows.filter((row) => row.section === section).map((row) => (
-                  <li key={row.id}>
-                    <PreviewRow
-                      row={row}
-                      calculated={calculatedById.get(row.id)}
-                      onEdit={() => onEditRow(row.id)}
-                    />
-                  </li>
-                ))}
-              </ul>
-              <button type="button" className="quotation-add-row" onClick={() => onAddRow(section)}>
-                <span aria-hidden="true">+</span> {addLabel}
-              </button>
-            </section>
-          ))}
+          {sections.map(({ section, label, accessibleLabel }) => {
+            const sectionRows = visibleRows.filter((row) => row.section === section)
+            const freeRows = sectionRows.filter((row) => !readAudioCategory(row.audioCategory, section))
+            return (
+              <section className="quotation-section" key={section} aria-label={label}>
+                <h2 className="quotation-section-title">{label}</h2>
+                {getAudioCategories(section).map((category) => {
+                  const categoryRows = sectionRows.filter((row) => row.audioCategory === category.id)
+                  return (
+                    <div className="quotation-audio-category" key={category.id}>
+                      {categoryRows.length === 0 ? (
+                        <button
+                          type="button"
+                          className="quotation-empty-row"
+                          onClick={() => onAddRow(section, category.id)}
+                          aria-label={`Agregar ${category.label}`}
+                        >
+                          <span aria-hidden="true">+</span> {category.label}
+                        </button>
+                      ) : (
+                        <>
+                          <h3 className="quotation-category-label">{category.label}</h3>
+                          <ul className="quotation-rows">
+                            {categoryRows.map((row) => (
+                              <li key={row.id}>
+                                <PreviewRow
+                                  row={row}
+                                  calculated={calculatedById.get(row.id)}
+                                  onEdit={() => onEditRow(row.id)}
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                          <button
+                            type="button"
+                            className="quotation-category-add"
+                            onClick={() => onAddRow(section, category.id)}
+                            aria-label={`Agregar otro ítem en ${category.label}`}
+                          >
+                            <span aria-hidden="true">+</span> Agregar otro
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+                {freeRows.length > 0 && (
+                  <ul className="quotation-rows">
+                    {freeRows.map((row) => (
+                      <li key={row.id}>
+                        <PreviewRow
+                          row={row}
+                          calculated={calculatedById.get(row.id)}
+                          onEdit={() => onEditRow(row.id)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button
+                  type="button"
+                  className="quotation-add-row"
+                  onClick={() => onAddRow(section)}
+                  aria-label={`Agregar otro concepto en ${accessibleLabel}`}
+                >
+                  <span aria-hidden="true">+</span> Agregar otro
+                </button>
+              </section>
+            )
+          })}
           {quotation.notes.trim() && (
             <div className="quotation-notes">
               <span className="quotation-notes-label">OBSERVACIONES</span>

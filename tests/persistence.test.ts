@@ -5,6 +5,7 @@ import type { CatalogItem, Quotation, QuotationRow, Workspace } from '../src/fea
 import { loadWorkspace, parseWorkspace, saveWorkspace, serializeWorkspace, STORAGE_KEY } from '../src/features/quotation/persistence.ts'
 import type { StorageAdapter } from '../src/features/quotation/persistence.ts'
 import type { BlueDollarQuote } from '../src/features/quotation/exchange-quote.ts'
+import { AUDIO_CATEGORIES } from '../src/features/quotation/audio-categories.ts'
 
 function createFixture(): Workspace {
   return {
@@ -24,6 +25,64 @@ function createFixture(): Workspace {
     catalog: [{ id: 'catalog-1', section: 'equipment', concept: 'Equipo de prueba', detail: 'Descripción actualizada', currency: 'ARS', unitPrice: '91,25' }],
   }
 }
+
+test('all audio categories roundtrip with identities, raw draft fields and mixed price states intact', () => {
+  const workspace = createFixture()
+  workspace.quotations[0].rows = AUDIO_CATEGORIES.map((category, index) => ({
+    ...workspace.quotations[0].rows[index % 4]!, id: `categorized-${index}`, section: category.section,
+    audioCategory: category.id, currency: index % 2 === 0 ? 'USD' : 'ARS',
+    concept: `Synthetic ${category.id}`, detail: ` Synthetic detail ${index}\n `,
+  }))
+  const snapshot = structuredClone(workspace)
+  assert.deepEqual(parseWorkspace(serializeWorkspace(workspace)), snapshot)
+  assert.deepEqual(workspace, snapshot)
+  const duplicated = duplicateQuotation(workspace.quotations[0])
+  assert.deepEqual(duplicated.rows.map((row) => row.audioCategory), AUDIO_CATEGORIES.map((category) => category.id))
+  assert.equal(duplicated.rows.some((row) => workspace.quotations[0].rows.some((original) => row.id === original.id)), false)
+})
+
+test('unknown, malformed or incompatible audio categories discard only optional classification', () => {
+  const workspace = createFixture()
+  const first = workspace.quotations[0].rows[0]!
+  for (const audioCategory of [null, '', 'other', 'AMP', 'labor', 5, true, {}, [], { id: 'amplifier-dsp' }]) {
+    const input = {
+      ...workspace,
+      quotations: [{ ...workspace.quotations[0], rows: [{ ...first, audioCategory }] }],
+    }
+    const restored = parseWorkspace(JSON.stringify(input))
+    assert.deepEqual(restored.quotations[0].rows, [first])
+    assert.equal(Object.hasOwn(restored.quotations[0].rows[0]!, 'audioCategory'), false)
+  }
+  const invalidExtras = {
+    ...workspace,
+    quotations: [{ ...workspace.quotations[0], rows: [{ ...workspace.quotations[0].rows[1], audioCategory: 'subwoofer' }] }],
+  }
+  assert.deepEqual(parseWorkspace(JSON.stringify(invalidExtras)).quotations[0].rows, [workspace.quotations[0].rows[1]])
+})
+
+test('legacy rows keep their existing order and never infer a category from descriptions', () => {
+  const workspace = createFixture()
+  workspace.quotations[0].rows[0].concept = 'Amplificador / DSP'
+  workspace.quotations[0].rows[1].concept = 'Mano de obra'
+  const restored = parseWorkspace(serializeWorkspace(workspace))
+  assert.deepEqual(restored, workspace)
+  assert.equal(restored.quotations[0].rows.every((row) => !Object.hasOwn(row, 'audioCategory')), true)
+})
+
+test('valid audio metadata never relaxes required commercial field validation', () => {
+  const workspace = createFixture()
+  const first = { ...workspace.quotations[0].rows[0], audioCategory: 'amplifier-dsp' }
+  for (const fields of [
+    { currency: 'EUR' }, { concept: null }, { detail: 1 }, { quantity: false },
+    { unitPrice: 0 }, { priceState: 'free' }, { section: 'invalid' },
+  ]) {
+    const input = {
+      ...workspace,
+      quotations: [{ ...workspace.quotations[0], rows: [{ ...first, ...fields }] }],
+    }
+    assert.throws(() => parseWorkspace(JSON.stringify(input)))
+  }
+})
 
 test('legacy rows inherit the original quotation currency without changing raw data or identities', () => {
   for (const currency of ['ARS', 'USD'] as const) {

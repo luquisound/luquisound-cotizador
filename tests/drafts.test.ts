@@ -4,10 +4,24 @@ import { createQuotation, createWorkspace, duplicateQuotation, ensureBlankQuotat
 import type { Quotation, Workspace } from '../src/features/quotation/model.ts'
 import { loadWorkspace, parseWorkspace, saveWorkspace, serializeWorkspace } from '../src/features/quotation/persistence.ts'
 import type { StorageAdapter } from '../src/features/quotation/persistence.ts'
+import { AUDIO_CATEGORIES } from '../src/features/quotation/audio-categories.ts'
 
 function createEmptyWorkspace(): Workspace {
   return { version: 1, activeQuotationId: null, quotations: [], catalog: [] }
 }
+
+test('audio classification alone remains blank and does not create recoverable draft content', () => {
+  for (const category of AUDIO_CATEGORIES) {
+    const quotation = createQuotation()
+    quotation.rows[0] = { ...quotation.rows[0]!, section: category.section, audioCategory: category.id }
+    assert.equal(hasQuotationContent(quotation), false)
+    const workspace: Workspace = { version: 1, activeQuotationId: quotation.id, quotations: [quotation], catalog: [] }
+    assert.deepEqual(prepareWorkspaceForStorage(workspace, new Set()), createEmptyWorkspace())
+    quotation.rows[0].concept = 'Synthetic unfinished item'
+    assert.equal(hasQuotationContent(quotation), true)
+    assert.deepEqual(prepareWorkspaceForStorage(workspace, new Set()), workspace)
+  }
+})
 
 test('default titles, blank copy titles and placeholder rows have no quotation content', () => {
   for (const title of ['', '   ', 'PRESUPUESTO', ' presupuesto ', 'Presupuesto (copia)', ' PRESUPUESTO (COPIA) (copia) ']) {

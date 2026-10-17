@@ -3,6 +3,7 @@ import { CATALOG_REFERENCE_MAX_PRICES } from './catalog.ts'
 import { parseCatalogStockFields } from './catalog-stock.ts'
 import { parseExchangeRate } from './exchange.ts'
 import { readStoredBlueDollarQuote } from './exchange-quote.ts'
+import { readAudioCategory } from './audio-categories.ts'
 import type { CatalogItem, CatalogReferencePrice, CatalogSource, Currency, PriceState, Quotation, QuotationRow, RowSection, Workspace } from './model.ts'
 
 export interface StorageAdapter {
@@ -78,9 +79,12 @@ function readPriceState(value: unknown): PriceState {
 
 function readRow(value: unknown, identifiers: Set<string>, legacyCurrency: Currency): QuotationRow {
   const row = readRecord(value)
+  const section = readSection(row.section)
+  const audioCategory = readAudioCategory(row.audioCategory, section)
   return {
     id: readIdentifier(row.id, identifiers),
-    section: readSection(row.section),
+    section,
+    ...(audioCategory === undefined ? {} : { audioCategory }),
     currency: row.currency === undefined ? legacyCurrency : readCurrency(row.currency),
     concept: readString(row.concept, 500),
     detail: readString(row.detail, 2000),

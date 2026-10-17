@@ -1,6 +1,7 @@
 import type { CatalogReferencePrice, CatalogSource } from './catalog.ts'
 import type { CatalogStockSnapshot } from './catalog-stock.ts'
 import type { BlueDollarQuote } from './exchange-quote.ts'
+import type { AudioCategory } from './audio-categories.ts'
 
 export type { CatalogReferencePrice, CatalogSource } from './catalog.ts'
 export type { CatalogStockSnapshot } from './catalog-stock.ts'
@@ -12,6 +13,7 @@ export type PriceState = 'pending' | 'priced' | 'included'
 export interface QuotationRow {
   id: string
   section: RowSection
+  audioCategory?: AudioCategory
   currency: Currency
   concept: string
   detail: string
