@@ -1,7 +1,11 @@
-import { useEffect, useEffectEvent, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { calculateQuotation } from './calculation'
-import { createQuotation, createRow, createWorkspace, duplicateQuotation, ensureBlankQuotation, hasQuotationContent, prepareWorkspaceForStorage, type Quotation, type RowSection, type Workspace } from './model'
-import { loadWorkspace, parseWorkspace, saveWorkspace, serializeWorkspace, STORAGE_KEY } from './persistence'
+import { createQuotation, createRow, hasQuotationContent, type CatalogItem, type Quotation, type RowSection } from './model'
+import { serializeWorkspace, type WorkspaceSaveResult } from './persistence'
+import {
+  CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
+  parseCatalogBackup, saveCatalog, saveCurrentQuotation, serializeCatalogBackup,
+} from './working-storage'
 import { createQuotationFile, downloadQuotationFile, shareQuotationFile } from './export'
 import { QuotationPreview } from './QuotationPreview'
 import { HeaderEditor, RowEditor } from './QuotationDialogs'
@@ -12,24 +16,31 @@ import { exchangeRateDescription, type BlueDollarQuote } from './exchange-quote'
 import { startExchangeRateRefresh, type ExchangeRefreshState } from './exchange-refresh'
 import { parseExchangeRate } from './exchange'
 
-interface InitialWorkspace { workspace: Workspace; error: string | null; stored: boolean; persistedIds: string[] }
-
-function initialWorkspace(): InitialWorkspace {
+function initialData() {
   try {
-    const loaded = loadWorkspace(window.localStorage)
-    const persistedIds = loaded.stored ? loaded.workspace.quotations.map((entry) => entry.id) : []
-    return { ...loaded, persistedIds, workspace: loaded.workspace.quotations.length ? loaded.workspace : ensureBlankQuotation(loaded.workspace) }
+    const storage = window.localStorage
+    return { catalog: loadCatalog(storage), current: loadCurrentQuotation(storage) }
+  } catch {
+    return {
+      catalog: { catalog: [] as CatalogItem[], error: 'El almacenamiento del catálogo no está disponible.', stored: false },
+      current: { quotation: createQuotation(), error: 'No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.' },
+    }
   }
-  catch { return { workspace: createWorkspace(), error: 'El almacenamiento de este navegador no está disponible. Podés trabajar y descargar un respaldo.', stored: false, persistedIds: [] } }
 }
 
 export default function QuotationApp() {
-  const [initial] = useState(initialWorkspace)
-  const [workspace, setWorkspace] = useState(initial.workspace)
-  const [storageEnabled, setStorageEnabled] = useState(!initial.error)
-  const [storageError, setStorageError] = useState(initial.error)
-  const [savedWorkspace, setSavedWorkspace] = useState<Workspace | null>(null)
-  const [savedIds, setSavedIds] = useState(initial.persistedIds)
+  const [initial] = useState(initialData)
+  const [quotation, setQuotation] = useState(initial.current.quotation)
+  const [catalog, setCatalog] = useState(initial.catalog.catalog)
+  const quotationRef = useRef(initial.current.quotation)
+  const catalogRef = useRef(initial.catalog.catalog)
+  const [catalogStorageEnabled, setCatalogStorageEnabled] = useState(!initial.catalog.error)
+  const [recoveryEnabled, setRecoveryEnabled] = useState(!initial.current.error)
+  const catalogWriteAllowed = useRef(!initial.catalog.error)
+  const recoveryWriteAllowed = useRef(!initial.current.error)
+  const [catalogError, setCatalogError] = useState(initial.catalog.error)
+  const [recoveryError, setRecoveryError] = useState(initial.current.error)
+  const [savedCatalog, setSavedCatalog] = useState<CatalogItem[] | null>(initial.catalog.stored ? initial.catalog.catalog : null)
   const [dialog, setDialog] = useState<'header' | 'catalog' | null>(null)
   const [editingRowId, setEditingRowId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
@@ -39,43 +50,17 @@ export default function QuotationApp() {
   const [sharedCatalogStatus, setSharedCatalogStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
   const [sharedCatalogAttempt, setSharedCatalogAttempt] = useState(0)
   const [rateState, setRateState] = useState<(ExchangeRefreshState & { id: string }) | null>(null)
-  const [rateWorkspaceVersion, setRateWorkspaceVersion] = useState(0)
+  const [rateCheckedAt, setRateCheckedAt] = useState(Date.now)
   const rateRefresh = useRef<ReturnType<typeof startExchangeRateRefresh> | null>(null)
-  const importInput = useRef<HTMLInputElement>(null)
-  const workspaceMenu = useRef<HTMLDetailsElement>(null)
+  const catalogButton = useRef<HTMLButtonElement>(null)
   const generation = useRef(0)
-  const pausedByAnotherTab = useRef(false)
-  const persistedIds = useRef(new Set(initial.persistedIds))
-  const storageExists = useRef(initial.stored)
-  const quotation = workspace.quotations.find((entry) => entry.id === workspace.activeQuotationId) ?? workspace.quotations[0]!
   const preparedFile = prepared?.quotation === quotation ? prepared.file : null
-  const emptyInMemory = !hasQuotationContent(quotation) && !savedIds.includes(quotation.id)
-  const saveStatus = !storageEnabled ? 'Guardado local desactivado' : storageError ? 'No se pudo guardar' : emptyInMemory ? 'Nuevo presupuesto · sin guardar' : savedWorkspace === workspace ? 'Guardado en este navegador' : 'Guardando…'
-  const catalogSaveStatus = !storageEnabled ? 'Guardado local pausado' : storageError ? 'No se pudo guardar el catálogo' : savedWorkspace === workspace ? 'Guardado en este navegador' : 'Guardando catálogo…'
-  const storedEmptyCount = workspace.quotations.filter((entry) => savedIds.includes(entry.id) && !hasQuotationContent(entry)).length
+  const catalogSaveStatus = !catalogStorageEnabled ? 'Guardado del catálogo pausado' : catalogError ? 'No se pudo guardar el catálogo' : savedCatalog === catalog ? 'Catálogo y precios conservados en este navegador' : 'Guardando catálogo…'
   const calculation = calculateQuotation(quotation)
   const editingRow = quotation.rows.find((row) => row.id === editingRowId)
   const rateLoading = rateState?.id === quotation.id && rateState.loading
   const rateError = rateState?.id === quotation.id ? rateState.error : null
   const displayedRate = parseExchangeRate(quotation.exchangeRate ?? '')
-
-  useEffect(() => {
-    function closeOutside(event: PointerEvent) {
-      if (event.target instanceof Node && !workspaceMenu.current?.contains(event.target)) workspaceMenu.current?.removeAttribute('open')
-    }
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape' && workspaceMenu.current?.open) {
-        workspaceMenu.current.removeAttribute('open')
-        workspaceMenu.current.querySelector('summary')?.focus()
-      }
-    }
-    document.addEventListener('pointerdown', closeOutside)
-    document.addEventListener('keydown', closeOnEscape)
-    return () => {
-      document.removeEventListener('pointerdown', closeOutside)
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [])
 
   function retrySharedCatalog() {
     setSharedCatalogStatus('loading')
@@ -84,68 +69,75 @@ export default function QuotationApp() {
 
   function closeCatalog() {
     setDialog(null)
-    // Wait until the modal is removed and the menu can receive focus again.
-    window.requestAnimationFrame(() => workspaceMenu.current?.querySelector('summary')?.focus())
+    // Restore focus after the modal is removed and the page is no longer inert.
+    window.requestAnimationFrame(() => catalogButton.current?.focus())
+  }
+
+  function updateQuotation(next: Quotation): boolean {
+    try {
+      serializeWorkspace({ version: 1, activeQuotationId: next.id, quotations: [next], catalog: [] })
+    } catch {
+      window.alert('El presupuesto supera el tamaño permitido. Reducí su contenido antes de continuar.')
+      return false
+    }
+    generation.current += 1
+    setPreparing(false)
+    setMessage('')
+    const updated = { ...next, updatedAt: new Date().toISOString() }
+    quotationRef.current = updated
+    setQuotation(updated)
+    return true
   }
 
   const applyDollarQuote = useEffectEvent((id: string, quote: BlueDollarQuote): boolean => {
-    if (!storageEnabled || pausedByAnotherTab.current || workspace.activeQuotationId !== id) return false
-    const current = workspace.quotations.find((entry) => entry.id === id)
-    if (!current) return false
+    const current = quotationRef.current
+    if (current.id !== id) return false
     return updateQuotation({ ...current, exchangeRate: quote.rate, exchangeRateQuote: quote })
   })
-
   const currentDollarQuote = useEffectEvent(() => quotation.exchangeRateQuote)
 
   useEffect(() => {
-    if (!storageEnabled) return
     const refresh = startExchangeRateRefresh({
       initialQuote: currentDollarQuote(),
       isActive: () => document.visibilityState !== 'hidden' && navigator.onLine,
       onQuote: (quote) => applyDollarQuote(quotation.id, quote),
-      onState: (state) => setRateState({ id: quotation.id, ...state }),
+      onState: (state) => { setRateState({ id: quotation.id, ...state }); setRateCheckedAt(Date.now()) },
     })
     rateRefresh.current = refresh
-    window.addEventListener('focus', refresh.check)
-    window.addEventListener('online', refresh.check)
-    document.addEventListener('visibilitychange', refresh.check)
+    function checkRate() {
+      setRateCheckedAt(Date.now())
+      refresh.check()
+    }
+    window.addEventListener('focus', checkRate)
+    window.addEventListener('online', checkRate)
+    document.addEventListener('visibilitychange', checkRate)
     return () => {
       refresh.stop()
       if (rateRefresh.current === refresh) rateRefresh.current = null
-      window.removeEventListener('focus', refresh.check)
-      window.removeEventListener('online', refresh.check)
-      document.removeEventListener('visibilitychange', refresh.check)
+      window.removeEventListener('focus', checkRate)
+      window.removeEventListener('online', checkRate)
+      document.removeEventListener('visibilitychange', checkRate)
     }
-  }, [quotation.id, rateWorkspaceVersion, storageEnabled])
+  }, [quotation.id])
 
-  function persistSnapshot(next: Workspace) {
-    const snapshot = prepareWorkspaceForStorage(next, persistedIds.current)
-    if (!storageExists.current && snapshot.quotations.length === 0 && snapshot.catalog.length === 0) return { ok: true, error: null }
-    const result = saveWorkspace(window.localStorage, snapshot)
-    if (result.ok) {
-      storageExists.current = true
-      const nextIds = snapshot.quotations.map((entry) => entry.id)
-      persistedIds.current = new Set(nextIds)
-      setSavedIds(nextIds)
+  function updateCatalog(next: CatalogItem[]): boolean {
+    try { serializeCatalogBackup(next) }
+    catch {
+      setCatalogError('El catálogo supera el tamaño o el formato permitido. Tus opciones actuales se conservan.')
+      return false
     }
-    return result
+    catalogRef.current = next
+    setCatalog(next)
+    return true
   }
 
-  useEffect(() => {
-    generation.current += 1
-  }, [quotation])
-
   const applySharedCatalog = useEffectEvent((document: CatalogImportDocument) => {
-    if (!storageEnabled || pausedByAnotherTab.current) {
-      setSharedCatalogStatus('error')
-      return
-    }
     try {
-      const catalog = mergeSharedCatalog(workspace.catalog, document)
-      if (catalog !== workspace.catalog) {
-        const next = { ...workspace, catalog }
-        serializeWorkspace(next)
-        setWorkspace(next)
+      const current = catalogRef.current
+      const next = mergeSharedCatalog(current, document)
+      if (next !== current && !updateCatalog(next)) {
+        setSharedCatalogStatus('error')
+        return
       }
       setSharedCatalogStatus('ready')
     } catch {
@@ -173,167 +165,180 @@ export default function QuotationApp() {
   }, [sharedCatalogAttempt])
 
   useEffect(() => {
-    if (!storageEnabled) return
+    if (!catalogStorageEnabled) return
     const timer = window.setTimeout(() => {
-      if (pausedByAnotherTab.current) return
+      if (!catalogWriteAllowed.current || catalogRef.current !== catalog) return
       try {
-        const result = persistSnapshot(workspace)
-        if (result.ok) { setStorageError(null); setSavedWorkspace(workspace) }
-        else setStorageError(result.error)
-      } catch { setStorageError('No se pudo acceder al almacenamiento. Descargá un respaldo para conservar tu trabajo.') }
+        const result = saveCatalog(window.localStorage, catalog)
+        setCatalogError(result.error)
+        if (result.ok) setSavedCatalog(catalog)
+      } catch { setCatalogError('No se pudo acceder al catálogo guardado. Descargá un respaldo del catálogo.') }
     }, 250)
     return () => window.clearTimeout(timer)
-  }, [workspace, storageEnabled])
+  }, [catalog, catalogStorageEnabled])
+
+  useEffect(() => {
+    if (!recoveryEnabled) return
+    const timer = window.setTimeout(() => {
+      if (!recoveryWriteAllowed.current || quotationRef.current !== quotation) return
+      try { setRecoveryError(saveCurrentQuotation(window.localStorage, quotation).error) }
+      catch { setRecoveryError('No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.') }
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [quotation, recoveryEnabled])
 
   useEffect(() => {
     function handleStorage(event: StorageEvent) {
-      if (event.key !== STORAGE_KEY && event.key !== null) return
-      pausedByAnotherTab.current = true
-      rateRefresh.current?.stop()
-      setRateState(null)
-      setStorageEnabled(false)
-      setStorageError('Otra pestaña cambió los datos guardados. El guardado se pausó para evitar sobrescribirlos. Descargá un respaldo de esta pestaña y recargá para recuperar la versión guardada.')
+      if (event.key === CATALOG_STORAGE_KEY || event.key === null) {
+        catalogWriteAllowed.current = false
+        setCatalogStorageEnabled(false)
+        setCatalogError('Otra pestaña cambió el catálogo. Su guardado se pausó para evitar sobrescribirlo. Conservá un respaldo antes de habilitarlo.')
+      }
+      if (event.key === CURRENT_QUOTATION_STORAGE_KEY || event.key === null) {
+        recoveryWriteAllowed.current = false
+        setRecoveryEnabled(false)
+        setRecoveryError('Otra pestaña cambió el presupuesto en curso. La recuperación de esta pestaña se pausó; podés seguir editando y compartirlo. Recargá para abrir el de la otra pestaña o usá «Nuevo» para empezar otro.')
+      }
     }
     function flush() {
-      if (!storageEnabled || pausedByAnotherTab.current) return
-      try { persistSnapshot(workspace) } catch { /* The visible save status remains authoritative. */ }
+      if (catalogWriteAllowed.current) {
+        try { saveCatalog(window.localStorage, catalogRef.current) } catch { /* Preserve in-memory data when storage is unavailable. */ }
+      }
+      if (recoveryWriteAllowed.current) {
+        try { saveCurrentQuotation(window.localStorage, quotationRef.current) } catch { /* Editing and export remain available. */ }
+      }
     }
     window.addEventListener('storage', handleStorage)
     window.addEventListener('pagehide', flush)
-    return () => { window.removeEventListener('storage', handleStorage); window.removeEventListener('pagehide', flush) }
-  }, [workspace, storageEnabled])
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [catalog, quotation])
 
-  function commitWorkspace(next: Workspace): boolean {
-    try { serializeWorkspace(next) }
-    catch {
-      window.alert('No se aplicaron estos cambios porque superarían el límite de guardado y respaldo. Descargá un respaldo y eliminá borradores que ya no necesitás antes de continuar. Tus datos actuales se conservan.')
-      return false
-    }
-    setWorkspace(next)
-    return true
-  }
-  function updateQuotation(next: Quotation): boolean {
+  function newQuotation() {
+    if ((hasQuotationContent(quotation) || recoveryError) && !window.confirm('¿Empezar otro presupuesto? Se reemplazará el trabajo en curso. Descargá o compartí su imagen antes si querés conservarlo.')) return
+    if (!hasQuotationContent(quotation) && !recoveryError) return
+    rateRefresh.current?.stop()
+    generation.current += 1
+    const next = createQuotation()
+    let result: WorkspaceSaveResult
+    try { result = saveCurrentQuotation(window.localStorage, next, { overwriteInvalid: true }) }
+    catch { result = { ok: false, error: 'No se pudo reiniciar la recuperación. Al recargar podría aparecer el presupuesto anterior.' } }
+    recoveryWriteAllowed.current = result.ok
+    setRecoveryEnabled(result.ok)
+    setRecoveryError(result.ok ? null : 'No se pudo reiniciar la recuperación. Al recargar podría aparecer el presupuesto anterior.')
+    quotationRef.current = next
+    setQuotation(next)
+    setRateState(null)
+    setDialog(null)
+    setEditingRowId(null)
+    setPrepared(null)
+    setPreparing(false)
+    setSharing(false)
     setMessage('')
-    return commitWorkspace({ ...workspace, quotations: workspace.quotations.map((entry) => entry.id === next.id ? { ...next, updatedAt: new Date().toISOString() } : entry) })
   }
-  function addQuotation(duplicate = false) {
-    if (!duplicate || !hasQuotationContent(quotation)) {
-      const next = ensureBlankQuotation(workspace)
-      if (next.quotations.length <= 500) commitWorkspace(next)
-      else setMessage('Llegaste al máximo de 500 borradores. Descargá un respaldo y eliminá los que ya no necesitás.')
-      return
-    }
-    if (workspace.quotations.length >= 500) { setMessage('Llegaste al máximo de 500 borradores. Descargá un respaldo y eliminá los que ya no necesitás.'); return }
-    setMessage('')
-    const next = duplicateQuotation(quotation)
-    commitWorkspace({ ...workspace, activeQuotationId: next.id, quotations: [...workspace.quotations, next] })
-  }
+
   function addRow(section: RowSection) {
     if (quotation.rows.length >= 1000) { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
     const row = createRow(section)
     if (updateQuotation({ ...quotation, rows: [...quotation.rows, row] })) setEditingRowId(row.id)
   }
-  function removeQuotation() {
-    if (!window.confirm('¿Eliminar este borrador? Descargá un respaldo antes si querés conservarlo.')) return
-    const remaining = workspace.quotations.filter((entry) => entry.id !== quotation.id)
-    const next = remaining.length ? remaining : [createQuotation()]
-    setWorkspace({ ...workspace, quotations: next, activeQuotationId: next[0]!.id })
-  }
-  function removeStoredEmptyQuotations() {
-    if (!window.confirm(`¿Eliminar ${storedEmptyCount} borradores guardados sin contenido? Los presupuestos con contenido se conservarán.`)) return
-    const remaining = workspace.quotations.filter((entry) => !savedIds.includes(entry.id) || hasQuotationContent(entry))
-    const activeQuotationId = remaining.some((entry) => entry.id === workspace.activeQuotationId) ? workspace.activeQuotationId : remaining[0]?.id ?? null
-    const next = { ...workspace, quotations: remaining, activeQuotationId }
-    commitWorkspace(remaining.length ? next : ensureBlankQuotation(next))
-  }
-  function quotationLabel(entry: Quotation): string {
-    if (!hasQuotationContent(entry)) return savedIds.includes(entry.id) ? `${entry.title || 'Sin título'} · vacío guardado` : 'Nuevo presupuesto · sin guardar'
-    const detail = entry.subtitle.trim() || entry.rows.find((row) => row.concept.trim())?.concept.trim() || ''
-    return `${entry.title || 'Sin título'}${detail ? ` · ${detail}` : ''}`
-  }
-  function exportBackup() {
+
+  function exportCatalogBackup() {
     try {
-      const file = new File([serializeWorkspace(prepareWorkspaceForStorage(workspace, persistedIds.current))], `luquisound-respaldo-${new Date().toISOString().slice(0, 10)}.json`, { type: 'application/json' })
-      downloadQuotationFile(file); setMessage('Respaldo descargado. Puede contener información de tus presupuestos: guardalo en un lugar privado.')
-    } catch { setMessage('No se pudo crear el respaldo: los datos superan el tamaño permitido de 5 MB. Reducí la cantidad de borradores o el contenido antes de reintentar.') }
+      const file = new File([serializeCatalogBackup(catalog)], 'luquisound-catalogo-respaldo-' + new Date().toISOString().slice(0, 10) + '.json', { type: 'application/json' })
+      downloadQuotationFile(file)
+      setMessage('Respaldo del catálogo descargado. Guardalo en un lugar privado.')
+    } catch { setCatalogError('No se pudo crear el respaldo del catálogo. Revisá su tamaño y volvé a intentar.') }
   }
-  async function importBackup(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]; event.target.value = ''
-    if (!file) return
+
+  async function importCatalogBackup(file: File, signal?: AbortSignal): Promise<boolean> {
+    if (file.size > 5 * 1024 * 1024) throw new Error('El respaldo supera el máximo de 5 MB.')
+    const next = parseCatalogBackup(await file.text())
+    if (signal?.aborted) return false
+    if (!window.confirm('¿Reemplazar el catálogo y sus precios por los del respaldo? El presupuesto en curso se conserva.')) return false
+    if (signal?.aborted) return false
+    let result: WorkspaceSaveResult
+    try { result = saveCatalog(window.localStorage, next, { overwriteInvalid: true }) }
+    catch { throw new Error('No se pudo restaurar el catálogo en este navegador.') }
+    if (!result.ok) {
+      setCatalogError(result.error)
+      throw new Error(result.error ?? 'No se pudo restaurar el catálogo.')
+    }
+    catalogWriteAllowed.current = true
+    setCatalogStorageEnabled(true)
+    setCatalogError(null)
+    catalogRef.current = next
+    setCatalog(next)
+    setSavedCatalog(next)
+    return true
+  }
+
+  function enableCatalogStorage() {
+    if (!window.confirm('¿Habilitar el guardado del catálogo? Sus datos guardados se reemplazarán por las opciones y precios que ves ahora.')) return
     try {
-      if (file.size > 5 * 1024 * 1024) throw new Error('El respaldo supera el máximo de 5 MB.')
-      const next = parseWorkspace(await file.text())
-      if (!window.confirm('Importar reemplaza los borradores y el catálogo de este navegador. ¿Continuar?')) return
-      rateRefresh.current?.stop()
-      setRateState(null)
-      setRateWorkspaceVersion((version) => version + 1)
-      pausedByAnotherTab.current = false
-      const nextIds = next.quotations.map((entry) => entry.id)
-      persistedIds.current = new Set(nextIds); storageExists.current = true; setSavedIds(nextIds)
-      setWorkspace(next.quotations.length ? next : ensureBlankQuotation(next)); setStorageEnabled(true); setMessage('Respaldo importado.'); setStorageError(null)
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo importar el respaldo.') }
+      const result = saveCatalog(window.localStorage, catalog, { overwriteInvalid: true })
+      setCatalogError(result.error)
+      if (result.ok) {
+        catalogWriteAllowed.current = true
+        setCatalogStorageEnabled(true)
+        setSavedCatalog(catalog)
+      }
+    } catch { setCatalogError('No se pudo habilitar el guardado del catálogo. Conservá un respaldo.') }
   }
+
   async function prepareImage() {
-    if (!calculation.canExport) { setMessage('Completá los conceptos, precios y la cotización USD / peso antes de preparar la imagen.'); return }
+    if (!calculation.canExport) { setMessage('Completá los conceptos, precios y la cotización del dólar antes de preparar la imagen.'); return }
     const request = ++generation.current
-    setPreparing(true); setMessage('Preparando imagen…')
+    setPreparing(true)
+    setMessage('Preparando imagen…')
     try {
       const file = await createQuotationFile(quotation)
-      if (request === generation.current) { setPrepared({ file, quotation }); setMessage('Imagen lista. Podés descargarla o abrir el menú para compartir.') }
-    } catch (error) { if (request === generation.current) setMessage(error instanceof Error ? error.message : 'No se pudo preparar la imagen. Intentá otra vez.') }
-    finally { setPreparing(false) }
+      if (request === generation.current) {
+        setPrepared({ file, quotation })
+        setMessage('Imagen lista. Podés descargarla o compartirla y seguir ajustando el presupuesto.')
+      }
+    } catch (error) {
+      if (request === generation.current) setMessage(error instanceof Error ? error.message : 'No se pudo preparar la imagen. Intentá otra vez.')
+    } finally {
+      if (request === generation.current) setPreparing(false)
+    }
   }
+
   async function shareImage() {
     if (!preparedFile || sharing) return
+    const request = generation.current
     setSharing(true)
     try {
       const result = await shareQuotationFile(preparedFile, navigator)
-      if (result === 'unsupported') { downloadQuotationFile(preparedFile); setMessage('Este navegador no permite compartir archivos. Se descargó la imagen para compartirla manualmente.') }
-      else if (result === 'cancelled') setMessage('Compartir cancelado. La imagen sigue disponible.')
+      if (request !== generation.current) return
+      if (result === 'unsupported') {
+        downloadQuotationFile(preparedFile)
+        setMessage('Este navegador no permite compartir archivos. Se descargó la imagen para compartirla manualmente.')
+      } else if (result === 'cancelled') setMessage('Compartir cancelado. La imagen sigue disponible.')
       else setMessage('Menú de compartir cerrado. El envío se confirma en la aplicación que elijas.')
-    } catch { setMessage('No se pudo abrir el menú para compartir. Podés descargar la imagen e intentarlo desde tu galería.') }
-    finally { setSharing(false) }
+    } catch {
+      if (request === generation.current) setMessage('No se pudo abrir el menú para compartir. Podés descargar la imagen.')
+    } finally {
+      setSharing(false)
+    }
   }
 
   return (
     <div className="quotation-workspace">
       <a className="skip-link" href="#quotation">Ir al presupuesto</a>
-      <header className="workspace-header"><div className="workspace-brand"><img src="/brand/luquisound-horizontal.svg" alt="Luquisound" width="176" height="20" /><h1 className="sr-only">Cotizador Luquisound</h1></div><button className="button primary" type="button" onClick={() => addQuotation()}>+ Nuevo</button></header>
-      <main className="workspace-main">
-        <div className="workspace-toolbar">
-          <label className="draft-selector"><span className="sr-only">Presupuesto</span>
-            <select aria-label="Elegir borrador" value={quotation.id} onChange={(event) => setWorkspace({ ...workspace, activeQuotationId: event.target.value })}>
-              {workspace.quotations.map((entry) => <option key={entry.id} value={entry.id}>{quotationLabel(entry)}</option>)}
-            </select>
-          </label>
-          <details ref={workspaceMenu} className="workspace-menu">
-            <summary>Opciones</summary>
-            <div onClick={(event) => {
-              if (event.target instanceof Element && event.target.closest('button')) {
-                workspaceMenu.current?.removeAttribute('open')
-                workspaceMenu.current?.querySelector('summary')?.focus()
-              }
-            }}>
-              <button type="button" onClick={() => addQuotation(true)}>Duplicar presupuesto</button>
-              <button type="button" onClick={() => setDialog('catalog')}>Mi catálogo</button>
-              <button type="button" onClick={exportBackup}>Descargar respaldo</button>
-              <button type="button" onClick={() => importInput.current?.click()}>Importar respaldo</button>
-              <button type="button" className="danger" onClick={removeQuotation}>Eliminar borrador</button>
-              {storedEmptyCount > 0 && <button type="button" className="danger" onClick={removeStoredEmptyQuotations}>Eliminar vacíos guardados ({storedEmptyCount})</button>}
-              <div className="workspace-menu-info">
-                <p role="status">{sharedCatalogStatus === 'loading' ? 'Cargando catálogo compartido…'
-                  : sharedCatalogStatus === 'ready' ? 'Catálogo compartido disponible.'
-                    : sharedCatalogStatus === 'unavailable' ? 'Catálogo compartido no disponible. Podés usar tu catálogo o escribir conceptos.'
-                      : 'No se pudo actualizar el catálogo. Se conserva tu catálogo guardado.'}</p>
-                {(sharedCatalogStatus === 'error' || sharedCatalogStatus === 'unavailable') && <button type="button" onClick={retrySharedCatalog}>Reintentar carga del catálogo</button>}
-                <p>Presupuestos y precios solo en este navegador. Usá respaldos para conservarlos o llevarlos a otro dispositivo. Borrar los datos del navegador puede eliminarlos.</p>
-              </div>
-            </div>
-          </details>
+      <header className="workspace-header">
+        <div className="workspace-brand"><img src="/brand/luquisound-horizontal.svg" alt="Luquisound" width="176" height="20" /><h1 className="sr-only">Cotizador Luquisound</h1></div>
+        <div className="workspace-header-actions">
+          <button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Catálogo</button>
+          <button className="button primary" type="button" onClick={newQuotation}>+ Nuevo</button>
         </div>
-        <p className="workspace-status" role="status">{saveStatus}</p>
-        {sharedCatalogStatus === 'error' && <div className="notice error" role="status"><p>No se pudo actualizar el catálogo compartido. Podés seguir usando el catálogo guardado.</p><button type="button" className="button secondary" onClick={retrySharedCatalog}>Reintentar carga del catálogo</button></div>}
-        {storageError && <div className="notice error" role="alert"><p>{storageError}</p><button className="button secondary" onClick={exportBackup}>Descargar respaldo</button>{!storageEnabled && <button className="button secondary" onClick={() => { if (window.confirm('Habilitar el guardado puede reemplazar datos locales que no pudieron recuperarse. ¿Continuar?')) { pausedByAnotherTab.current = false; setStorageEnabled(true) } }}>Habilitar guardado</button>}</div>}
+      </header>
+      <main className="workspace-main">
+        {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
+        {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
+        {sharedCatalogStatus === 'error' && <div className="notice error" role="status"><p>No se pudo actualizar el catálogo compartido. Podés seguir usando tus opciones.</p><button className="button secondary" type="button" onClick={retrySharedCatalog}>Reintentar catálogo compartido</button></div>}
         <details className="exchange-panel">
           <summary><span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span></summary>
           <div className="exchange-panel-details">
@@ -342,17 +347,20 @@ export default function QuotationApp() {
             {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
           </div>
         </details>
-        {quotation.exchangeRateQuote && Date.now() - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
+        {quotation.exchangeRateQuote && rateCheckedAt - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
         {rateError && <p className="exchange-warning" role="alert">{rateError}</p>}
-        <p className="editing-hint">Tocá el título o un concepto para editar.</p>
+        <p className="editing-hint">Agregá productos o trabajos. Tocá el título o un concepto para editar.</p>
         <div id="quotation"><QuotationPreview quotation={quotation} onEditHeader={() => setDialog('header')} onEditRow={setEditingRowId} onAddRow={addRow} /></div>
-        {!calculation.canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({calculation.issues.length})</summary><ul>{calculation.issues.map((issue, index) => <li key={`${index}-${issue}`}>{issue}</li>)}</ul>{!calculation.conversion.ok && <button type="button" className="button secondary" onClick={() => setDialog('header')}>Revisar cotización del dólar</button>}</details>}
-        <input ref={importInput} type="file" accept=".json,application/json" hidden onChange={(event) => { void importBackup(event) }} />
+        {!calculation.canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({calculation.issues.length})</summary><ul>{calculation.issues.map((issue, index) => <li key={String(index) + '-' + issue}>{issue}</li>)}</ul>{!calculation.conversion.ok && <button type="button" className="button secondary" onClick={() => setDialog('header')}>Revisar cotización del dólar</button>}</details>}
+        <p className="current-quotation-note">Se recupera solo el presupuesto en curso al recargar. «Nuevo» lo reemplaza.</p>
       </main>
-      <footer className="export-bar"><p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message || (!calculation.canExport ? 'Completá los datos pendientes para preparar la imagen.' : '')}</p><div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={() => downloadQuotationFile(preparedFile)}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !calculation.canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div></footer>
+      <footer className="export-bar">
+        <p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message || (!calculation.canExport ? 'Completá los datos pendientes para preparar la imagen.' : '')}</p>
+        <div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={() => downloadQuotationFile(preparedFile)}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !calculation.canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div>
+      </footer>
       {dialog === 'header' && <HeaderEditor quotation={quotation} rateLoading={rateLoading} rateError={rateError} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
-      {dialog === 'catalog' && <CatalogEditor catalog={workspace.catalog} saveStatus={catalogSaveStatus} saveError={storageError} onClose={closeCatalog} onSave={(catalog) => commitWorkspace({ ...workspace, catalog })} />}
-      {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={workspace.catalog} onClose={() => setEditingRowId(null)} onSave={(row) => { if (updateQuotation({ ...quotation, rows: quotation.rows.map((entry) => entry.id === row.id ? row : entry) })) setEditingRowId(null) }} onRemove={() => { if (updateQuotation({ ...quotation, rows: quotation.rows.filter((entry) => entry.id !== editingRow.id) })) setEditingRowId(null) }} />}
+      {dialog === 'catalog' && <CatalogEditor catalog={catalog} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onRetrySharedCatalog={retrySharedCatalog} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
+      {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} onClose={() => setEditingRowId(null)} onSave={(row) => { if (updateQuotation({ ...quotation, rows: quotation.rows.map((entry) => entry.id === row.id ? row : entry) })) setEditingRowId(null) }} onRemove={() => { if (updateQuotation({ ...quotation, rows: quotation.rows.filter((entry) => entry.id !== editingRow.id) })) setEditingRowId(null) }} />}
     </div>
   )
 }

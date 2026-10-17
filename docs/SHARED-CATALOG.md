@@ -9,11 +9,16 @@ edits, and those edits are not synchronized between devices.
 
 Common records need a complete, unique supplier and SKU key. Merging is atomic:
 local identities, approved prices (including zero), currencies, personal entries,
-and quotation snapshots are preserved. Common metadata and historical references
-can be updated. Conflicts or limits retain the previous local catalogue and show
-a retry action. Missing configuration retains manual file import and local use.
+and current quotation row values are preserved. Common metadata and historical
+references can be updated. Conflicts or limits retain the previous local catalogue
+and show a retry action. Missing configuration retains manual file import and local use.
 
-Local copies are kept in browser storage and included in private JSON backups.
+Local copies and approved prices use `luquisound.catalog.v1`, independently of
+the single current quotation's recovery snapshot. "Nuevo" replaces only that
+quotation. Private catalogue JSON backups preserve IDs, approved prices, and
+provenance. Backup import replaces the catalogue after confirmation; an old
+workspace backup contributes only its catalogue and never restores quotations.
+The legacy `luquisound.workspace.v1` storage key remains untouched.
 Startup fetch failures allow continued work with that copy. Loading the common
 catalogue never grants historical references the status of approved sale prices.
 
@@ -72,7 +77,8 @@ It requires explicit authorization after the code and local checks are reviewed.
    blocked and an authorized session receives the valid catalogue.
 5. Open two fresh authorized browser profiles. Both must receive the catalogue
    without importing a file. Confirm reload, manual-price preservation, backup
-   recovery, and continued local use when the source is temporarily unavailable.
+   recovery without restoring quotations, and continued local use when the
+   source is temporarily unavailable.
 6. Verify the intended access and automatic load on Android and Lucas's iPhone.
 
 Local Vite development and preview serve the frontend only. Full local checks

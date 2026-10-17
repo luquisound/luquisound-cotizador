@@ -13,14 +13,15 @@ The value is stored as ARS per USD with the existing exact conversion rules.
 source update timestamp, and fetch timestamp. The source date is displayed in
 America/Argentina/Buenos_Aires in the editor, preview, and exported PNG.
 
-The selected quotation refreshes when its saved reference was fetched at least
-one hour ago, or when it has no automatic reference. This includes saved
-quotations, imported backups, and duplicates. A fresh saved reference is reused
+The current quotation refreshes when its saved reference was fetched at least
+one hour ago, or when it has no automatic reference. This includes recovering
+the current quotation after reload. A fresh recovered reference is reused
 until its fetch-hour boundary. There is no manual update or retry button.
-Only the selected quotation changes; inactive snapshots stay stored until opened.
+The app has no quotation history or quotation restoration from backup.
 No update changes row prices, currencies, or quantities.
 An in-flight response applies to the latest quotation state and cannot replace
-another draft or overwrite local edits. Header edits preserve an updated rate.
+a newly started quotation or overwrite local edits. Header edits preserve an
+updated rate.
 Automatic updates can change the equivalent total and invalidate a prepared
 image. Previously downloaded PNG files remain unchanged.
 
@@ -31,22 +32,27 @@ schedule server work. Requests are bounded and deduplicated within the active
 quotation. Failures keep the saved rate and schedule an automatic retry after
 one hour, when the app is active. Source timestamps may legitimately remain
 unchanged even after a successful fetch.
+Local-storage errors and cross-tab saving pauses do not disable these checks;
+the current quotation can receive a rate in memory even when it cannot be saved.
 
 Automatically attaching a rate alone does not save an otherwise blank proposal.
-Legacy backups remain compatible. Manual rates remain labelled as manual without
-an invented source/date until a successful automatic lookup replaces them. The
-editor obtains replacement rates through DolarAPI rather than manual overrides.
+The current recovery snapshot retains compatible rate metadata. Manual rates
+remain labelled as manual without an invented source/date until a successful
+automatic lookup replaces them. Legacy workspace backups restore only catalogue
+data and never reopen a quotation. The editor obtains replacement rates through
+DolarAPI rather than manual overrides.
 
 ## Validation and availability
 
 The server validates positive finite sale values with at most six decimal places,
 fixed market/currency, bounded JSON, valid dates, a maximum seven-day source age,
-and no more than five minutes of future clock skew. Historical snapshots are
-validated structurally, without applying network freshness rules to saved drafts.
+and no more than five minutes of future clock skew. The current recovery snapshot
+is validated structurally, without applying network freshness rules to its
+saved rate.
 Stored metadata must match the quotation rate.
 
 Requests have bounded response sizes and timeouts and do not follow redirects.
-Failures preserve the current quotation. Without a valid rate, a draft remains
+Failures preserve the current quotation. Without a valid rate, it remains
 editable and image preparation remains unavailable until an update succeeds.
 Source timestamps older than 24 hours show a reminder to review the date; weekends
 can legitimately retain an earlier reference. The app does not claim live trading

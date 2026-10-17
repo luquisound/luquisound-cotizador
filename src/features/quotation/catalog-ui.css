@@ -4,6 +4,12 @@
   gap: 24px;
 }
 
+.catalog-controls {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .catalog-tools :is(input, select, textarea),
 .catalog-picker :is(input, select, textarea) {
   min-width: 0;

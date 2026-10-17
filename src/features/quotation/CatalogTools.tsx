@@ -183,11 +183,19 @@ interface CatalogEditorProps {
   catalog: CatalogItem[]
   saveStatus: string
   saveError: string | null
+  sharedCatalogStatus: 'loading' | 'ready' | 'unavailable' | 'error'
+  onRetrySharedCatalog: () => void
+  onExportBackup: () => void
+  onImportBackup: (file: File, signal?: AbortSignal) => Promise<boolean>
+  onEnableStorage?: () => void
   onSave: (catalog: CatalogItem[]) => boolean
   onClose: () => void
 }
 
-export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose }: CatalogEditorProps) {
+export function CatalogEditor({
+  catalog, saveStatus, saveError, sharedCatalogStatus, onRetrySharedCatalog,
+  onExportBackup, onImportBackup, onEnableStorage, onSave, onClose,
+}: CatalogEditorProps) {
   const [draft, setDraft] = useState<CatalogItem>(emptyItem)
   const [baseline, setBaseline] = useState(() => editableSignature(draft))
   const [error, setError] = useState('')
@@ -196,6 +204,8 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
   const [selectedCategory, setSelectedCategory] = useState('')
   const [page, setPage] = useState({ index: 0, category: '' })
   const [reading, setReading] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const [backupError, setBackupError] = useState('')
   const [importError, setImportError] = useState('')
   const [importDocument, setImportDocument] = useState<CatalogImportDocument | null>(null)
   const [preview, setPreview] = useState<CatalogImportPreview | null>(null)
@@ -203,6 +213,7 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
   const [allowUpdates, setAllowUpdates] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const readToken = useRef(0)
+  const backupController = useRef<AbortController | null>(null)
   const searchId = useId()
   const deferredQuery = useDeferredValue(query)
   const categories = useMemo(() => getCatalogCategories(catalog), [catalog])
@@ -212,7 +223,17 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
   const visiblePage = page.category === category ? Math.min(page.index, pageCount - 1) : 0
   const editingExisting = catalog.some((item) => item.id === draft.id)
   const dirty = editableSignature(draft) !== baseline
-  useEffect(() => () => { readToken.current += 1 }, [])
+  useEffect(() => () => {
+    readToken.current += 1
+    backupController.current?.abort()
+  }, [])
+
+  function cancelRead(): void {
+    readToken.current += 1
+    backupController.current?.abort()
+    backupController.current = null
+    setReading(false)
+  }
 
   function resetDraft(item: CatalogItem = emptyItem()): void {
     const next = structuredClone(item)
@@ -234,7 +255,7 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
 
   function close(): void {
     if (!discardDraftChanges()) return
-    readToken.current += 1
+    cancelRead()
     onClose()
   }
 
@@ -250,6 +271,7 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
     if (!file) return
+    cancelRead()
     const token = ++readToken.current
     clearPreview()
     setFeedback('')
@@ -278,6 +300,37 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
       setImportError(cause instanceof Error ? cause.message : 'No se pudo revisar este catálogo.')
     } finally {
       setReading(false)
+    }
+  }
+
+  async function restoreBackup(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file || !discardDraftChanges()) return
+    cancelRead()
+    const token = ++readToken.current
+    const controller = new AbortController()
+    backupController.current = controller
+    setRestoring(true)
+    setBackupError('')
+    setFeedback('')
+    try {
+      const restored = await onImportBackup(file, controller.signal)
+      if (token !== readToken.current || controller.signal.aborted || !restored) return
+      resetDraft()
+      clearPreview()
+      setSelectedCategory('')
+      setPage({ index: 0, category: '' })
+      setFeedback('Respaldo restaurado. El catálogo y sus precios de venta fueron reemplazados; el presupuesto en curso se conserva.')
+    } catch (cause: unknown) {
+      if (token === readToken.current && !controller.signal.aborted) {
+        setBackupError(cause instanceof Error ? cause.message : 'No se pudo restaurar el respaldo. El catálogo se conserva.')
+      }
+    } finally {
+      if (token === readToken.current) {
+        backupController.current = null
+        setRestoring(false)
+      }
     }
   }
 
@@ -349,13 +402,13 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
       return
     }
     resetMissingCategory(next)
-    setFeedback(editingExisting ? 'Opción actualizada en el espacio actual. Los presupuestos existentes se conservan.' : 'Opción agregada al catálogo del espacio actual.')
+    setFeedback(editingExisting ? 'Opción actualizada. El presupuesto en curso se conserva.' : 'Opción agregada al catálogo.')
     resetDraft()
     clearPreview()
   }
 
   function removeItem(item: CatalogItem): void {
-    if (!window.confirm('¿Eliminar esta opción del catálogo? Los presupuestos existentes se conservan.')) return
+    if (!window.confirm('¿Eliminar esta opción del catálogo? El presupuesto en curso se conserva.')) return
     const next = catalog.filter((entry) => entry.id !== item.id)
     if (!onSave(next)) {
       setError('No se pudo guardar la eliminación. La opción se conserva.')
@@ -363,7 +416,7 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
     }
     resetMissingCategory(next)
     if (draft.id === item.id) resetDraft()
-    setFeedback('Opción quitada del catálogo del espacio actual. Los presupuestos existentes se conservan.')
+    setFeedback('Opción quitada del catálogo. El presupuesto en curso se conserva.')
     clearPreview()
   }
 
@@ -379,13 +432,37 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
   return (
     <Dialog title="Mi catálogo" onClose={close}>
       <div className="catalog-tools">
-        <p className="field-help">Opciones privadas de este navegador. Cambiar o eliminar una opción no modifica presupuestos existentes. Siempre podés escribir un concepto manualmente.</p>
+        <p className="field-help">Opciones privadas de este navegador. Cambiar o eliminar una opción no modifica el presupuesto en curso. Siempre podés escribir un concepto manualmente.</p>
+        <div>
+          <p className="catalog-count" role="status">{sharedCatalogStatus === 'loading' ? 'Cargando catálogo compartido…'
+            : sharedCatalogStatus === 'ready' ? 'Catálogo compartido disponible.'
+              : sharedCatalogStatus === 'unavailable' ? 'Catálogo compartido no disponible. Podés usar tus opciones o escribir manualmente.'
+                : 'No se pudo actualizar el catálogo compartido. Tus opciones y precios se conservan.'}</p>
+          {(sharedCatalogStatus === 'error' || sharedCatalogStatus === 'unavailable') && <button type="button" className="button secondary" disabled={restoring} onClick={onRetrySharedCatalog}>Reintentar catálogo compartido</button>}
+        </div>
         <p className="catalog-count" role="status">{saveStatus}</p>
-        {saveError && <p className="field-errors" role="alert">{saveError} Cerrá el catálogo y descargá un respaldo para conservar tus cambios.</p>}
+        {saveError && <div>
+          <p className="field-errors" role="alert">{saveError} Podés descargar un respaldo del catálogo para conservar tus opciones y precios.</p>
+          {onEnableStorage && <button type="button" className="button secondary" disabled={restoring} onClick={onEnableStorage}>Habilitar guardado del catálogo</button>}
+        </div>}
         {feedback && <p className="catalog-feedback" role="status">{feedback}</p>}
+        {restoring && <p className="field-help" role="status">Revisando el respaldo del catálogo…</p>}
+        <fieldset className="catalog-tools catalog-controls" disabled={restoring}>
+        <details className="catalog-metadata">
+          <summary>Respaldos del catálogo</summary>
+          <div className="form-stack">
+            <p className="field-help">Conservá tus opciones y precios de venta en un archivo. El respaldo no incluye presupuestos.</p>
+            <button type="button" className="button secondary" onClick={onExportBackup}>Descargar respaldo del catálogo</button>
+            <p className="field-help">Restaurar reemplaza el catálogo y sus precios después de tu confirmación. El presupuesto en curso se conserva. Para combinar opciones de un archivo fuente, usá «Importar catálogo privado».</p>
+            <label className="catalog-search">Restaurar respaldo del catálogo
+              <input type="file" accept=".json,application/json" onChange={restoreBackup} />
+            </label>
+            {backupError && <p className="field-errors" role="alert">{backupError}</p>}
+          </div>
+        </details>
         <section className="catalog-import" aria-label="Importar catálogo privado">
           <h3>Importar catálogo privado</h3>
-          <p className="field-help">Elegí un JSON de Luquisound. Se procesa en este navegador; no reemplaza tus presupuestos y ningún precio histórico se carga como venta.</p>
+          <p className="field-help">Elegí un JSON de Luquisound. Se procesa en este navegador; el presupuesto en curso se conserva y ningún precio histórico se carga como venta.</p>
           <label className="catalog-search">Archivo JSON privado
             <input type="file" accept=".json,application/json" disabled={reading} onChange={readImport} />
           </label>
@@ -496,6 +573,7 @@ export function CatalogEditor({ catalog, saveStatus, saveError, onSave, onClose 
             <button type="submit" className="button primary">Guardar opción</button>
           </div>
         </form>
+        </fieldset>
         <div className="dialog-actions"><button type="button" className="button secondary" onClick={close}>Cerrar catálogo</button></div>
       </div>
     </Dialog>

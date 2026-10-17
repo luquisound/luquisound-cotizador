@@ -6,6 +6,8 @@ Provide a mobile-first, editable graphic quotation for the Luquisound workshop.
 The quotation template is the primary interface: tap its title or a row to edit
 it using touch-friendly controls. Lucas's target device is an iPhone; Android is
 also part of hands-on acceptance.
+Fixed budgets and reusable templates remain in Figma. This app creates one
+current custom quotation, rather than managing a quotation archive.
 
 ## V1 scope
 
@@ -15,9 +17,10 @@ also part of hands-on acceptance.
   plus optional personal entries; every selected description and price remains
   editable. A field may be left blank without requiring a catalogue selection.
 - Explicit quantity, unit price, pending price, and included-without-charge state.
-- Automatic ARS and USD totals using a rate saved per quotation, with hourly
-  DolarAPI blue sale refresh for the open quotation, including saved ones.
-- Local drafts, duplicate, reopen, and explicit JSON backup/import.
+- Automatic ARS and USD totals using a rate saved with the current quotation,
+  with hourly DolarAPI blue sale refresh, including after recovery on reload.
+- Recovery of the current quotation only, with a separate persistent catalogue
+  and private catalogue JSON backup/import. No history, duplicate, or delete UI.
 - PNG image with only the graphic quotation, plus browser file sharing or download.
 
 Without the configured common catalogue service, a new browser starts empty.
@@ -61,65 +64,87 @@ is inserted; a plus sign explicitly typed as part of the title is retained.
   positive value, and up to six decimal places. The open quotation requests DolarAPI
   blue sale through the server automatically when its saved fetch reference is
   one hour old or absent. Save the value and source timestamp together. This
-  includes reopening saved/imported quotations and duplicates. Only the open
-  quotation changes; inactive snapshots remain stored. Poll while visible and
-  online and check again on return or reconnection. No manual refresh control is
-  provided. Legacy manual rates remain valid without invented provenance until
+  includes recovering the current quotation after reload. Poll while visible and
+  online and check again on return or reconnection, independently of persistence
+  errors or saving pauses. No manual refresh control is provided. Recovered
+  manual rates remain valid without invented provenance until
   a successful automatic lookup replaces them. See `EXCHANGE-RATE.md`.
 - Sum the rounded base lines first. Convert that final total once using exact
   integer/rational arithmetic, rounding the equivalent half up to cents. Preserve
   the base total exactly. Both ARS and USD totals and the explicit rate appear in
   the preview and exported image. An absent, invalid, zero, or overflowing rate
-  blocks image preparation; legacy drafts remain editable without an invented rate.
+  blocks image preparation; a recovered quotation remains editable without an
+  invented rate.
 - A blank amount is pending, not zero. An explicit zero is valid. Included without
   charge is a separate state with a zero subtotal, labelled as included.
 - Completely empty rows are omitted from export. A concept with a pending price,
   a missing concept with other content, an invalid quantity or amount, a blank
   title, no nonempty rows, or numeric overflow blocks final image generation.
-- Incomplete drafts can still be saved. No discount, tax, supplier rounding,
-  automatic margin, or inferred commercial rule is implemented.
+- Incomplete current quotations can still be recovered. No discount, tax,
+  supplier rounding, automatic margin, or inferred commercial rule is implemented.
 
 ## Local persistence and privacy
 
-The versioned workspace contains quotation snapshots, the personal catalogue,
-and the active draft. Persistence is isolated behind an adapter in persistence.ts
-so a later authorized storage decision does not require rewriting the editor.
-The implementation stores quotation snapshots, approved prices, and a local
-catalogue copy in localStorage in the current browser and origin. A read-only
-server endpoint supplies the private common catalogue on startup. There is no
-quotation upload, analytics, or synchronization of locally approved prices.
+The editor has one current quotation. Its recovery snapshot uses localStorage
+key `luquisound.current-quotation.v1`; the persistent catalogue and approved
+prices use `luquisound.catalog.v1`. These stores are independent and belong to
+the current browser and origin. A read-only server endpoint supplies the private
+common catalogue on startup. There is no quotation upload, analytics, or
+synchronization of locally approved prices.
+
+"Nuevo" replaces the current quotation, asking for confirmation when it has
+meaningful content. It never clears the catalogue. There is no quotation history,
+selector, duplicate, delete, or quotation-backup workflow, and no saved-status
+label in the main interface. Downloading or sharing a PNG leaves the quotation
+open. Reusable templates and fixed budgets are managed in Figma.
 
 Automatic loading combines the common catalogue with the latest local state by
 supplier and SKU. It updates common metadata and historical references while
-preserving approved prices, currencies, identities, personal entries, and quotation
-snapshots. Invalid keys, conflicts, limits, and network failures leave local data
-unchanged and show a retry action. A paused or unreadable workspace is never
-overwritten by the common catalogue. See `SHARED-CATALOG.md` for activation.
+preserving approved prices, currencies, identities, personal entries, and the
+current quotation's row values. Invalid keys, conflicts, limits, and network
+failures leave local data unchanged and show a retry action. A paused or
+unreadable catalogue store is never overwritten by the common catalogue.
+See `SHARED-CATALOG.md` for activation.
 
 An untouched blank proposal remains in memory. Default headings, currency, and
-placeholder rows and an automatically attached rate do not create persistent drafts. New and duplicate actions reuse
-a blank proposal while it remains empty. Partial concepts with pending prices
-are saved, and repeated saves keep the current quotation ID. A stored workspace
-may contain no quotations and a null active quotation ID; the editor then opens
-one blank proposal in memory without persisting it. Existing empty quotations
-are retained, with a visible, confirmed cleanup action rather than silent removal.
+placeholder rows and an automatically attached rate do not create recoverable
+content. Partial concepts with pending prices are meaningful, and recovery keeps
+the current quotation and row identities. No earlier quotation is retained when
+the current one is replaced.
+
+When `luquisound.catalog.v1` is absent, the app may seed its catalogue from a
+validated legacy `luquisound.workspace.v1`. It does not reopen old quotations.
+The legacy key is never rewritten or deleted, including on "Nuevo" or import.
+Invalid legacy data is not used as a catalogue source.
 
 This is individual browser storage, not shared or access-controlled cloud storage.
 Browser clearing, private mode, device loss, or origin changes can remove access.
 The app does not encrypt local data. Backups can contain private business data
 and must be stored privately; no backup belongs in the public repository.
 
-JSON import validates schema, version, identities, dates, field lengths, and a
-5 MB limit; unknown properties are discarded. Import replaces the workspace only
-after confirmation. Corrupt stored data is not overwritten automatically. Save
-failures remain visible. Changes from another tab pause saving to avoid silently
-overwriting its work. Limits are 500 drafts, 1000 rows per draft, and 2000 catalogue
-entries; supported canvas export is limited to 16 million pixels with an explicit
-error rather than truncation when exceeded.
+Catalogue backups preserve approved prices, currencies, item IDs, metadata, and
+provenance without loss. They use the existing Workspace v1 envelope with
+`quotations: []` and `activeQuotationId: null`. Import replaces the catalogue
+after confirmation. A compatible old full-workspace backup contributes only its
+catalogue; no quotation is restored and the current quotation is unchanged. This
+lossless backup path is distinct from the `luquisound.catalog` private source format,
+which merges product references without approving commercial prices.
 
-Duplicating creates fresh quotation and row identities. Selecting a catalogue
-entry copies its current values into a row. Editing or removing that entry later
-does not change existing quotation prices or their duplicates.
+JSON validation checks schema, version, identities, dates, field lengths, and a
+5 MiB limit; unknown properties are discarded. Corrupt stored data is not
+overwritten automatically. An unreadable current recovery record remains until
+the user confirms its replacement with "Nuevo". Resetting an unreadable catalogue
+or resuming paused saving requires an explicit user action. Save failures remain
+visible and isolated to their store. Changes from another tab pause saving for
+the affected store to avoid silently overwriting its work; hourly exchange-rate
+updates remain active. Limits are 1000 rows in the current quotation and 2000
+catalogue entries. The legacy parser still validates up to 500 quotations in an
+old backup before its catalogue is extracted; this is compatibility, not history
+support. Canvas export is limited to 16 million pixels with an explicit error
+rather than truncation when exceeded.
+
+Selecting a catalogue entry copies its current values into a row. Editing or
+removing that entry later does not change the current quotation's row prices.
 
 The repository remains public even when deployment access is restricted. Never
 commit supplier lists, discounts, internal costs, customers, real quotations, or
@@ -137,8 +162,9 @@ derive category options from their available data. "Todas" clears the filter;
 missing categories appear as "Sin clasificar". No provider taxonomy or automatic
 category assignment is bundled. Manual concepts remain independent. Import
 matches normalized supplier and SKU, preserves approved manual prices, and does
-not change quotation snapshots. Conflicts and records without a complete key are
-reported before applying changes. See `CATALOG-IMPORT.md` for the schema.
+not change the current quotation's row values. Conflicts and records without a
+complete key are reported before applying changes. See `CATALOG-IMPORT.md` for
+the schema.
 
 Catalogue sections suggest the ordering of choices. Equipment and extras can
 both choose a product, including cables imported as equipment; the quotation row
@@ -158,12 +184,14 @@ action uses an already prepared File directly from a user gesture. If file
 sharing is unavailable, download is the fallback. Cancellation preserves the
 prepared image without sending or downloading it. Repeated sharing remains
 possible. Opening or closing a share sheet does not establish recipient delivery.
+Downloading or sharing does not clear or replace the current quotation.
 
 ## Verification and remaining acceptance
 
 Run typecheck, lint, calculation/persistence/export tests, and build. Check mobile
 and desktop layouts, long text, many rows, pending/zero/included states, decimal
-input, invalid values, duplication, reload, backups, and share cancellation.
+input, invalid values, confirmed replacement with "Nuevo", current-quotation
+recovery, catalogue backups, legacy catalogue extraction, and share cancellation.
 Browser emulation is useful evidence but does not replace physical Android and
 iPhone checks for PNG saving, Web Share, WhatsApp, and deployment access.
 

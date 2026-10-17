@@ -10,8 +10,11 @@ or committed; listed paths do not expand authorization.
 
 The current V1 includes an editable graphic quotation template, manual rows,
 an optional personal catalogue, a private common catalogue loaded through a
-read-only endpoint, calculations, local drafts, backups, and PNG download or file
-sharing. Read-only common catalogue and DolarAPI blue-sale lookup are the
+read-only endpoint, calculations, recovery of one current quotation, private
+catalogue backups, and PNG download or file sharing. Fixed budgets and templates
+remain in Figma. The app has no quotation history, duplicate, or quotation-backup
+restore workflow.
+Read-only common catalogue and DolarAPI blue-sale lookup are the
 authorized server-side features;
 quotation and manual-price synchronization, accounts, Supabase, AI, CRM,
 inventory management, invoicing, and a general backend remain outside this stage.
@@ -56,14 +59,19 @@ inventory management, invoicing, and a general backend remain outside this stage
   cents, and quantity times unit price rounded half up per row. A positive
   ARS-per-USD rate is saved per quotation and converts only the final total, with
   half-up rounding to cents. The open quotation uses DolarAPI blue sale
-  automatically, refreshing hourly while active and when reopened if due.
-  Inactive quotations retain their snapshots until opened. Preserve source/date
-  metadata and legacy values until an automatic lookup succeeds. Discounts
+  automatically, refreshing hourly while active and after reload if due,
+  independently of local-storage failures or saving pauses. Preserve source/date
+  metadata and recovered values until an automatic lookup succeeds. Discounts
   and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
   calculation contract and remaining decisions.
 - Preserve the approved graphic composition and official brand assets. Private
   source quotations and commercial data must never enter the public repository
   or client bundle, including when deployment access is restricted.
+- Keep the current quotation recovery and persistent catalogue separate. New
+  replaces only the current quotation after confirmation when it has meaningful
+  content. Catalogue backups preserve approved prices, IDs, and provenance;
+  importing an old workspace backup restores only its catalogue after confirmation.
+  Never rewrite or delete the legacy `luquisound.workspace.v1` storage key.
 
 ## Git, local files, and external effects
 

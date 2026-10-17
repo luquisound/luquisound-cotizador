@@ -109,7 +109,7 @@ export function QuotationPreview({
   return (
     <div className="quotation-preview">
       <p className="quotation-edit-hint" id={hintId}>
-        Tocá el título o un concepto para editar la plantilla.
+        Tocá el título o un concepto para editar el presupuesto.
       </p>
       <article
         className="quotation-sheet"

@@ -9,6 +9,9 @@ This document describes manual file import. The same schema also supplies the
 automatic common catalogue through a protected endpoint. That service requires
 complete, unique supplier and SKU keys and applies common updates automatically
 while preserving local sale prices. See [shared catalogue setup](SHARED-CATALOG.md).
+This `luquisound.catalog` source format is distinct from lossless catalogue
+backups in the existing Workspace v1 envelope. Source imports never supply
+approved sale prices or persistent item IDs.
 
 ## Version 1 document
 
@@ -99,7 +102,7 @@ No reference is an approved current price. New catalogue entries always receive
 an empty editable `unitPrice`; their current-price currency placeholder is ARS.
 Reference currencies remain independent. Import never copies cost, list, or
 historical sale values into a quotation sale price, calculates margins, rounds
-supplier prices, or changes existing quotation snapshots.
+supplier prices, or changes the current quotation's row values.
 
 ## Validation and limits
 
@@ -121,10 +124,11 @@ are rejected rather than coerced.
 | source.sheet | 128 characters |
 | referencePrices | 50 per item, including retained history |
 
-These bounds align with catalogue and row limits. Before saving the resulting
-workspace, the integration must also run the workspace serializer: the complete
-workspace, including all quotations, still has a separate 5 MiB limit and
-globally unique identities. Failure must leave the current workspace unchanged.
+These bounds align with catalogue limits. Before saving the resulting catalogue,
+the integration must also validate its Workspace v1 envelope with empty
+`quotations` and a null `activeQuotationId`: it has a separate 5 MiB limit and
+unique catalogue identities. Failure must leave the current catalogue and
+quotation unchanged. The quotation recovery snapshot is stored separately.
 
 ## Preview, matching and confirmation
 
@@ -174,10 +178,15 @@ or browser storage. New IDs are generated locally, never accepted from the file.
 
 `CatalogEntry` extends the existing catalogue type with optional supplier, SKU,
 brand, category, unit, presentation, source, and reference price metadata. The
-workspace model and persistence whitelist must preserve and validate these
-fields; earlier version-1 backups without them must continue to load. Catalogue
-import merges only catalogue data. Workspace-backup import remains a separate,
-explicit replacement operation.
+model and persistence whitelist must preserve and validate these fields; earlier
+version-1 backups without them remain compatible catalogue sources. Source import
+merges only catalogue data. Catalogue-backup import is a separate confirmed
+replacement operation that preserves approved prices, IDs, currencies, and
+provenance from the backup. It accepts the Workspace v1 envelope; compatible old
+full-workspace backups contribute only their catalogue and never restore quotations.
+New backups contain
+`quotations: []` and `activeQuotationId: null`. Neither path changes the current
+quotation or rewrites or deletes the legacy `luquisound.workspace.v1` storage key.
 
 `queryCatalog(items, query)` searches supplier, SKU, brand, name, description,
 and category. It ignores case and accent marks; all whitespace-separated query

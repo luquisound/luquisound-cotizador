@@ -1,13 +1,14 @@
 # Luquisound Cotizador
 
 Mobile-first graphic quotation editor for Luquisound. V1 provides manual concepts
-and editable prices, an optional personal catalogue, automatic ARS/USD totals, local
-drafts and JSON backups, plus PNG download and file sharing.
+and editable prices, an optional personal catalogue, automatic ARS/USD totals,
+recovery of one current quotation, private catalogue backups, and PNG file sharing.
+Fixed budgets and templates remain in Figma; this app builds a custom quotation.
 
 The app starts with a blank quotation and loads the private common catalogue
 automatically when its protected endpoint is configured. Local catalogue prices
-and quotations are preserved. Without that service, a new browser starts with
-an empty catalogue and can still import a private file. No customer data,
+and the current quotation are preserved. Without that service, a new browser
+starts with an empty catalogue and can still import a private file. No customer data,
 supplier lists, historical quotations, or commercial prices are bundled. See
 [the product scope and calculation rules](docs/PRODUCTO.md).
 
@@ -94,32 +95,40 @@ when a concrete feature needs them.
 paired document library. Keep external source documents and original assets in
 that library; do not commit the local routing file.
 
-## Data and backups
+## Current quotation and catalogue data
 
-Drafts, approved sale prices, and the local catalogue copy stay in localStorage in
-the current browser and origin. They are not uploaded, synchronized between
-devices, or encrypted by the app. The common product catalogue is fetched from a
-private server endpoint on startup; it is available without manually importing
-on each device once that service is activated.
-Clearing browser data, private browsing, device loss, or changing the app origin
-can make them unavailable. Download a JSON backup from "Opciones" and keep
-it privately. Import replaces the current workspace after confirmation.
+The main screen contains "Nuevo", "Catalogo", the editable quotation, and image
+export. There is no quotation list, saved-status label, duplicate, delete, or
+quotation-backup control. "Nuevo" asks for confirmation when the current
+quotation has meaningful content, then replaces it with a blank one. Downloading
+or sharing a PNG leaves the current quotation open.
 
-An untouched quotation stays in memory and is not saved as a draft. Repeated
-"Nuevo" or duplicating an empty quotation reuses that blank proposal. A partial
-concept with a pending price is meaningful content and is saved with the same
-quotation ID. Existing empty drafts are preserved; removing them requires the
-visible cleanup action and confirmation.
+The current quotation is recovered across reloads from
+`luquisound.current-quotation.v1`. The persistent catalogue and approved sale
+prices use the separate `luquisound.catalog.v1` key. New quotations never clear
+the catalogue. An untouched blank quotation and automatic rate updates alone
+do not create recoverable content; a partial concept with a pending price does.
 
-Corrupt stored data is not automatically overwritten. Failed saves show an error.
-Concurrent changes from another tab pause saving until the user resolves them.
-Catalogue selections copy values into a quotation; later catalogue edits preserve
-the quotation's stored prices.
+When the new catalogue key is absent, a valid legacy `luquisound.workspace.v1`
+may seed its catalogue. Legacy quotations are not reopened, and the old key is
+never rewritten or deleted. Corrupt stored data is not automatically overwritten.
+An unreadable current recovery record remains intact until confirmed replacement
+with "Nuevo". A catalogue reset or resuming paused saving requires an explicit
+user action. Save failures remain visible; changes from another tab pause saving
+for the affected store to avoid overwriting that tab's work. Failures in one
+store do not disable the other, and exchange-rate updates continue independently.
 
-The compact "Opciones" menu groups duplication, "Mi catalogo", backups, and
-draft cleanup. Expand "Dolar del presupuesto" to inspect the automatic rate.
-Catalogue status and local-storage guidance are in the menu;
-storage and service failures remain visible beside the editor.
+All local data belongs to the current browser and origin. It is not uploaded,
+synchronized between devices, or encrypted by the app. Clearing browser data,
+private browsing, device loss, or an origin change can make it unavailable.
+The private common catalogue is fetched on startup when configured.
+
+Catalogue controls provide private JSON backup and import. Backups preserve IDs,
+approved prices, currencies, and provenance in the existing Workspace v1 envelope
+with `quotations: []` and `activeQuotationId: null`. After confirmation, backup
+import replaces the catalogue. A compatible old full-workspace backup contributes
+only its catalogue; it never restores quotation history or replaces the open
+quotation. Keep these files private and outside the public repository.
 
 Import a private catalogue JSON from "Mi catalogo" after reviewing its summary.
 Manual file import remains available alongside automatic common catalogue loading.
@@ -128,22 +137,23 @@ Categories come from imported data; "Todas" clears the filter and "Sin clasifica
 groups entries without a category. Manual concepts remain available.
 New imported products have no approved sale price;
 historical references remain separate. Reimporting matches supplier and SKU,
-preserving existing manually approved prices and quotation snapshots. See the
-[private import contract](docs/CATALOG-IMPORT.md). Keep catalogue files private.
+preserving existing manually approved prices and the current quotation's row
+values. See the [private import contract](docs/CATALOG-IMPORT.md).
+Keep catalogue files private.
 
 Each quotation has one currency for its concepts. The open quotation automatically
 uses the DolarAPI blue sale rate through a same-origin server endpoint.
 Both totals, the rate, its source, and the source date appear in the preview and
-PNG. Rates refresh hourly while the app is visible and online. Reopening a saved
-quotation or duplicate, returning to the app, and reconnecting check whether its
-saved reference is due. Fresh references are reused until their fetch-hour boundary;
-inactive quotations retain their snapshots. There is no manual update button.
+PNG. Rates refresh hourly while the app is visible and online. Reloading the
+current quotation, returning to the app, and reconnecting check whether its
+saved reference is due. Fresh references are reused until their fetch-hour boundary.
+There is no manual update button.
 A lookup failure keeps the existing rate and retries automatically after one hour
-when active; a draft without a rate stays editable but cannot export yet.
-Legacy manual rates remain labelled without invented source dates until a
+when active; a quotation without a rate stays editable but cannot export yet.
+Recovered manual rates remain labelled without invented source dates until a
 successful automatic lookup replaces them. Automatic updates can change the
 equivalent total and invalidate a prepared image; downloaded files remain unchanged.
-Automatic rates alone do not create saved blank drafts. See
+Automatic updates continue when local saving is unavailable or paused. See
 [exchange-rate behavior](docs/EXCHANGE-RATE.md).
 Changing the concepts' currency preserves the entered prices after confirmation.
 
