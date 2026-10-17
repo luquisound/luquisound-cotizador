@@ -50,9 +50,6 @@
 .exchange-panel {
   margin: 0;
   border-block: 1px solid #d3d2cb;
-}
-
-.exchange-panel > summary {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -60,40 +57,12 @@
   min-height: 48px;
   padding: 10px 0;
   font-size: 13px;
-  list-style: none;
-}
-
-.exchange-panel > summary::-webkit-details-marker {
-  display: none;
-}
-
-.exchange-panel > summary::after {
-  content: '+';
-  margin-left: auto;
-  font-size: 18px;
-}
-
-.exchange-panel[open] > summary::after {
-  content: '−';
 }
 
 .exchange-summary-value {
   color: #62625c;
   overflow-wrap: anywhere;
   min-width: 0;
-}
-
-.exchange-panel-details {
-  display: grid;
-  justify-items: start;
-  gap: 10px;
-  padding-bottom: 14px;
-}
-
-.exchange-panel-details > p {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
 }
 
 .exchange-warning {
@@ -109,11 +78,6 @@
 
 .exchange-warning p {
   flex: 1 1 240px;
-}
-
-.exchange-panel-details > .button {
-  max-width: 100%;
-  white-space: normal;
 }
 
 @media (min-width: 40rem) {
@@ -154,18 +118,8 @@
     font-size: clamp(24px, 2.25vw, 32px);
   }
 
-  .quotation-total .exchange-panel > summary {
+  .quotation-total .exchange-panel {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .quotation-total .exchange-summary-value {
-    grid-column: 1;
-  }
-
-  .quotation-total .exchange-panel > summary::after {
-    grid-column: 2;
-    grid-row: 1 / 3;
-    margin-left: 0;
+    grid-template-columns: minmax(0, 1fr);
   }
 }

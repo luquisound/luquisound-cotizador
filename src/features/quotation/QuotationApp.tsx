@@ -318,12 +318,10 @@ export default function QuotationApp() {
               {sharedCatalogStatus === 'error' && <div className="notice error" role="status"><p>No se pudo actualizar el catálogo compartido. Podés seguir usando tus opciones.</p><button className="button secondary" type="button" onClick={retrySharedCatalog}>Reintentar catálogo compartido</button></div>}
             </>}
             exchangeDetails={<>
-              <details className="exchange-panel" id="quotation-exchange-rate">
-                <summary><span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span></summary>
-                <div className="exchange-panel-details">
-                  {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
-                </div>
-              </details>
+              <p className="exchange-panel" id="quotation-exchange-rate">
+                <span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span>
+              </p>
+              {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
               {quotation.exchangeRateQuote && rateCheckedAt - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
               {rateError && <p className="exchange-warning" role="alert">{rateError}</p>}
             </>}
