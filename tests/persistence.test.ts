@@ -15,15 +15,49 @@ function createFixture(): Workspace {
       notes: 'Nota de prueba\nSegunda línea',
       createdAt: '2026-10-16T10:00:00.000Z', updatedAt: '2026-10-16T10:15:00.000Z',
       rows: [
-        { id: 'row-1', section: 'equipment', concept: 'Equipo de prueba', detail: 'Descripción', quantity: '2', unitPrice: '10,50', priceState: 'priced' },
-        { id: 'row-2', section: 'extras', concept: 'Trabajo sin cargo', detail: '', quantity: '1', unitPrice: '', priceState: 'included' },
-        { id: 'row-3', section: 'extras', concept: 'Precio pendiente', detail: '', quantity: '1', unitPrice: '', priceState: 'pending' },
-        { id: 'row-4', section: 'extras', concept: 'Cero explícito', detail: '', quantity: '1', unitPrice: '0', priceState: 'priced' },
+        { id: 'row-1', section: 'equipment', currency: 'ARS', concept: 'Equipo de prueba', detail: 'Descripción', quantity: '2', unitPrice: '10,50', priceState: 'priced' },
+        { id: 'row-2', section: 'extras', currency: 'ARS', concept: 'Trabajo sin cargo', detail: '', quantity: '1', unitPrice: '', priceState: 'included' },
+        { id: 'row-3', section: 'extras', currency: 'ARS', concept: 'Precio pendiente', detail: '', quantity: '1', unitPrice: '', priceState: 'pending' },
+        { id: 'row-4', section: 'extras', currency: 'ARS', concept: 'Cero explícito', detail: '', quantity: '1', unitPrice: '0', priceState: 'priced' },
       ],
     }],
     catalog: [{ id: 'catalog-1', section: 'equipment', concept: 'Equipo de prueba', detail: 'Descripción actualizada', currency: 'ARS', unitPrice: '91,25' }],
   }
 }
+
+test('legacy rows inherit the original quotation currency without changing raw data or identities', () => {
+  for (const currency of ['ARS', 'USD'] as const) {
+    const workspace = createFixture()
+    workspace.quotations[0].currency = currency
+    const legacy = {
+      ...workspace,
+      quotations: workspace.quotations.map((quotation) => ({
+        ...quotation,
+        rows: quotation.rows.map(({ currency: _currency, ...row }) => row),
+      })),
+    }
+    const raw = JSON.stringify(legacy)
+    const restored = parseWorkspace(raw)
+    assert.deepEqual(restored.quotations[0].rows.map((row) => row.currency), [currency, currency, currency, currency])
+    assert.deepEqual(restored.quotations[0].rows.map((row) => row.id), workspace.quotations[0].rows.map((row) => row.id))
+    assert.equal(JSON.stringify(legacy), raw)
+    assert.deepEqual(parseWorkspace(serializeWorkspace(restored)), restored)
+  }
+})
+
+test('mixed row currencies roundtrip with prices, explicit zero, included and pending state intact', () => {
+  const workspace = createFixture()
+  workspace.quotations[0].rows[0].currency = 'USD'
+  workspace.quotations[0].rows[2].currency = 'USD'
+  const snapshot = structuredClone(workspace)
+  assert.deepEqual(parseWorkspace(serializeWorkspace(workspace)), snapshot)
+  assert.deepEqual(workspace, snapshot)
+  for (const currency of [null, '', 'EUR', 'usd', 0]) {
+    const invalid = structuredClone(workspace)
+    const input = { ...invalid.quotations[0], rows: [{ ...invalid.quotations[0].rows[0], currency }] }
+    assert.throws(() => parseWorkspace(JSON.stringify({ ...invalid, quotations: [input] })))
+  }
+})
 
 function createMetadataFixture(): Workspace {
   const workspace = createFixture()

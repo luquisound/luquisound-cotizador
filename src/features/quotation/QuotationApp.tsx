@@ -218,7 +218,7 @@ export default function QuotationApp() {
 
   function addRow(section: RowSection) {
     if (quotation.rows.length >= 1000) { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
-    const row = createRow(section)
+    const row = createRow(section, quotation.currency)
     if (updateQuotation({ ...quotation, rows: [...quotation.rows, row] })) setEditingRowId(row.id)
   }
 

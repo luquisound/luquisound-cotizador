@@ -1,5 +1,5 @@
 import type { Currency, Quotation, QuotationRow } from './model.ts'
-import { convertTotals, type ConvertedTotalsResult } from './exchange.ts'
+import { convertMixedTotals, type ConvertedTotalsResult } from './exchange.ts'
 
 type ParseFailure = { ok: false; reason: string }
 export type MoneyResult = { ok: true; cents: number } | ParseFailure
@@ -12,7 +12,8 @@ export interface CalculatedRow {
 }
 
 export interface QuotationCalculation {
-  totalCents: number
+  nativeTotals: Record<Currency, number>
+  totals: Record<Currency, number | null>
   rows: CalculatedRow[]
   itemsComplete: boolean
   conversion: ConvertedTotalsResult
@@ -76,6 +77,7 @@ export function isEmptyRow(row: QuotationRow): boolean {
 function calculateRow(row: QuotationRow): CalculatedRow {
   const errors: string[] = []
   if (!row.concept.trim()) errors.push('Ingresá el concepto de la fila.')
+  if (row.currency !== 'ARS' && row.currency !== 'USD') errors.push('Seleccioná una moneda válida para el ítem: ARS o USD.')
 
   const quantity = parseQuantity(row.quantity)
   if (!quantity.ok) errors.push(quantity.reason)
@@ -108,25 +110,39 @@ export function calculateQuotation(quotation: Quotation): QuotationCalculation {
   const issues: string[] = []
   if (!quotation.title.trim()) issues.push('Ingresá un título para el presupuesto.')
   const rows: CalculatedRow[] = []
-  let total = 0n
+  const subtotals = { ARS: 0n, USD: 0n }
   for (const [index, row] of quotation.rows.entries()) {
     if (isEmptyRow(row)) continue
     const calculated = calculateRow(row)
     rows.push(calculated)
     for (const error of calculated.errors) issues.push(`Fila ${index + 1}: ${error}`)
-    if (calculated.lineTotalCents !== null) total += BigInt(calculated.lineTotalCents)
+    if (calculated.lineTotalCents !== null) subtotals[row.currency] += BigInt(calculated.lineTotalCents)
   }
   if (!rows.length) issues.push('Agregá al menos un concepto para exportar el presupuesto.')
 
-  const totalOverflow = total > maximumSafeInteger
+  const totalOverflow = subtotals.ARS > maximumSafeInteger || subtotals.USD > maximumSafeInteger
   if (totalOverflow) issues.push('El total supera el límite de cálculo seguro.')
-  // An overflowing total is unavailable; canExport and issues must be checked.
-  const totalCents = totalOverflow ? 0 : Number(total)
+  const nativeTotals = {
+    ARS: subtotals.ARS > maximumSafeInteger ? 0 : Number(subtotals.ARS),
+    USD: subtotals.USD > maximumSafeInteger ? 0 : Number(subtotals.USD),
+  }
   const itemsComplete = rows.length > 0
     && rows.every((row) => row.errors.length === 0 && row.lineTotalCents !== null)
     && !totalOverflow
-  const conversion = convertTotals(totalCents, quotation.currency, quotation.exchangeRate ?? '')
+  const conversion = convertMixedTotals(nativeTotals.ARS, nativeTotals.USD, quotation.exchangeRate ?? '')
   if (!conversion.ok) issues.push(conversion.reason)
+  const totals: Record<Currency, number | null> = { ARS: null, USD: null }
+  if (itemsComplete) {
+    if (conversion.ok) {
+      totals.ARS = conversion.arsCents
+      totals.USD = conversion.usdCents
+    } else {
+      // Without conversion, a native subtotal is a full total only for a single-currency quotation.
+      for (const currency of ['ARS', 'USD'] as const) {
+        if (rows.every(({ row }) => row.currency === currency)) totals[currency] = nativeTotals[currency]
+      }
+    }
+  }
   const canExport = quotation.title.trim().length > 0 && itemsComplete && conversion.ok
-  return { totalCents, rows, itemsComplete, conversion, canExport, issues }
+  return { nativeTotals, totals, rows, itemsComplete, conversion, canExport, issues }
 }

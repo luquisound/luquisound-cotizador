@@ -12,13 +12,14 @@ current custom quotation, rather than managing a quotation archive.
 ## V1 scope
 
 - Editable title, optional subtitle, and manual quotation rows. Existing notes
-  remain in recovered quotations and images; the details form edits only title,
-  subtitle, and row currency. Exchange-rate information stays beside the totals.
+  remain in recovered quotations and images; the details form edits only title
+  and subtitle. Exchange-rate information stays beside the totals.
 - Equipment and installation/accessory sections, including arbitrary work.
 - Private common catalogue loaded automatically on each device when configured,
   plus optional personal entries; every selected description and price remains
   editable. A field may be left blank without requiring a catalogue selection.
-- Explicit quantity, unit price, pending price, and included-without-charge state.
+- Explicit quantity, unit price, ARS or USD currency per row, pending price, and
+  included-without-charge state.
 - Automatic ARS and USD totals using a rate saved with the current quotation,
   with hourly DolarAPI blue sale refresh, including after recovery on reload.
 - Recovery of the current quotation only, with a separate persistent catalogue
@@ -59,9 +60,14 @@ is inserted; a plus sign explicitly typed as part of the title is retained.
   decimals. Comma or dot is accepted as the quantity decimal separator.
 - Represent prices and totals as safe integer cents. Compute quantity times
   unit price using integer arithmetic, round each line half up to the nearest
-  cent, then sum the rounded complete lines.
-- One explicit currency applies to every row of a quotation. Changing that base
-  currency requires confirmation and preserves the entered row values.
+  cent in its own currency, then sum complete lines separately into ARS and USD
+  subtotals. Use exact BigInt/integer-rational arithmetic and reject overflow
+  before returning safe integer cents.
+- Each row has an explicit ARS or USD currency and preserves its entered amount
+  when that currency changes. New manual rows default to ARS. The retained
+  `quotation.currency` field is only a legacy default: recovered rows without
+  currency inherit it, and new rows in those quotations use that default.
+  New and edited rows store their currency explicitly.
 - The rate states how many ARS equal one USD, using Argentine separators, a
   positive value, and up to six decimal places. The open quotation requests DolarAPI
   blue sale through the server automatically when its saved fetch reference is
@@ -71,10 +77,11 @@ is inserted; a plus sign explicitly typed as part of the title is retained.
   errors or saving pauses. No manual refresh control is provided. Recovered
   manual rates remain valid without invented provenance until
   a successful automatic lookup replaces them. See `EXCHANGE-RATE.md`.
-- Sum the rounded base lines first. Convert that final total once using exact
-  integer/rational arithmetic, rounding the equivalent half up to cents. Preserve
-  the base total exactly. Both ARS and USD totals and the explicit rate appear in
-  the preview and exported image. An absent, invalid, zero, or overflowing rate
+- Convert each currency subtotal once, rounding half up to cents:
+  `totalARS = arsSubtotal + halfUp(usdSubtotal * rate)` and
+  `totalUSD = usdSubtotal + halfUp(arsSubtotal / rate)`. Never convert individual
+  rows or derive one total from the other. Both totals and the explicit rate appear
+  in the preview and exported image. An absent, invalid, zero, or overflowing rate
   blocks image preparation; a recovered quotation remains editable without an
   invented rate.
 - A blank amount is pending, not zero. An explicit zero is valid. Included without
@@ -149,8 +156,12 @@ old backup before its catalogue is extracted; this is compatibility, not history
 support. Canvas export is limited to 16 million pixels with an explicit error
 rather than truncation when exceeded.
 
-Selecting a catalogue entry copies its current values into a row. Editing or
-removing that entry later does not change the current quotation's row prices.
+Selecting a catalogue entry with an approved price copies that amount and its
+currency together, including an explicit zero. Without an approved price, one
+unambiguous explicit currency across its source references supplies the row
+default without copying any amount; missing or conflicting reference currencies
+fall back to the catalogue entry's currency. Editing or removing that entry later
+does not change the current quotation's row prices or currencies.
 
 The repository remains public even when deployment access is restricted. Never
 commit supplier lists, discounts, internal costs, customers, real quotations, or
@@ -175,13 +186,14 @@ the schema.
 
 Catalogue sections suggest the ordering of choices. Equipment and extras can
 both choose a product, including cables imported as equipment; the quotation row
-keeps its selected section. Currency restrictions still apply to approved prices.
+keeps its selected section. Selected prices retain their own currencies.
 
 Imported products start without an approved sale price. Supplier cost, historical
 list/sale reference, missing currency, zero, and unknown dates remain distinct.
-Only an explicitly confirmed list/sale reference in the quotation currency with
-at most two decimals may be copied into an editable price. Costs and unknown
-roles/currencies require manual pricing. Provenance remains in the private
+Only an explicitly confirmed list/sale reference with a known ARS or USD currency
+and at most two decimals may be copied into an editable price. Confirmation copies
+the reference amount and currency together. Costs and unknown roles/currencies
+require manual pricing. Provenance remains in the private
 catalogue UI and backup, never in customer-facing descriptions or images.
 
 Future supplier availability has an optional stock snapshot contract with explicit

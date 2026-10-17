@@ -66,8 +66,9 @@ quotation concepts and do not introduce a hardcoded commercial taxonomy.
 
 A catalogue item's `section` is a suggestion for ordering choices. Products can
 be chosen in either quotation section; choosing a cable or accessory preserves
-the row's selected section. Approved prices still require the quotation currency;
-products without an approved price remain available in either currency.
+the row's selected section. Each row has its own editable ARS or USD currency;
+selecting an approved price copies its amount and currency together, including
+an explicit zero. Products without an approved price remain available.
 
 `source` may be omitted when provenance is unavailable. If supplied, it requires
 a nonempty document name and an explicit `date`: a valid month in `YYYY-MM`
@@ -103,6 +104,14 @@ an empty editable `unitPrice`; their current-price currency placeholder is ARS.
 Reference currencies remain independent. Import never copies cost, list, or
 historical sale values into a quotation sale price, calculates margins, rounds
 supplier prices, or changes the current quotation's row values.
+
+When selecting an entry without an approved price, a single explicit ARS or USD
+currency across its source references supplies the row's currency default. If
+references have no explicit currency or conflict, use the catalogue entry's
+currency instead. This default never copies or approves a historical amount.
+An eligible list/sale reference with a known currency and at most two decimals
+requires explicit confirmation before copying its amount and currency together
+into an editable row. Cost and unknown-role references cannot supply a price.
 
 ## Optional stock observations
 

@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useId, useMemo, useRef, useState, type Cha
 import { parseMoney } from './calculation.ts'
 import {
   applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES, CATALOG_IMPORT_MAX_ITEMS,
-  getCatalogCategories, getCatalogChoices, parseCatalogImport, queryCatalog,
+  getCatalogCategories, getCatalogChoices, getCatalogDefaultCurrency, parseCatalogImport, queryCatalog,
 } from './catalog.ts'
 import type { CatalogCategoryOption, CatalogImportDocument, CatalogImportPreview, CatalogReferencePrice, CatalogSource } from './catalog.ts'
 import type { CatalogItem, Currency, RowSection } from './model.ts'
@@ -42,22 +42,23 @@ function referenceAmount(price: CatalogReferencePrice): string {
   return `${price.currency ?? 'Moneda no identificada'} ${value}`
 }
 
-function referenceInput(price: CatalogReferencePrice, currency: Currency): string | null {
-  if (price.currency !== currency || price.amount === null || (price.role !== 'list' && price.role !== 'sale')) return null
+function referenceInput(price: CatalogReferencePrice, currency: Currency | undefined): string | null {
+  if (price.currency === null || (currency !== undefined && price.currency !== currency)
+    || price.amount === null || (price.role !== 'list' && price.role !== 'sale')) return null
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(price.amount)) return null
   const input = price.amount.replace('.', ',')
   return parseMoney(input).ok ? input : null
 }
 
-function referenceUnavailableReason(price: CatalogReferencePrice, currency: Currency): string {
+function referenceUnavailableReason(price: CatalogReferencePrice, currency: Currency | undefined): string {
   if (price.amount === null) return 'Esta referencia no indica un importe.'
   if (price.role === 'cost' || price.role === 'unknown') return 'El costo o un rol no identificado no se toma como venta. Cargá el precio de venta manualmente.'
   if (price.currency === null) return 'La moneda no está identificada. Cargá el precio de venta manualmente.'
-  if (price.currency !== currency) return `La referencia está en ${price.currency}. Cargá un precio de venta en ${currency}; no se convierte automáticamente.`
+  if (currency !== undefined && price.currency !== currency) return `La referencia está en ${price.currency}. Cargá un precio de venta en ${currency}; no se convierte automáticamente.`
   return 'Este importe requiere revisión manual: admite hasta dos decimales y debe estar dentro del límite de cálculo.'
 }
 
-function confirmReference(item: CatalogItem, price: CatalogReferencePrice, currency: Currency): string | null {
+function confirmReference(item: CatalogItem, price: CatalogReferencePrice, currency: Currency | undefined): string | null {
   const input = referenceInput(price, currency)
   if (input === null) return null
   const confirmed = window.confirm([
@@ -71,12 +72,14 @@ function confirmReference(item: CatalogItem, price: CatalogReferencePrice, curre
 interface HistoricalReferencesProps {
   item: CatalogItem
   currency: Currency
-  onUse: (unitPrice: string) => void
+  allowCurrencyChange?: boolean
+  onUse: (unitPrice: string, currency: Currency) => void
 }
 
-function HistoricalReferences({ item, currency, onUse }: HistoricalReferencesProps) {
+function HistoricalReferences({ item, currency, allowCurrencyChange = false, onUse }: HistoricalReferencesProps) {
   const [open, setOpen] = useState(false)
   const references = item.referencePrices ?? []
+  const requiredCurrency = allowCurrencyChange ? undefined : currency
   if (references.length === 0) return null
   return (
     <details className="catalog-metadata" onToggle={(event) => setOpen(event.currentTarget.open)}>
@@ -85,7 +88,7 @@ function HistoricalReferences({ item, currency, onUse }: HistoricalReferencesPro
         <p className="field-help">Información privada de consulta. Ningún importe se usa como venta sin tu confirmación.</p>
         <ul className="catalog-reference-list">
           {references.map((price, index) => {
-            const input = referenceInput(price, currency)
+            const input = referenceInput(price, requiredCurrency)
             return (
               <li className="catalog-reference" key={index}>
                 <strong className="catalog-reference-heading">{roleLabels[price.role]} · Histórica</strong>
@@ -94,10 +97,10 @@ function HistoricalReferences({ item, currency, onUse }: HistoricalReferencesPro
                 <p className="catalog-provenance">{price.source ? sourceLabel(price.source) : 'Procedencia de esta referencia no indicada.'}</p>
                 <div className="catalog-reference-action">
                   {input === null
-                    ? <p className="catalog-reference-note">{referenceUnavailableReason(price, currency)}</p>
+                    ? <p className="catalog-reference-note">{referenceUnavailableReason(price, requiredCurrency)}</p>
                     : <button type="button" className="button secondary" onClick={() => {
-                      const confirmedInput = confirmReference(item, price, currency)
-                      if (confirmedInput !== null) onUse(confirmedInput)
+                      const confirmedInput = confirmReference(item, price, requiredCurrency)
+                      if (confirmedInput !== null && price.currency !== null) onUse(confirmedInput, price.currency)
                     }}>Usar referencia como precio</button>}
                 </div>
               </li>
@@ -132,17 +135,16 @@ function CatalogCategorySelect({ label, options, value, onChange }: CatalogCateg
 
 interface CatalogPickerProps {
   catalog: CatalogItem[]
-  currency: Currency
   section: RowSection
   onChoose: (item: CatalogItem) => void
 }
 
-export function CatalogPicker({ catalog, currency, section, onChoose }: CatalogPickerProps) {
+export function CatalogPicker({ catalog, section, onChoose }: CatalogPickerProps) {
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const deferredQuery = useDeferredValue(query)
   const searchId = useId()
-  const available = useMemo(() => getCatalogChoices(catalog, currency, section), [catalog, currency, section])
+  const available = useMemo(() => getCatalogChoices(catalog, section), [catalog, section])
   const categories = useMemo(() => getCatalogCategories(available), [available])
   const category = categories.some((option) => option.key === selectedCategory) ? selectedCategory : ''
   const results = useMemo(() => queryCatalog(available, deferredQuery, category), [available, deferredQuery, category])
@@ -159,7 +161,7 @@ export function CatalogPicker({ catalog, currency, section, onChoose }: CatalogP
       </div>
       <p className="field-help">Podés escribir manualmente o dejar el campo vacío. Elegir un producto conserva su precio de venta; las referencias se revisan por separado.</p>
       <p className="catalog-count" aria-live="polite">{results.length === 0
-        ? 'No hay coincidencias para esta búsqueda y moneda.'
+        ? 'No hay coincidencias para esta búsqueda.'
         : `${results.length} coincidencias${results.length > PICKER_LIMIT ? ` · Se muestran las primeras ${PICKER_LIMIT}; afiná la búsqueda.` : ''}`}</p>
       <ul className="catalog-picker-results" aria-busy={query !== deferredQuery}>
         {results.slice(0, PICKER_LIMIT).map((item) => (
@@ -170,7 +172,7 @@ export function CatalogPicker({ catalog, currency, section, onChoose }: CatalogP
               <span className="catalog-item-price">{item.unitPrice.trim() ? `Venta: ${item.currency} ${item.unitPrice}` : 'Precio de venta pendiente'}</span>
               <span className="catalog-item-meta">Usar producto</span>
             </button>
-            <HistoricalReferences item={item} currency={currency} onUse={(unitPrice) => onChoose({ ...item, unitPrice, currency })} />
+            <HistoricalReferences item={item} currency={getCatalogDefaultCurrency(item)} allowCurrencyChange onUse={(unitPrice, currency) => onChoose({ ...item, unitPrice, currency })} />
           </li>
         ))}
       </ul>

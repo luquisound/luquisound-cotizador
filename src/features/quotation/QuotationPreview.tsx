@@ -6,7 +6,7 @@ import {
   parseQuantity,
 } from './calculation.ts'
 import type { CalculatedRow } from './calculation.ts'
-import type { Currency, Quotation, QuotationRow, RowSection } from './model.ts'
+import type { Quotation, QuotationRow, RowSection } from './model.ts'
 import { exchangeRateDescription } from './exchange-quote'
 import './preview.css'
 import './exchange-ui.css'
@@ -23,7 +23,6 @@ export interface QuotationPreviewProps {
 interface PreviewRowProps {
   row: QuotationRow
   calculated: CalculatedRow | undefined
-  currency: Currency
   onEdit: () => void
 }
 
@@ -32,7 +31,7 @@ const sections: { section: RowSection; label: string; addLabel: string }[] = [
   { section: 'extras', label: 'INSTALACIÓN Y ACCESORIOS', addLabel: 'Agregar extra' },
 ]
 
-function PreviewRow({ row, calculated, currency, onEdit }: PreviewRowProps) {
+function PreviewRow({ row, calculated, onEdit }: PreviewRowProps) {
   if (isEmptyRow(row)) {
     return (
       <button
@@ -56,7 +55,7 @@ function PreviewRow({ row, calculated, currency, onEdit }: PreviewRowProps) {
     ? 'Pendiente'
     : row.priceState === 'included'
       ? 'Incluido'
-      : formatMoney(calculated.lineTotalCents, currency)
+      : formatMoney(calculated.lineTotalCents, row.currency)
   const concept = row.concept.trim() || 'Concepto pendiente'
 
   return (
@@ -133,7 +132,7 @@ export function QuotationPreview({
               type="button"
               className="quotation-heading-edit"
               onClick={onEditHeader}
-              aria-label="Editar título, subtítulo y moneda del presupuesto"
+              aria-label="Editar título y subtítulo del presupuesto"
               title="Tocá para editar el encabezado"
             >
               <span className="quotation-title">
@@ -162,7 +161,6 @@ export function QuotationPreview({
                     <PreviewRow
                       row={row}
                       calculated={calculatedById.get(row.id)}
-                      currency={quotation.currency}
                       onEdit={() => onEditRow(row.id)}
                     />
                   </li>
@@ -184,9 +182,7 @@ export function QuotationPreview({
         <div className="quotation-total quotation-total-dual" aria-live="polite" aria-atomic="true">
           <span className="quotation-total-label">TOTAL</span>
           {(['ARS', 'USD'] as const).map((currency) => {
-            const cents = !calculation.itemsComplete ? null
-              : calculation.conversion.ok ? currency === 'ARS' ? calculation.conversion.arsCents : calculation.conversion.usdCents
-                : quotation.currency === currency ? calculation.totalCents : null
+            const cents = calculation.totals[currency]
             return (
               <div className="quotation-converted-total" key={currency}>
                 <span className="quotation-total-currency">{currency}</span>

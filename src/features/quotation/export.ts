@@ -91,7 +91,7 @@ function drawLines(
   for (const [index, line] of lines.entries()) context.fillText(line, x, y + index * lineHeight)
 }
 
-function quantityLabel(row: QuotationRow, currency: Quotation['currency']): string {
+function quantityLabel(row: QuotationRow): string {
   const quantity = parseQuantity(row.quantity)
   if (!quantity.ok || quantity.thousandths === 1000) return ''
   const amount = BigInt(quantity.thousandths)
@@ -100,20 +100,20 @@ function quantityLabel(row: QuotationRow, currency: Quotation['currency']): stri
   const label = `${whole}${fraction ? `,${fraction}` : ''}`
   if (row.priceState === 'included') return `${label} unidades · Sin cargo`
   const price = parseMoney(row.unitPrice)
-  return price.ok ? `${label} × ${formatMoney(price.cents, currency)} c/u` : ''
+  return price.ok ? `${label} × ${formatMoney(price.cents, row.currency)} c/u` : ''
 }
 
-function amountLabel(result: CalculatedRow, currency: Quotation['currency']): string {
+function amountLabel(result: CalculatedRow): string {
   if (result.lineTotalCents === null) {
     throw new Error('Completá los campos pendientes antes de preparar la imagen.')
   }
   return result.row.priceState === 'included'
     ? 'Incluido'
-    : formatMoney(result.lineTotalCents, currency)
+    : formatMoney(result.lineTotalCents, result.row.currency)
 }
 
 function layoutRow(
-  context: CanvasRenderingContext2D, result: CalculatedRow, currency: Quotation['currency'],
+  context: CanvasRenderingContext2D, result: CalculatedRow,
   conceptWidth: number, amountWidth: number,
 ): RowLayout {
   setFont(context, 36, BODY_FONT)
@@ -122,10 +122,10 @@ function layoutRow(
   const detailLines = result.row.detail.trim()
     ? measureLines(context, result.row.detail.trim(), conceptWidth) : []
   setFont(context, 24, BODY_FONT)
-  const quantity = quantityLabel(result.row, currency)
+  const quantity = quantityLabel(result.row)
   const quantityLines = quantity ? measureLines(context, quantity, conceptWidth) : []
   setFont(context, 38, BODY_FONT)
-  const amountLines = measureLines(context, amountLabel(result, currency), amountWidth)
+  const amountLines = measureLines(context, amountLabel(result), amountWidth)
   const textHeight = conceptLines.length * 44
     + (detailLines.length ? 8 + detailLines.length * 32 : 0)
     + (quantityLines.length ? 8 + quantityLines.length * 30 : 0)
@@ -198,13 +198,13 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
   const headerHeight = Math.max(348, subtitleY + subtitleLines.length * 38 + 28)
   setFont(context, 38, BODY_FONT)
   const amountWidth = Math.min(450, Math.max(260, ...calculation.rows.map(
-    (row) => Math.ceil(context.measureText(amountLabel(row, quotation.currency)).width),
+    (row) => Math.ceil(context.measureText(amountLabel(row)).width),
   )))
   const conceptWidth = CONTENT_WIDTH - amountWidth - 36
   const sections: SectionLayout[] = (['equipment', 'extras'] as const).map((section) => ({
     section,
     rows: calculation.rows.filter((result) => result.row.section === section)
-      .map((result) => layoutRow(context, result, quotation.currency, conceptWidth, amountWidth)),
+      .map((result) => layoutRow(context, result, conceptWidth, amountWidth)),
   })).filter((section) => section.rows.length > 0)
   setFont(context, 30, BODY_FONT)
   const noteLines = quotation.notes.trim()
@@ -214,10 +214,10 @@ export function renderQuotationCanvas(quotation: Quotation, logo: CanvasImageSou
     (height, section) => height + 60 + section.rows.reduce((sum, row) => sum + row.height, 0) + 36,
     0,
   ) + notesHeight + 12
-  const conversion = calculation.conversion
   setFont(context, 80)
   const totalRows = (['ARS', 'USD'] as const).map((currency) => {
-    const cents = currency === 'ARS' ? conversion.arsCents : conversion.usdCents
+    const cents = calculation.totals[currency]
+    if (cents === null) throw new Error('Completá los campos pendientes antes de preparar la imagen.')
     const amount = formatMoney(cents, currency).slice(currency.length + 1)
     const lines = measureLines(context, amount, CONTENT_WIDTH - 152)
     return { currency, lines, height: Math.max(100, lines.length * 90 + 20) }

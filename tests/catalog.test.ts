@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES, CATALOG_REPLACEMENT_MAX_DOCUMENTS,
-  getCatalogCategories, getCatalogChoices, parseCatalogImport, queryCatalog,
+  getCatalogCategories, getCatalogChoices, getCatalogDefaultCurrency, parseCatalogImport, queryCatalog,
 } from '../src/features/quotation/catalog.ts'
 import type {
   CatalogEntry, CatalogImportDocument, CatalogImportItem, CatalogReferencePrice,
@@ -812,19 +812,55 @@ test('catalogue choices allow cables in extras and prefer the suggested section 
     item({ sku: 'D', section: 'extras' }),
   ])
   const snapshot = structuredClone(existing)
-  assert.deepEqual(getCatalogChoices(existing, 'ARS', 'extras'), [existing[1], existing[3], existing[0], existing[2]])
-  assert.deepEqual(queryCatalog(getCatalogChoices(existing, 'ARS', 'extras'), 'A', 'category:synthetic cables'), [existing[0]])
-  assert.deepEqual(getCatalogChoices(existing, 'ARS', 'equipment'), [existing[0], existing[2], existing[1], existing[3]])
+  assert.deepEqual(getCatalogChoices(existing, 'extras'), [existing[1], existing[3], existing[0], existing[2]])
+  assert.deepEqual(queryCatalog(getCatalogChoices(existing, 'extras'), 'A', 'category:synthetic cables'), [existing[0]])
+  assert.deepEqual(getCatalogChoices(existing, 'equipment'), [existing[0], existing[2], existing[1], existing[3]])
   assert.deepEqual(existing, snapshot)
 })
 
-test('catalogue choices keep blank prices available across currencies but never mix approved zero prices', () => {
+test('catalogue choices include ARS and USD prices together without modifying approved values', () => {
   const existing = entries(['A', 'B', 'C', 'D'].map((sku) => item({ sku })))
   existing[1].currency = 'USD'
   existing[1].unitPrice = '   '
   existing[2].currency = 'USD'
   existing[2].unitPrice = '0'
   existing[3].unitPrice = '0'
-  assert.deepEqual(getCatalogChoices(existing, 'ARS', 'equipment'), [existing[0], existing[1], existing[3]])
-  assert.deepEqual(getCatalogChoices(existing, 'USD', 'extras'), [existing[0], existing[1], existing[2]])
+  const snapshot = structuredClone(existing)
+  assert.deepEqual(getCatalogChoices(existing, 'equipment'), existing)
+  assert.deepEqual(getCatalogChoices(existing, 'extras'), existing)
+  assert.deepEqual(existing, snapshot)
+})
+
+test('catalogue currency defaults use one source currency without approving its historical amount', () => {
+  const [entry] = entries([item({ referencePrices: [
+    { amount: '15', currency: 'USD', role: 'cost', date: null, historical: true },
+    { amount: null, currency: null, role: 'unknown', date: null, historical: true },
+    { amount: '20', currency: 'USD', role: 'list', date: null, historical: true },
+  ] })])
+  const snapshot = structuredClone(entry)
+  assert.equal(getCatalogDefaultCurrency(entry), 'USD')
+  assert.deepEqual(entry, snapshot)
+  assert.equal(entry.unitPrice, '')
+  assert.equal(entry.currency, 'ARS')
+})
+
+test('approved catalogue currency takes precedence for positive and explicit zero prices', () => {
+  const [entry] = entries()
+  for (const unitPrice of ['25,50', '0', ' 0 ']) {
+    assert.equal(getCatalogDefaultCurrency({ ...entry, currency: 'ARS', unitPrice }), 'ARS')
+  }
+  assert.equal(getCatalogDefaultCurrency({ ...entry, unitPrice: '   ' }), 'USD')
+})
+
+test('ambiguous or unidentified source currencies preserve the catalogue fallback', () => {
+  const [entry] = entries()
+  const reference = item().referencePrices[0]
+  for (const referencePrices of [
+    [],
+    [{ ...reference, currency: null }],
+    [{ ...reference, currency: 'ARS' as const }, { ...reference, currency: 'USD' as const }],
+  ]) {
+    assert.equal(getCatalogDefaultCurrency({ ...entry, currency: 'ARS', referencePrices }), 'ARS')
+    assert.equal(getCatalogDefaultCurrency({ ...entry, currency: 'USD', referencePrices }), 'USD')
+  }
 })

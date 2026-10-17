@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createQuotation, hasQuotationContent } from '../src/features/quotation/model.ts'
+import { createQuotation, createRow, hasQuotationContent } from '../src/features/quotation/model.ts'
 import type { CatalogItem, Workspace } from '../src/features/quotation/model.ts'
 import { parseWorkspace, serializeWorkspace, STORAGE_KEY } from '../src/features/quotation/persistence.ts'
 import type { StorageAdapter } from '../src/features/quotation/persistence.ts'
@@ -51,6 +51,45 @@ function legacyFixture(): Workspace {
   second.subtitle = 'Synthetic latest quotation'
   return { version: 1, activeQuotationId: second.id, quotations: [first, second], catalog: catalogFixture() }
 }
+
+test('legacy current recovery migrates row currencies and stores mixed work without touching the old workspace', () => {
+  const quotation = createQuotation()
+  quotation.title = 'Synthetic old USD quotation'
+  quotation.currency = 'USD'
+  quotation.notes = 'Synthetic retained notes'
+  quotation.rows[0].concept = 'Legacy USD item'
+  quotation.rows[0].unitPrice = '20'
+  quotation.rows[0].priceState = 'priced'
+  const rawCurrent = JSON.stringify({ version: 1, activeQuotationId: quotation.id, catalog: [], quotations: [{
+    ...quotation, rows: quotation.rows.map(({ currency: _currency, ...row }) => row),
+  }] })
+  const rawLegacy = JSON.stringify(legacyFixture())
+  const memory = memoryStorage({ [CURRENT_QUOTATION_STORAGE_KEY]: rawCurrent, [STORAGE_KEY]: rawLegacy })
+  const loaded = loadCurrentQuotation(memory.storage)
+  assert.equal(loaded.error, null)
+  assert.deepEqual(loaded.quotation.rows.map((row) => row.currency), ['USD', 'USD'])
+  assert.equal(memory.values.get(CURRENT_QUOTATION_STORAGE_KEY), rawCurrent)
+  assert.deepEqual(memory.writes, [])
+  loaded.quotation.rows.push({ ...createRow('extras', 'ARS'), concept: 'New ARS item', unitPrice: '1000', priceState: 'priced' })
+  assert.equal(saveCurrentQuotation(memory.storage, loaded.quotation).ok, true)
+  assert.deepEqual(loadCurrentQuotation(memory.storage).quotation, loaded.quotation)
+  assert.equal(loaded.quotation.notes, quotation.notes)
+  assert.equal(memory.values.get(STORAGE_KEY), rawLegacy)
+  assert.deepEqual(memory.writes, [CURRENT_QUOTATION_STORAGE_KEY])
+})
+
+test('an invalid explicit row currency blocks recovery and never overwrites saved data', () => {
+  const quotation = createQuotation()
+  quotation.title = 'Synthetic invalid currency'
+  const raw = JSON.stringify({ version: 1, activeQuotationId: quotation.id, catalog: [], quotations: [{
+    ...quotation, rows: [{ ...quotation.rows[0], currency: 'EUR' }],
+  }] })
+  const memory = memoryStorage({ [CURRENT_QUOTATION_STORAGE_KEY]: raw })
+  assert.notEqual(loadCurrentQuotation(memory.storage).error, null)
+  assert.equal(saveCurrentQuotation(memory.storage, quotation).ok, false)
+  assert.equal(memory.values.get(CURRENT_QUOTATION_STORAGE_KEY), raw)
+  assert.deepEqual(memory.writes, [])
+})
 
 test('legacy migration seeds only the catalog without reading old quotations into the current work or changing any bytes', () => {
   const legacy = legacyFixture()

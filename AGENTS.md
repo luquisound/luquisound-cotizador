@@ -55,10 +55,15 @@ inventory management, invoicing, and a general backend remain outside this stage
 - Preserve the difference between a missing amount and an explicit zero.
 - Represent an included, no-charge concept explicitly; do not infer it from a
   blank amount or collapse it into an ordinary zero-priced row.
-- V1 uses one explicit currency for quotation rows (ARS or USD), safe integer
-  cents, and quantity times unit price rounded half up per row. A positive
-  ARS-per-USD rate is saved per quotation and converts only the final total, with
-  half-up rounding to cents. The open quotation uses DolarAPI blue sale
+- V1 uses an explicit ARS or USD currency per row, safe integer cents, and
+  quantity times unit price rounded half up in each row's currency. Sum native
+  ARS and USD subtotals separately. A positive ARS-per-USD rate is saved per
+  quotation; each total adds its native subtotal to one conversion of the other
+  subtotal, rounded half up to cents. Never convert rows or derive one total from
+  the other. Legacy rows without a currency inherit `quotation.currency`; new
+  rows store an explicit currency. Catalogue selections copy approved amounts
+  and currencies together; source-only currency defaults never approve prices.
+  The open quotation uses DolarAPI blue sale
   automatically, refreshing hourly while active and after reload if due,
   independently of local-storage failures or saving pauses. Preserve source/date
   metadata and recovered values until an automatic lookup succeeds. Discounts

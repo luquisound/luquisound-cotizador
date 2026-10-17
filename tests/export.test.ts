@@ -67,7 +67,7 @@ test('blocks an unresolved amount even when a zero was previously typed', async 
     createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     rows: [{
       id: 'synthetic-row', section: 'extras', concept: 'Trabajo de ejemplo', detail: '',
-      quantity: '1', unitPrice: '0', priceState: 'pending',
+      quantity: '1', currency: 'ARS', unitPrice: '0', priceState: 'pending',
     }],
   }
   await assert.rejects(createQuotationFile(quotation), /campos pendientes/)
@@ -148,9 +148,11 @@ interface CanvasText {
   x: number
   y: number
   width: number
+  align: string
 }
 
 function renderWithRecordedCanvas(quotation: Quotation): {
+  width: number
   height: number
   texts: CanvasText[]
   footerY: number
@@ -165,7 +167,7 @@ function renderWithRecordedCanvas(quotation: Quotation): {
       return { width: Array.from(text).length * size * 0.75 }
     },
     fillText(text: string, x: number, y: number) {
-      texts.push({ text, x, y, width: this.measureText(text).width })
+      texts.push({ text, x, y, width: this.measureText(text).width, align: this.textAlign })
     },
     fillRect(_x: number, y: number, _width: number, height: number) {
       rectangles.push({ y, height })
@@ -184,7 +186,7 @@ function renderWithRecordedCanvas(quotation: Quotation): {
     const result = renderQuotationCanvas(quotation, {} as CanvasImageSource)
     const footer = rectangles.at(-1)
     assert.ok(footer)
-    return { height: result.height, texts, footerY: footer.y }
+    return { width: result.width, height: result.height, texts, footerY: footer.y }
   } finally {
     if (previous) Object.defineProperty(globalThis, 'document', previous)
     else Reflect.deleteProperty(globalThis, 'document')
@@ -202,7 +204,7 @@ function exportableQuotation(): Quotation {
     createdAt: '2026-10-16T13:31:00.000Z', updatedAt: '2026-10-16T13:31:00.000Z',
     rows: [{
       id: 'synthetic-row', section: 'equipment', concept: 'Equipo de prueba', detail: '',
-      quantity: '1', unitPrice: '2400', priceState: 'priced',
+      quantity: '1', currency: 'ARS', unitPrice: '2400', priceState: 'priced',
     }],
   }
 }
@@ -233,4 +235,36 @@ test('grows a long quotation image to reserve every wrapped source line above th
   assert.equal(sourceLines.map((entry) => entry.text).join(' '), exchangeRateDescription(quotation))
   assert.ok(sourceLines.every((entry) => entry.y + 30 <= automatic.footerY))
   assert.ok(legacy.texts.some((entry) => entry.text.includes('Cotización manual')))
+})
+
+test('renders mixed row currencies, unit prices and converted totals without clipping long descriptions', () => {
+  const quotation = exportableQuotation()
+  quotation.exchangeRate = '1000'
+  quotation.exchangeRateQuote = undefined
+  quotation.rows = [
+    {
+      ...quotation.rows[0], concept: 'Amplificador '.repeat(25).trim(),
+      detail: `${'Descripción extensa '.repeat(50)}Final del detalle`,
+      currency: 'USD', quantity: '2', unitPrice: '12,50',
+    },
+    {
+      ...quotation.rows[0], id: 'synthetic-installation', section: 'extras',
+      concept: 'Instalación de prueba', currency: 'ARS', unitPrice: '35000',
+    },
+  ]
+  const result = renderWithRecordedCanvas(quotation)
+  const text = result.texts.map((entry) => entry.text).join(' ')
+  assert.equal(result.width, 1080)
+  assert.ok(text.includes('2 × USD 12,50 c/u'))
+  assert.ok(text.includes('USD 25,00'))
+  assert.ok(text.includes('ARS 35.000,00'))
+  assert.ok(text.includes('60.000,00'))
+  assert.ok(text.includes('60,00'))
+  assert.ok(text.includes('Final del detalle'))
+  assert.ok(text.includes('1 USD = 1.000 ARS'))
+  const bodyTexts = result.texts.filter((entry) => entry.y >= 348 && entry.y < result.footerY)
+  assert.ok(bodyTexts.every((entry) => entry.y + 30 <= result.footerY))
+  assert.ok(bodyTexts.every((entry) => entry.align === 'right'
+    ? entry.x - entry.width >= 64
+    : entry.x + entry.width <= 1016))
 })

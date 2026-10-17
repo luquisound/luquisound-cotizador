@@ -99,7 +99,7 @@ that library; do not commit the local routing file.
 
 The main screen opens directly on the editable quotation, with the brand and
 editable title in its header and exchange-rate details beside the totals.
-"Datos del presupuesto" edits only the title, optional subtitle, and row currency.
+"Datos del presupuesto" edits only the title and optional subtitle.
 Previously stored notes are retained in recovery and PNG output.
 On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
 compact header and readable row sizes; wide screens place totals beside the
@@ -158,8 +158,15 @@ spreadsheet source. No Sheets connection or availability filtering is active;
 the approved Excel snapshot remains unchanged. See the
 [source preparation and activation boundaries](docs/CATALOG-SOURCE-ROADMAP.md).
 
-Each quotation has one currency for its concepts. The open quotation automatically
-uses the DolarAPI blue sale rate through a same-origin server endpoint.
+Each row has its own editable ARS or USD currency. New manual rows default to ARS;
+legacy quotations retain their previous currency as the row default. A catalogue
+selection copies an approved price and its currency together, including zero.
+Without an approved price, a single explicit source currency can preselect the
+row currency without approving or copying historical amounts.
+Rounded row amounts are summed separately by currency. Each displayed total adds
+its native subtotal to one conversion of the other subtotal; neither total is
+derived from the other. The open quotation automatically uses the DolarAPI blue
+sale rate through a same-origin server endpoint.
 Both totals, the rate, its source, and the source date appear in the preview and
 PNG. Rates refresh hourly while the app is visible and online. Reloading the
 current quotation, returning to the app, and reconnecting check whether its
@@ -168,11 +175,12 @@ There is no manual update button.
 A lookup failure keeps the existing rate and retries automatically after one hour
 when active; a quotation without a rate stays editable but cannot export yet.
 Recovered manual rates remain labelled without invented source dates until a
-successful automatic lookup replaces them. Automatic updates can change the
-equivalent total and invalidate a prepared image; downloaded files remain unchanged.
+successful automatic lookup replaces them. Automatic updates can change converted
+contributions to both totals and invalidate a prepared image; downloaded files
+remain unchanged.
 Automatic updates continue when local saving is unavailable or paused. See
 [exchange-rate behavior](docs/EXCHANGE-RATE.md).
-Changing the concepts' currency preserves the entered prices after confirmation.
+Changing a row's currency preserves its entered price.
 
 Prepare an image after completing pending rows, then download or share it. File
 sharing depends on browser support and requires the user's action. Unsupported

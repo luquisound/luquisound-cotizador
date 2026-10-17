@@ -455,10 +455,17 @@ export interface CatalogCategoryOption {
   label: string
 }
 
+export function getCatalogDefaultCurrency(item: CatalogEntry): Currency {
+  if (item.unitPrice.trim()) return item.currency
+  const currencies = new Set((item.referencePrices ?? []).flatMap((price) =>
+    price.currency === 'ARS' || price.currency === 'USD' ? [price.currency] : []))
+  return currencies.size === 1 ? [...currencies][0] : item.currency
+}
+
 export function getCatalogChoices(
-  items: readonly CatalogEntry[], currency: Currency, preferredSection: RowSection,
+  items: readonly CatalogEntry[], preferredSection: RowSection,
 ): CatalogEntry[] {
-  return items.filter((item) => !item.unitPrice.trim() || item.currency === currency)
+  return [...items]
     .sort((first, second) => (first.section === preferredSection ? 0 : 1) - (second.section === preferredSection ? 0 : 1))
 }
 

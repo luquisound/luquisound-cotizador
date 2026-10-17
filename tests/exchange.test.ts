@@ -1,7 +1,50 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { convertTotals, parseExchangeRate } from '../src/features/quotation/exchange.ts'
+import { convertMixedTotals, convertTotals, parseExchangeRate } from '../src/features/quotation/exchange.ts'
 import type { Currency } from '../src/features/quotation/model.ts'
+
+test('mixed conversion preserves the existing single-currency contract exactly', () => {
+  for (const currency of ['ARS', 'USD'] as const) {
+    for (const cents of [0, 1, 2, 123456, Number.MAX_SAFE_INTEGER]) {
+      for (const rate of ['0,000001', '0,5', '1', '1,234567', '1.234,56', '2', '']) {
+        const mixed = convertMixedTotals(currency === 'ARS' ? cents : 0, currency === 'USD' ? cents : 0, rate)
+        assert.deepEqual(mixed, convertTotals(cents, currency, rate), `${cents} ${currency} at ${rate}`)
+      }
+    }
+  }
+})
+
+test('mixed totals convert each foreign subtotal once and preserve half-up boundaries', () => {
+  for (const [ars, usd, rate, expectedArs, expectedUsd] of [
+    [100000, 2000, '1.000', 2100000, 2100],
+    [2, 1, '1,5', 4, 2],
+    [1, 1, '0,499999', 1, 3],
+    [1, 1, '0,5', 2, 3],
+    [1, 1, '1,999999', 3, 2],
+    [1, 1, '2,000001', 3, 1],
+  ] as const) {
+    const result = convertMixedTotals(ars, usd, rate)
+    assert.equal(result.ok, true)
+    if (result.ok) assert.deepEqual([result.arsCents, result.usdCents], [expectedArs, expectedUsd])
+  }
+})
+
+test('mixed conversion checks final addition and exact safe limits in both currencies', () => {
+  assert.deepEqual(convertMixedTotals(Number.MAX_SAFE_INTEGER - 1, 1, '1'), {
+    ok: true, arsCents: Number.MAX_SAFE_INTEGER, usdCents: Number.MAX_SAFE_INTEGER, rateLabel: '1 USD = 1 ARS',
+  })
+  for (const [ars, usd] of [[Number.MAX_SAFE_INTEGER, 1], [1, Number.MAX_SAFE_INTEGER]]) {
+    assert.equal(convertMixedTotals(ars, usd, '1').ok, false)
+  }
+  assert.deepEqual(convertMixedTotals(0, 1, '9.007.199.254.740.991,000000'), {
+    ok: true, arsCents: Number.MAX_SAFE_INTEGER, usdCents: 1,
+    rateLabel: '1 USD = 9.007.199.254.740.991,000000 ARS',
+  })
+  for (const amount of [-1, 0.1, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(convertMixedTotals(amount, 0, '1').ok, false)
+    assert.equal(convertMixedTotals(0, amount, '1').ok, false)
+  }
+})
 
 test('manual exchange rates parse Argentine grouping and preserve entered precision exactly', () => {
   for (const [input, numerator, denominator, normalized] of [

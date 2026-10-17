@@ -82,3 +82,29 @@ export function convertTotals(
     rateLabel: rate.rateLabel,
   }
 }
+
+export function convertMixedTotals(
+  arsCents: number,
+  usdCents: number,
+  rateInput: string,
+): ConvertedTotalsResult {
+  if (![arsCents, usdCents].every((amount) => Number.isSafeInteger(amount) && amount >= 0)) {
+    return { ok: false, reason: 'Los subtotales deben ser importes válidos en centavos enteros, mayores o iguales a cero.' }
+  }
+  const rate = parseExchangeRate(rateInput)
+  if (!rate.ok) return rate
+
+  function roundHalfUp(numerator: bigint, denominator: bigint): bigint {
+    return numerator / denominator + (numerator % denominator * 2n >= denominator ? 1n : 0n)
+  }
+
+  const ars = BigInt(arsCents)
+  const usd = BigInt(usdCents)
+  // Convert each foreign subtotal once; neither displayed total is derived from the other.
+  const totalArs = ars + roundHalfUp(usd * rate.numerator, rate.denominator)
+  const totalUsd = usd + roundHalfUp(ars * rate.denominator, rate.numerator)
+  if (totalArs > maximumSafeInteger || totalUsd > maximumSafeInteger) {
+    return { ok: false, reason: 'El total equivalente supera el límite de cálculo seguro.' }
+  }
+  return { ok: true, arsCents: Number(totalArs), usdCents: Number(totalUsd), rateLabel: rate.rateLabel }
+}

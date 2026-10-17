@@ -12,6 +12,7 @@ export type PriceState = 'pending' | 'priced' | 'included'
 export interface QuotationRow {
   id: string
   section: RowSection
+  currency: Currency
   concept: string
   detail: string
   quantity: string
@@ -23,6 +24,7 @@ export interface Quotation {
   id: string
   title: string
   subtitle: string
+  // Compatibility default for older saved rows without their own currency.
   currency: Currency
   exchangeRate?: string
   exchangeRateQuote?: BlueDollarQuote
@@ -57,9 +59,9 @@ export interface Workspace {
   catalog: CatalogItem[]
 }
 
-export function createRow(section: RowSection = 'equipment'): QuotationRow {
+export function createRow(section: RowSection = 'equipment', currency: Currency = 'ARS'): QuotationRow {
   return {
-    id: crypto.randomUUID(), section, concept: '', detail: '', quantity: '1',
+    id: crypto.randomUUID(), section, currency, concept: '', detail: '', quantity: '1',
     unitPrice: '', priceState: 'pending',
   }
 }

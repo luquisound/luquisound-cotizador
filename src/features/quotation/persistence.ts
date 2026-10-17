@@ -76,11 +76,12 @@ function readPriceState(value: unknown): PriceState {
   return value
 }
 
-function readRow(value: unknown, identifiers: Set<string>): QuotationRow {
+function readRow(value: unknown, identifiers: Set<string>, legacyCurrency: Currency): QuotationRow {
   const row = readRecord(value)
   return {
     id: readIdentifier(row.id, identifiers),
     section: readSection(row.section),
+    currency: row.currency === undefined ? legacyCurrency : readCurrency(row.currency),
     concept: readString(row.concept, 500),
     detail: readString(row.detail, 2000),
     quantity: readString(row.quantity, 64),
@@ -91,6 +92,7 @@ function readRow(value: unknown, identifiers: Set<string>): QuotationRow {
 
 function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
   const quotation = readRecord(value)
+  const currency = readCurrency(quotation.currency)
   let exchangeRateQuote: Quotation['exchangeRateQuote']
   if (quotation.exchangeRateQuote !== undefined) {
     try {
@@ -108,10 +110,10 @@ function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
     id: readIdentifier(quotation.id, identifiers),
     title: readString(quotation.title, 500),
     subtitle: readString(quotation.subtitle, 1000),
-    currency: readCurrency(quotation.currency),
+    currency,
     ...(quotation.exchangeRate === undefined ? {} : { exchangeRate: readString(quotation.exchangeRate, 64) }),
     ...(exchangeRateQuote === undefined ? {} : { exchangeRateQuote }),
-    rows: readArray(quotation.rows, 1000).map((row) => readRow(row, identifiers)),
+    rows: readArray(quotation.rows, 1000).map((row) => readRow(row, identifiers, currency)),
     notes: readString(quotation.notes, 10000),
     createdAt: readTimestamp(quotation.createdAt),
     updatedAt: readTimestamp(quotation.updatedAt),
