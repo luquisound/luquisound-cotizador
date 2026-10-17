@@ -44,6 +44,13 @@ function createMetadataFixture(): Workspace {
   return workspace
 }
 
+function stockFixture(): NonNullable<CatalogItem['stock']> {
+  return {
+    quantity: 3, checkedAt: '2020-01-10T15:00:00.000Z', validUntil: '2020-01-10T16:00:00.000Z',
+    source: { document: 'synthetic-stock.xlsx', sheet: 'Stock', row: 7, date: '2020-01-10' },
+  }
+}
+
 test('new quotations have an empty exchange rate while legacy backups keep the field absent', () => {
   assert.equal(createQuotation().exchangeRate, '')
   const legacy = createFixture()
@@ -53,6 +60,7 @@ test('new quotations have an empty exchange rate while legacy backups keep the f
   assert.equal(Object.hasOwn(restored.quotations[0]!, 'exchangeRate'), false)
   assert.equal(Object.hasOwn(restored.catalog[0]!, 'source'), false)
   assert.equal(Object.hasOwn(restored.catalog[0]!, 'referencePrices'), false)
+  assert.equal(Object.hasOwn(restored.catalog[0]!, 'stock'), false)
 })
 
 test('raw exchange-rate draft strings survive backup, storage and duplication without coercion', () => {
@@ -169,6 +177,75 @@ test('catalogue metadata and independent historical price sources roundtrip exac
   assert.deepEqual(loadWorkspace(storage).workspace, original)
 })
 
+test('stock snapshots preserve zero, unknown quantity, expired timestamps and independent sources exactly', () => {
+  for (const quantity of [0, null, 3, Number.MAX_SAFE_INTEGER]) {
+    const workspace = createMetadataFixture()
+    workspace.catalog[0]!.stock = { ...stockFixture(), quantity }
+    const snapshot = structuredClone(workspace)
+    const restored = parseWorkspace(serializeWorkspace(workspace))
+    assert.deepEqual(restored, snapshot)
+    assert.notEqual(restored.catalog[0]!.stock, workspace.catalog[0]!.stock)
+    assert.notEqual(restored.catalog[0]!.stock!.source, workspace.catalog[0]!.stock!.source)
+    assert.notDeepEqual(restored.catalog[0]!.stock!.source, restored.catalog[0]!.source)
+    const storage = createMemoryStorage()
+    assert.equal(saveWorkspace(storage, workspace).ok, true)
+    assert.deepEqual(loadWorkspace(storage).workspace, snapshot)
+    restored.catalog[0]!.stock!.source.sheet = 'Edited stock'
+    assert.deepEqual(workspace, snapshot)
+  }
+})
+
+test('stock whitelists discard unknown properties without substituting product source or dates', () => {
+  const workspace = createMetadataFixture()
+  workspace.catalog[0]!.stock = stockFixture()
+  const item = workspace.catalog[0]!
+  const stock = item.stock!
+  const expanded = {
+    ...workspace, catalog: [{
+      ...item, stock: { ...stock, unrecognized: 'discard', source: { ...stock.source, unrecognized: 'discard' } },
+    }],
+  }
+  assert.deepEqual(parseWorkspace(JSON.stringify(expanded)), workspace)
+  assert.deepEqual(JSON.parse(serializeWorkspace(expanded)), workspace)
+  const withoutItemSource = { ...workspace, catalog: [{ ...item, source: undefined }] }
+  const restored = parseWorkspace(serializeWorkspace(withoutItemSource))
+  assert.equal(Object.hasOwn(restored.catalog[0]!, 'source'), false)
+  assert.deepEqual(restored.catalog[0]!.stock, stock)
+})
+
+test('invalid stock quantity, timestamps, intervals and provenance cannot overwrite good stored work', () => {
+  const workspace = createMetadataFixture()
+  const stock = stockFixture()
+  const invalidStocks: unknown[] = [
+    null, [], {},
+    ...[undefined, -1, 1.5, '0', '', true, Number.MAX_SAFE_INTEGER + 1].map((quantity) => ({ ...stock, quantity })),
+    ...[undefined, null, '', 0, '2020-01-10', '2020-02-30T15:00:00.000Z', '2020-01-10T15:00:00Z',
+      '2020-01-10T15:00:00.000+00:00'].flatMap((timestamp) => [
+      { ...stock, checkedAt: timestamp }, { ...stock, validUntil: timestamp },
+    ]),
+    { ...stock, validUntil: stock.checkedAt },
+    { ...stock, validUntil: '2020-01-10T14:59:59.999Z' },
+    ...[undefined, null, [], {}, { document: '', date: null }, { document: 'synthetic.xlsx' },
+      { document: 'synthetic.xlsx', row: 0, date: null },
+      { document: 'synthetic.xlsx', date: '2020-02-30' }].map((source) => ({ ...stock, source })),
+  ]
+  const original = serializeWorkspace(workspace)
+  const storage = createMemoryStorage(original)
+  for (const invalidStock of invalidStocks) {
+    const invalid = { ...workspace, catalog: [{ ...workspace.catalog[0]!, stock: invalidStock }] }
+    rejectBackup(invalid)
+    assert.equal(saveWorkspace(storage, invalid as Workspace).ok, false)
+    assert.equal(storage.current(), original)
+    assert.equal(storage.writeCount(), 0)
+  }
+  for (const quantity of [NaN, Infinity, -Infinity]) {
+    const invalid = { ...workspace, catalog: [{ ...workspace.catalog[0]!, stock: { ...stock, quantity } }] }
+    assert.equal(saveWorkspace(storage, invalid).ok, false)
+    assert.equal(storage.current(), original)
+    assert.equal(storage.writeCount(), 0)
+  }
+})
+
 test('restoring old historical prices never assigns the current item source retroactively', () => {
   const workspace = createMetadataFixture()
   const oldReference = workspace.catalog[0]!.referencePrices![1]!
@@ -233,6 +310,7 @@ test('item and individual reference sources require valid dates, document names 
   for (const source of invalidSources) {
     rejectBackup({ ...workspace, catalog: [{ ...item, source }] })
     rejectBackup({ ...workspace, catalog: [{ ...item, referencePrices: [{ ...reference, source }] }] })
+    rejectBackup({ ...workspace, catalog: [{ ...item, stock: { ...stockFixture(), source } }] })
   }
   const source = { document: 'synthetic.xlsx', page: 1000000, row: 1, sheet: '', date: '2024-02-29' }
   const valid = { ...workspace, catalog: [{ ...item, source, referencePrices: [{ ...reference, source }] }] }

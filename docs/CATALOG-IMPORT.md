@@ -104,6 +104,26 @@ Reference currencies remain independent. Import never copies cost, list, or
 historical sale values into a quotation sale price, calculates margins, rounds
 supplier prices, or changes the current quotation's row values.
 
+## Optional stock observations
+
+An item may include `stock` without changing schema version 1. It contains
+`quantity` (a nonnegative safe integer or explicit `null`), canonical UTC
+millisecond `checkedAt` and `validUntil` timestamps, and its own required `source`
+using the same provenance schema. The validity interval must be positive. Missing
+stock does not mean zero, and imports never infer availability from price,
+historical Excel columns, file dates or import time.
+
+Stock-only changes participate in matching and updates. A supplied observation
+replaces the previous observation; an ordinary additive update with stock omitted
+preserves the prior observation without extending its validity. An explicit
+authoritative source replacement uses the incoming optional stock exactly, so
+omission clears old stock. Copies and backups preserve nested provenance and
+timestamps. Stock does not alter approved prices or current quotation rows.
+
+The observation classifier is prepared but disconnected from product selection
+and visual indicators until the remote source and freshness policy are validated.
+See [private spreadsheet preparation](CATALOG-SOURCE-ROADMAP.md).
+
 ## Validation and limits
 
 `parseCatalogImport(text)` validates an unknown JSON value and returns only known

@@ -1,4 +1,5 @@
 import type { CatalogItem, Currency, RowSection } from './model.ts'
+import { parseCatalogStockFields, type CatalogStockSnapshot } from './catalog-stock.ts'
 
 export interface CatalogSource {
   document: string
@@ -26,6 +27,7 @@ export interface CatalogEntry extends CatalogItem {
   presentation?: string
   source?: CatalogSource
   referencePrices?: CatalogReferencePrice[]
+  stock?: CatalogStockSnapshot
 }
 
 export interface CatalogImportItem {
@@ -40,6 +42,7 @@ export interface CatalogImportItem {
   section: RowSection
   source?: CatalogSource
   referencePrices: CatalogReferencePrice[]
+  stock?: CatalogStockSnapshot
 }
 
 export interface CatalogImportDocument {
@@ -154,6 +157,13 @@ function referencePrice(value: unknown): CatalogReferencePrice {
   }
 }
 
+function stockSnapshot(value: unknown): CatalogStockSnapshot {
+  const input = record(value)
+  const fields = parseCatalogStockFields(input.quantity, input.checkedAt, input.validUntil)
+  if (!fields) invalidImport()
+  return { ...fields, source: source(input.source) }
+}
+
 function importItem(value: unknown): CatalogImportItem {
   const input = record(value)
   const name = text(input.name, 500)
@@ -178,6 +188,7 @@ function importItem(value: unknown): CatalogImportItem {
       const priceSource = price.source ?? itemSource
       return { ...price, ...(priceSource === undefined ? {} : { source: { ...priceSource } }) }
     }),
+    ...(input.stock === undefined ? {} : { stock: stockSnapshot(input.stock) }),
   }
 }
 
@@ -232,6 +243,7 @@ function itemSignature(item: CatalogImportItem): string {
     section: item.section, unit: item.unit ?? '', presentation: item.presentation ?? '',
     source: sourceSignature(item.source),
     referencePrices: item.referencePrices.map(referenceSignature),
+    stock: item.stock ? [item.stock.quantity, item.stock.checkedAt, item.stock.validUntil, sourceSignature(item.stock.source)] : null,
   })
 }
 
@@ -249,6 +261,10 @@ function cloneReference(price: CatalogReferencePrice): CatalogReferencePrice {
   return { ...price, ...(price.source === undefined ? {} : { source: { ...price.source } }) }
 }
 
+function cloneStock(stock: CatalogStockSnapshot): CatalogStockSnapshot {
+  return { ...stock, source: { ...stock.source } }
+}
+
 function asImportItem(item: CatalogEntry): CatalogImportItem {
   return {
     supplier: item.supplier ?? '', sku: item.sku ?? '', brand: item.brand ?? '',
@@ -257,6 +273,7 @@ function asImportItem(item: CatalogEntry): CatalogImportItem {
     ...(item.presentation === undefined ? {} : { presentation: item.presentation }),
     ...(item.source === undefined ? {} : { source: { ...item.source } }),
     referencePrices: item.referencePrices?.map(cloneReference) ?? [],
+    ...(item.stock === undefined ? {} : { stock: cloneStock(item.stock) }),
   }
 }
 
@@ -267,6 +284,7 @@ function cloneEntry(item: CatalogEntry): CatalogEntry {
     ...(item.referencePrices === undefined ? {} : {
       referencePrices: item.referencePrices.map(cloneReference),
     }),
+    ...(item.stock === undefined ? {} : { stock: cloneStock(item.stock) }),
   }
 }
 
@@ -279,6 +297,7 @@ function entryFromItem(item: CatalogImportItem, id: string): CatalogEntry {
     ...(item.presentation === undefined ? {} : { presentation: item.presentation }),
     ...(item.source === undefined ? {} : { source: { ...item.source } }),
     referencePrices: mergeReferences([], item.referencePrices),
+    ...(item.stock === undefined ? {} : { stock: cloneStock(item.stock) }),
   }
 }
 

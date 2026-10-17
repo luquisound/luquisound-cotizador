@@ -8,6 +8,7 @@ import type {
   CatalogEntry, CatalogImportDocument, CatalogImportItem, CatalogReferencePrice,
   CatalogSource,
 } from '../src/features/quotation/catalog.ts'
+import type { CatalogStockSnapshot } from '../src/features/quotation/catalog-stock.ts'
 
 function item(changes: Partial<CatalogImportItem> = {}): CatalogImportItem {
   return {
@@ -25,6 +26,13 @@ function document(items: CatalogImportItem[] = [item()]): CatalogImportDocument 
 
 function replacement(items: CatalogImportItem[] = [item()], sources = ['synthetic-source.pdf']): CatalogImportDocument {
   return { ...document(items), replaceSourceDocuments: sources }
+}
+
+function stock(quantity: number | null = 3): CatalogStockSnapshot {
+  return {
+    quantity, checkedAt: '2026-10-17T15:00:00.000Z', validUntil: '2026-10-17T16:00:00.000Z',
+    source: { document: 'synthetic-stock-source', sheet: 'Products', row: 12, date: null },
+  }
 }
 
 function parse(value: unknown): CatalogImportDocument {
@@ -594,6 +602,112 @@ test('replacement capacity counts 451 scoped removals before additions and valid
   const largePreview = buildCatalogImportPreview(largeExisting, largeIncoming)
   assert.equal(largePreview.removals.length, 451)
   assert.throws(() => applyCatalogImport(largeExisting, largePreview, { allowUpdates: true }), /límite de 5 MB/)
+})
+
+test('optional stock preserves unknown and explicit zero with independent provenance and no legacy defaults', () => {
+  const legacy = parse(document())
+  assert.equal(Object.hasOwn(legacy.items[0], 'stock'), false)
+  assert.equal(Object.hasOwn(entries()[0], 'stock'), false)
+  assert.equal(Object.hasOwn(parse({ ...document(), items: [{ ...item(), stockQuantity: 0 }] }).items[0], 'stock'), false)
+  for (const quantity of [null, 0, 3, Number.MAX_SAFE_INTEGER]) {
+    const snapshot = stock(quantity)
+    const parsed = parse(document([item({ stock: snapshot })]))
+    assert.deepEqual(parsed.items[0].stock, snapshot)
+    assert.notDeepEqual(parsed.items[0].stock?.source, parsed.items[0].source)
+    const imported = entries([item({ stock: snapshot })])[0]
+    assert.deepEqual(imported.stock, snapshot)
+    assert.equal(imported.unitPrice, '')
+    assert.equal(imported.stock?.source.date, null)
+  }
+})
+
+test('stock import rejects invalid quantities, validity intervals and missing independent source provenance', () => {
+  const valid = stock(0)
+  const invalidSnapshots: unknown[] = [null, [], {},
+    ...[undefined, '0', true, -1, 0.5, Number.MAX_SAFE_INTEGER + 1].map((quantity) => ({ ...valid, quantity })),
+    { ...valid, checkedAt: undefined }, { ...valid, checkedAt: '2026-10-17' },
+    { ...valid, checkedAt: '2026-10-17T15:00:00+00:00' },
+    { ...valid, checkedAt: '2026-02-30T15:00:00.000Z' },
+    { ...valid, validUntil: undefined }, { ...valid, validUntil: valid.checkedAt },
+    { ...valid, validUntil: '2026-10-17T14:00:00.000Z' },
+    ...[undefined, null, {}, { document: ' ', date: null },
+      { document: 'synthetic-stock-source', row: 0, date: null },
+      { document: 'synthetic-stock-source', date: '2026-13' }].map((source) => ({ ...valid, source })),
+  ]
+  for (const snapshot of invalidSnapshots) {
+    assert.throws(() => parse({ ...document(), items: [{ ...item(), stock: snapshot }] }), /formato válido/)
+  }
+  const overflow = JSON.stringify(document([item({ stock: valid })])).replace('"quantity":0', '"quantity":1e309')
+  assert.throws(() => parseCatalogImport(overflow), /formato válido/)
+  const parsed = parse({ ...document(), items: [{ ...item(), stock: {
+    ...valid, unknown: 'discard', source: { ...valid.source, unknown: 'discard' },
+  } }] })
+  assert.deepEqual(parsed.items[0].stock, valid)
+})
+
+test('stock-only changes participate in previews, matching conflicts and idempotent approved updates', () => {
+  const existing = entries([item({ stock: stock(3) })])
+  existing[0].unitPrice = '0'
+  existing[0].currency = 'USD'
+  const snapshot = structuredClone(existing)
+  const changes: Partial<CatalogStockSnapshot>[] = [
+    { quantity: 0 }, { quantity: null }, { checkedAt: '2026-10-17T15:01:00.000Z' },
+    { validUntil: '2026-10-17T17:00:00.000Z' },
+    { source: { ...stock().source, row: 13 } },
+    { source: { ...stock().source, document: 'synthetic-other-stock-source' } },
+  ]
+  for (const change of changes) {
+    const incoming = document([item({ stock: { ...stock(), ...change } })])
+    const preview = buildCatalogImportPreview(existing, incoming)
+    assert.equal(preview.summary.updates, 1)
+    assert.deepEqual(applyCatalogImport(existing, preview, { allowUpdates: false }), snapshot)
+    const result = applyCatalogImport(existing, preview, { allowUpdates: true })
+    assert.equal(result[0].id, existing[0].id)
+    assert.equal(result[0].unitPrice, '0')
+    assert.equal(result[0].currency, 'USD')
+    assert.deepEqual(result[0].stock, incoming.items[0].stock)
+    assert.equal(buildCatalogImportPreview(result, incoming).summary.unchanged, 1)
+    assert.deepEqual(existing, snapshot)
+  }
+  const conflicting = buildCatalogImportPreview(existing, replacement([
+    item({ stock: stock(0) }), item({ stock: stock(3) }),
+  ]))
+  assert.equal(conflicting.conflicts[0].reason, 'duplicate-import-key')
+  assert.throws(() => applyCatalogImport(existing, conflicting, { allowUpdates: true }), /resolver los conflictos/)
+  assert.deepEqual(existing, snapshot)
+})
+
+test('ordinary stock omission preserves its exact validity while authoritative source replacement clears omission', () => {
+  const existing = entries([item({ stock: stock(0) })])
+  const incoming = document([item({ name: 'Updated synthetic product' })])
+  const additive = applyCatalogImport(existing, buildCatalogImportPreview(existing, incoming), { allowUpdates: true })
+  assert.deepEqual(additive[0].stock, stock(0))
+  assert.notEqual(additive[0].stock, existing[0].stock)
+  const authoritative = applyCatalogImport(existing,
+    buildCatalogImportPreview(existing, replacement(incoming.items)), { allowUpdates: true })
+  assert.equal(Object.hasOwn(authoritative[0], 'stock'), false)
+  assert.equal(existing[0].stock?.quantity, 0)
+  assert.equal(buildCatalogImportPreview(authoritative, replacement(incoming.items)).summary.unchanged, 1)
+})
+
+test('stock snapshots and source provenance are deeply isolated across input, parse, previews and applied entries', () => {
+  const incoming = document([item({ stock: stock(0) })])
+  const parsed = parse(incoming)
+  const first = buildCatalogImportPreview([], parsed)
+  const existing = applyCatalogImport([], first, { allowUpdates: false })
+  existing[0].stock!.source.row = 19
+  assert.equal(first.additions[0].stock?.source.row, 12)
+  assert.equal(parsed.items[0].stock?.source.row, 12)
+  assert.equal(incoming.items[0].stock?.source.row, 12)
+  const preview = buildCatalogImportPreview(existing, document([item({ stock: stock(3) })]))
+  const result = applyCatalogImport(existing, preview, { allowUpdates: true })
+  result[0].stock!.source.document = 'synthetic-mutated-stock-source'
+  assert.equal(existing[0].stock?.source.document, 'synthetic-stock-source')
+  assert.equal(preview.updates[0].after.stock?.source.document, 'synthetic-stock-source')
+  assert.equal(preview.updates[0].before.stock?.source.row, 19)
+  const removal = buildCatalogImportPreview(existing, replacement([])).removals[0]
+  removal.stock!.source.row = 20
+  assert.equal(existing[0].stock?.source.row, 19)
 })
 
 test('search matches accents, case, code, supplier, brand and combined terms in original order', () => {

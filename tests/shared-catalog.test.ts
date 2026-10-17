@@ -6,6 +6,7 @@ import {
   type CatalogImportDocument, type CatalogImportItem, type CatalogReferencePrice,
 } from '../src/features/quotation/catalog.ts'
 import { createQuotation, type CatalogItem } from '../src/features/quotation/model.ts'
+import type { CatalogStockSnapshot } from '../src/features/quotation/catalog-stock.ts'
 import { serializeWorkspace, STORAGE_KEY, type StorageAdapter } from '../src/features/quotation/persistence.ts'
 import {
   CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
@@ -27,6 +28,13 @@ function item(overrides: Partial<CatalogImportItem> = {}): CatalogImportItem {
 
 function document(items: CatalogImportItem[] = [item()]): CatalogImportDocument {
   return { format: 'luquisound.catalog', version: 1, items }
+}
+
+function stock(quantity: number | null): CatalogStockSnapshot {
+  return {
+    quantity, checkedAt: '2026-10-17T15:00:00.000Z', validUntil: '2026-10-17T16:00:00.000Z',
+    source: { document: 'synthetic-stock-source', sheet: 'Products', row: 2, date: null },
+  }
 }
 
 function jsonResponse(value: unknown = document()): Response {
@@ -255,6 +263,31 @@ test('shared transport preserves a validated explicit source replacement manifes
   assert.deepEqual(loaded?.replaceSourceDocuments, incoming.replaceSourceDocuments)
   await assert.rejects(load(jsonResponse({ ...incoming, replaceSourceDocuments: [] })), genericFailure)
   await assert.rejects(load(jsonResponse({ ...incoming, items: [item()] })), genericFailure)
+})
+
+test('shared snapshots preserve unknown and zero through loading and stock-only merges without inventing freshness', async () => {
+  const existing = mergeSharedCatalog([], document([item({ stock: stock(3) })]))
+  existing[0].unitPrice = '0'
+  existing[0].currency = 'USD'
+  const original = structuredClone(existing)
+  for (const quantity of [0, null]) {
+    const incoming = document([item({ stock: stock(quantity) })])
+    const loaded = await load(jsonResponse(incoming))
+    assert.ok(loaded)
+    const result = mergeSharedCatalog(existing, loaded)
+    assert.notEqual(result, existing)
+    assert.equal(result[0].id, existing[0].id)
+    assert.equal(result[0].unitPrice, '0')
+    assert.equal(result[0].currency, 'USD')
+    assert.deepEqual(result[0].stock, incoming.items[0].stock)
+    assert.equal(mergeSharedCatalog(result, loaded), result)
+    const withoutStock = mergeSharedCatalog(result, document([item({ name: 'Updated synthetic name' })]))
+    assert.deepEqual(withoutStock[0].stock, incoming.items[0].stock)
+    result[0].stock!.source.row = 99
+    assert.equal(loaded.items[0].stock?.source.row, 2)
+    assert.deepEqual(existing, original)
+  }
+  await assert.rejects(load(jsonResponse(document([item({ stock: { ...stock(0), quantity: -1 } })]))), genericFailure)
 })
 
 test('shared removal-only updates apply once and an explicitly empty scoped catalogue preserves manual entries', () => {

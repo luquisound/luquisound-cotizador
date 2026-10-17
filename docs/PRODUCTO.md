@@ -181,6 +181,14 @@ at most two decimals may be copied into an editable price. Costs and unknown
 roles/currencies require manual pricing. Provenance remains in the private
 catalogue UI and backup, never in customer-facing descriptions or images.
 
+Future supplier availability has an optional stock snapshot contract with explicit
+quantity, observation validity and private provenance. This preparation does not
+connect a spreadsheet, import historical Excel stock or change product choices.
+After read-only source access and a freshness policy are validated, fresh zero
+stock will be excluded from new catalogue selections. Low-stock thresholds and
+presentation remain undecided. Manual concepts, approved sale prices and existing
+quotation rows remain independent. See `CATALOG-SOURCE-ROADMAP.md`.
+
 ## Image download and sharing
 
 Complete the quotation, prepare a PNG, then choose download or share. The share

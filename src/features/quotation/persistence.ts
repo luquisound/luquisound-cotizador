@@ -1,5 +1,6 @@
 import { createWorkspace } from './model.ts'
 import { CATALOG_REFERENCE_MAX_PRICES } from './catalog.ts'
+import { parseCatalogStockFields } from './catalog-stock.ts'
 import { parseExchangeRate } from './exchange.ts'
 import { readStoredBlueDollarQuote } from './exchange-quote.ts'
 import type { CatalogItem, CatalogReferencePrice, CatalogSource, Currency, PriceState, Quotation, QuotationRow, RowSection, Workspace } from './model.ts'
@@ -162,6 +163,13 @@ function readReferencePrice(value: unknown): CatalogReferencePrice {
   }
 }
 
+function readCatalogStock(value: unknown): NonNullable<CatalogItem['stock']> {
+  const stock = readRecord(value)
+  const fields = parseCatalogStockFields(stock.quantity, stock.checkedAt, stock.validUntil)
+  if (fields === null) invalidBackup()
+  return { ...fields, source: readCatalogSource(stock.source) }
+}
+
 function readCatalogItem(value: unknown, identifiers: Set<string>): CatalogItem {
   const item = readRecord(value)
   return {
@@ -178,6 +186,7 @@ function readCatalogItem(value: unknown, identifiers: Set<string>): CatalogItem 
     ...(item.unit === undefined ? {} : { unit: readString(item.unit, 200) }),
     ...(item.presentation === undefined ? {} : { presentation: readString(item.presentation, 200) }),
     ...(item.source === undefined ? {} : { source: readCatalogSource(item.source) }),
+    ...(item.stock === undefined ? {} : { stock: readCatalogStock(item.stock) }),
     ...(item.referencePrices === undefined ? {} : {
       referencePrices: readArray(item.referencePrices, CATALOG_REFERENCE_MAX_PRICES).map(readReferencePrice),
     }),

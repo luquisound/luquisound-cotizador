@@ -1,7 +1,9 @@
 import type { CatalogReferencePrice, CatalogSource } from './catalog.ts'
+import type { CatalogStockSnapshot } from './catalog-stock.ts'
 import type { BlueDollarQuote } from './exchange-quote.ts'
 
 export type { CatalogReferencePrice, CatalogSource } from './catalog.ts'
+export type { CatalogStockSnapshot } from './catalog-stock.ts'
 
 export type Currency = 'ARS' | 'USD'
 export type RowSection = 'equipment' | 'extras'
@@ -45,6 +47,7 @@ export interface CatalogItem {
   presentation?: string
   source?: CatalogSource
   referencePrices?: CatalogReferencePrice[]
+  stock?: CatalogStockSnapshot
 }
 
 export interface Workspace {

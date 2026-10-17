@@ -37,6 +37,13 @@ function catalogFixture(): CatalogItem[] {
   }]
 }
 
+function stockFixture(): NonNullable<CatalogItem['stock']> {
+  return {
+    quantity: 3, checkedAt: '2020-01-10T15:00:00.000Z', validUntil: '2020-01-10T16:00:00.000Z',
+    source: { document: 'synthetic-stock.xlsx', sheet: 'Stock', row: 7, date: '2020-01-10' },
+  }
+}
+
 function legacyFixture(): Workspace {
   const first = createQuotation()
   first.title = 'Synthetic earlier quotation'
@@ -115,11 +122,71 @@ test('catalog-only backups preserve approved zero, missing sale price and histor
   const snapshot = structuredClone(catalog)
   const text = serializeCatalogBackup(catalog)
   assert.deepEqual(parseCatalogBackup(text), snapshot)
+  assert.equal(Object.hasOwn(parseCatalogBackup(text)[0]!, 'stock'), false)
   assert.deepEqual(parseWorkspace(text), { version: 1, activeQuotationId: null, quotations: [], catalog: snapshot })
   assert.deepEqual(catalog, snapshot)
   const memory = memoryStorage()
   assert.equal(saveCatalog(memory.storage, catalog).ok, true)
   assert.deepEqual(loadCatalog(memory.storage), { catalog: snapshot, error: null, stored: true })
+})
+
+test('stock snapshots roundtrip catalogue backups and both storage keys without inventing or refreshing values', () => {
+  for (const quantity of [null, 0, 3]) {
+    const catalog = catalogFixture()
+    catalog[0]!.stock = { ...stockFixture(), quantity }
+    const snapshot = structuredClone(catalog)
+    const legacy = { ...legacyFixture(), catalog }
+    const raw = `\ufeff${JSON.stringify(legacy)}`
+    const memory = memoryStorage({ [STORAGE_KEY]: raw })
+    assert.deepEqual(loadCatalog(memory.storage), { catalog: snapshot, error: null, stored: false })
+    assert.deepEqual(parseCatalogBackup(serializeCatalogBackup(catalog)), snapshot)
+    assert.equal(saveCatalog(memory.storage, catalog).ok, true)
+    assert.deepEqual(loadCatalog(memory.storage), { catalog: snapshot, error: null, stored: true })
+    assert.equal(memory.values.get(STORAGE_KEY), raw)
+    assert.deepEqual(memory.writes, [CATALOG_STORAGE_KEY])
+    assert.deepEqual(catalog, snapshot)
+  }
+})
+
+test('catalogue-only recovery preserves stock without replacing the current quotation or legacy bytes', () => {
+  const legacy = legacyFixture()
+  legacy.catalog[0]!.stock = stockFixture()
+  const raw = `\ufeff${JSON.stringify(legacy)}`
+  const current = createQuotation()
+  current.notes = 'Synthetic independent current work'
+  const currentText = serializeWorkspace({ version: 1, activeQuotationId: current.id, quotations: [current], catalog: [] })
+  const memory = memoryStorage({ [STORAGE_KEY]: raw, [CURRENT_QUOTATION_STORAGE_KEY]: currentText })
+  const restoredCatalog = parseCatalogBackup(raw)
+  assert.equal(saveCatalog(memory.storage, restoredCatalog).ok, true)
+  assert.deepEqual(loadCatalog(memory.storage).catalog, legacy.catalog)
+  assert.deepEqual(loadCurrentQuotation(memory.storage).quotation, current)
+  assert.equal(memory.values.get(CURRENT_QUOTATION_STORAGE_KEY), currentText)
+  assert.equal(memory.values.get(STORAGE_KEY), raw)
+  assert.deepEqual(memory.writes, [CATALOG_STORAGE_KEY])
+})
+
+test('malformed stock never replaces valid catalogue, current recovery or legacy bytes', () => {
+  const legacyText = serializeWorkspace(legacyFixture())
+  const catalogText = serializeCatalogBackup(catalogFixture())
+  const current = createQuotation()
+  current.notes = 'Synthetic recoverable work'
+  const currentText = serializeWorkspace({ version: 1, activeQuotationId: current.id, quotations: [current], catalog: [] })
+  const memory = memoryStorage({
+    [STORAGE_KEY]: legacyText, [CATALOG_STORAGE_KEY]: catalogText, [CURRENT_QUOTATION_STORAGE_KEY]: currentText,
+  })
+  const before = new Map(memory.values)
+  const stock = stockFixture()
+  for (const invalidStock of [
+    null, {}, { ...stock, quantity: -1 }, { ...stock, quantity: 1.5 }, { ...stock, quantity: '0' },
+    { ...stock, checkedAt: undefined }, { ...stock, validUntil: stock.checkedAt },
+    { ...stock, source: undefined }, { ...stock, source: { document: '', date: null } },
+  ]) {
+    const invalid = [{ ...catalogFixture()[0]!, stock: invalidStock }] as CatalogItem[]
+    assert.throws(() => parseCatalogBackup(JSON.stringify({ version: 1, activeQuotationId: null, quotations: [], catalog: invalid })))
+    assert.equal(saveCatalog(memory.storage, invalid).ok, false)
+    assert.deepEqual(memory.values, before)
+    assert.deepEqual(memory.writes, [])
+  }
 })
 
 test('legacy full-workspace backups restore only their catalog with approved prices intact', () => {

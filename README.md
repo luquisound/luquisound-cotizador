@@ -144,6 +144,11 @@ prices. Replacement previews show the removals before confirmation. See the
 [private import contract](docs/CATALOG-IMPORT.md).
 Keep catalogue files private.
 
+The optional stock observation contract is prepared for a future private
+spreadsheet source. No Sheets connection or availability filtering is active;
+the approved Excel snapshot remains unchanged. See the
+[source preparation and activation boundaries](docs/CATALOG-SOURCE-ROADMAP.md).
+
 Each quotation has one currency for its concepts. The open quotation automatically
 uses the DolarAPI blue sale rate through a same-origin server endpoint.
 Both totals, the rate, its source, and the source date appear in the preview and

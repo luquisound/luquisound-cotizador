@@ -36,6 +36,12 @@ catalogue never grants historical references the status of approved sale prices.
 
 ## Private source and configuration
 
+The endpoint can carry validated optional stock observations in the existing
+private JSON schema. No spreadsheet connector, credentials, schedule or live
+availability filter is enabled by that support. A future server-side reader can
+produce the same reviewed private snapshot; see
+[private spreadsheet preparation](CATALOG-SOURCE-ROADMAP.md).
+
 Store the reviewed import JSON in a **private** Vercel Blob store. Never add it to
 the checkout, `public/`, the Vite bundle, fixtures, or build artifacts. The existing
 personal-import schema is reused; the shared transport is limited to 4 MiB to

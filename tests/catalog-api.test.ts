@@ -85,6 +85,32 @@ test('source replacement survives the endpoint and client loader before reconcil
   assert.deepEqual(result[1], manual)
 })
 
+test('the private endpoint preserves stock observations independently of price and product provenance', async () => {
+  for (const quantity of [null, 0]) {
+    const stock = {
+      quantity, checkedAt: '2026-10-17T10:00:00.000Z', validUntil: '2026-10-17T10:15:00.000Z',
+      source: { document: 'Synthetic live source', sheet: 'Products', row: 2, date: null },
+    }
+    const incoming = document([item({
+      source: { document: 'synthetic-reference.pdf', page: 1, date: null }, stock,
+    })])
+    const response = await serveCatalog(request(), CONFIG, fetchDocument(incoming))
+    assert.equal(response.status, 200)
+    assertPrivate(response)
+    const loaded = await loadSharedCatalog(new AbortController().signal, async () => response)
+    assert.ok(loaded)
+    assert.deepEqual(loaded.items[0]!.stock, stock)
+    assert.equal(loaded.items[0]!.source?.document, 'synthetic-reference.pdf')
+    const [entry] = mergeSharedCatalog([], loaded)
+    assert.equal(entry!.unitPrice, '')
+    assert.deepEqual(entry!.stock, stock)
+  }
+  const malformed = { ...document(), items: [{ ...item(), stock: { quantity: '0' } }] }
+  const response = await serveCatalog(request(), CONFIG, fetchDocument(malformed))
+  assert.equal(response.status, 502)
+  assertPrivate(response)
+})
+
 test('only the configured private Blob receives the server credential and cache bypass', async () => {
   let calls = 0
   const fetcher: typeof fetch = async (input, init) => {
