@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import {
   calculateQuotation,
   formatMoney,
@@ -105,7 +105,6 @@ export function QuotationPreview({
   notices,
   exchangeDetails,
 }: QuotationPreviewProps) {
-  const hintId = useId()
   const calculation = calculateQuotation(quotation)
   const calculatedById = new Map(calculation.rows.map((row) => [row.row.id, row]))
 
@@ -114,7 +113,6 @@ export function QuotationPreview({
       <article
         className="quotation-sheet"
         aria-label="Vista previa editable del presupuesto"
-        aria-describedby={hintId}
       >
         <header className="quotation-header">
           <div className="quotation-brand-line">
@@ -149,9 +147,6 @@ export function QuotationPreview({
 
         <div className="quotation-content">
           {notices}
-          <p className="quotation-edit-hint" id={hintId}>
-            Tocá el título o un concepto para editar el presupuesto.
-          </p>
           {sections.map(({ section, label, addLabel }) => (
             <section className="quotation-section" key={section} aria-label={label}>
               <h2 className="quotation-section-title">{label}</h2>

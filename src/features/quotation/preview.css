@@ -18,13 +18,6 @@
   box-sizing: border-box;
 }
 
-.quotation-edit-hint {
-  margin: 0 0 max(16px, 1.8519cqw);
-  color: var(--quotation-muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
 .quotation-sheet {
   background: #fff;
   box-shadow: 0 2px 16px #0000000d;
@@ -412,10 +405,6 @@
   .quotation-content {
     min-width: 0;
     padding: 24px max(32px, env(safe-area-inset-right, 0px)) 0 max(32px, env(safe-area-inset-left, 0px));
-  }
-
-  .quotation-edit-hint {
-    margin-bottom: 20px;
   }
 
   .quotation-section + .quotation-section {
