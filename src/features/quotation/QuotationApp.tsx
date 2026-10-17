@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { calculateQuotation, isEmptyRow } from './calculation'
-import { createQuotation, createRow, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
+import { createQuotation, createRow, hasQuotationContent, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
 import type { AudioCategory } from './audio-categories'
 import { serializeWorkspace, type WorkspaceSaveResult } from './persistence'
 import {
@@ -79,6 +79,22 @@ export default function QuotationApp() {
       const target = catalogButton.current ?? document.querySelector<HTMLButtonElement>('.quotation-heading-edit')
       target?.focus()
     })
+  }
+
+  function startNewQuotation() {
+    if ((hasQuotationContent(quotationRef.current) || recoveryError) && !window.confirm(
+      '¿Comenzar un presupuesto nuevo? Se reemplazará el presupuesto en curso de este navegador. Descargá o guardá el actual antes de continuar. Tu catálogo y sus precios se conservan.',
+    )) return
+    const next = createQuotation()
+    if (!updateQuotation(next)) return
+    recoveryWriteAllowed.current = true
+    setRecoveryEnabled(true)
+    try {
+      setRecoveryError(saveCurrentQuotation(window.localStorage, next, { overwriteInvalid: true }).error)
+    } catch {
+      setRecoveryError('No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.')
+    }
+    window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.quotation-heading-edit')?.focus())
   }
 
   function updateQuotation(next: Quotation): boolean {
@@ -354,6 +370,10 @@ export default function QuotationApp() {
     <div className="quotation-workspace">
       <a className="skip-link" href="#quotation">Ir al presupuesto</a>
       <main className="workspace-main">
+        <nav className="workspace-actions" aria-label="Herramientas del presupuesto">
+          <button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Mi catálogo</button>
+          <button className="button secondary" type="button" onClick={startNewQuotation}>Nuevo presupuesto</button>
+        </nav>
         <div id="quotation">
           <QuotationPreview
             quotation={quotation}
@@ -362,7 +382,7 @@ export default function QuotationApp() {
             onAddRow={addRow}
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
-              {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
+              {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
               {sharedCatalogStatus === 'error' && <div className="notice error" role="status"><p>No se pudo actualizar el catálogo compartido. Podés seguir usando tus opciones.</p><button className="button secondary" type="button" onClick={retrySharedCatalog}>Reintentar catálogo compartido</button></div>}
             </>}
             exchangeDetails={<>

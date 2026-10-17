@@ -152,9 +152,12 @@ the current browser and origin. A read-only server endpoint supplies the private
 common catalogue on startup. There is no quotation upload, analytics, or
 synchronization of locally approved prices.
 
-The header contains the brand and editable quotation details. There is no
-new-quotation action, quotation history, selector, duplicate, delete, or
-quotation-backup workflow, and no saved-status label in the main interface.
+The header contains the brand and editable quotation details. "Mi catalogo" is
+always reachable above the quotation. "Nuevo presupuesto" replaces only the
+current quotation, confirming before content or an unreadable recovery record is
+replaced. It preserves the catalogue, approved prices and legacy workspace key.
+There is no quotation history, selector, duplicate or quotation-backup workflow yet,
+and no saved-status label in the main interface.
 Downloading or sharing a PNG leaves the quotation open. Reusable templates and
 fixed budgets are managed in Figma.
 
@@ -222,8 +225,8 @@ separately; the application does not add a frontend PIN or claim one is security
 ## Optional private catalogue
 
 No catalogue data is embedded in the public application. Product selection stays
-in the row editor; catalogue management remains available from a storage-error
-notice. A configured private endpoint loads the common catalogue automatically.
+in the row editor; catalogue management is always available through "Mi catalogo"
+and from a storage-error notice. A configured private endpoint loads the common catalogue automatically.
 A private JSON file can also be imported after a summary and explicit confirmation.
 The catalogue combines a category filter with SKU, brand, and name search and limits rendered
 results for mobile use. Both the catalogue editor and quotation product picker

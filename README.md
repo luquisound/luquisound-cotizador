@@ -108,9 +108,11 @@ On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
 compact header and readable row sizes; wide screens place totals beside the
 concepts and expand the workspace up to 1680 pixels. Image export controls remain
 fixed at the bottom and are excluded from the PNG along with other editing controls.
-There is no quotation list, saved-status label, new-quotation, duplicate, delete,
-or quotation-backup control. Downloading or sharing a PNG leaves the current
-quotation open.
+"Mi catalogo" is always available above the quotation. "Nuevo presupuesto"
+starts a blank current quotation after confirmation when it would replace content
+or an unreadable recovery record; the catalogue and its prices are preserved.
+There is no quotation list, duplicate or quotation-backup control yet.
+Downloading or sharing a PNG leaves the current quotation open.
 
 Both sections offer optional audio categories: amplifier/DSP, additional
 amplifier, subwoofer, and speakers for equipment; cables/accessories,
@@ -147,8 +149,8 @@ synchronized between devices, or encrypted by the app. Clearing browser data,
 private browsing, device loss, or an origin change can make it unavailable.
 The private common catalogue is fetched on startup when configured.
 
-Catalogue management remains available from a storage-error notice, with private
-JSON backup and import. Product selection stays in the row editor. Backups
+Catalogue management is available from "Mi catalogo" and from a storage-error
+notice, with private JSON backup and import. Product selection stays in the row editor. Backups
 preserve IDs, approved prices, currencies, and provenance in the existing
 Workspace v1 envelope with `quotations: []` and `activeQuotationId: null`.
 After confirmation, backup

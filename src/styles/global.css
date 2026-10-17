@@ -47,6 +47,8 @@
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .quotation-workspace { min-height: 100svh; padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px)); }
 .workspace-main { max-width: 1080px; padding: 0 0 24px; margin: 0 auto; }
+.workspace-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 12px max(12px, env(safe-area-inset-left, 0px)); }
+.workspace-actions .button { min-width: 120px; }
 .export-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .current-quotation-note { margin: 20px 0 0; color: #66665f; font-size: 12px; text-align: center; }
 button, summary, select { touch-action: manipulation; }
