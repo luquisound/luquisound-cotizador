@@ -10,12 +10,11 @@ interface HeaderEditorProps {
   quotation: Quotation
   onSave: (quotation: Quotation) => void
   onClose: () => void
-  onUpdateRate: () => void
   rateLoading: boolean
   rateError: string | null
 }
 
-export function HeaderEditor({ quotation, onSave, onClose, onUpdateRate, rateLoading, rateError }: HeaderEditorProps) {
+export function HeaderEditor({ quotation, onSave, onClose, rateLoading, rateError }: HeaderEditorProps) {
   const [draft, setDraft] = useState(quotation)
   const rate = parseExchangeRate(quotation.exchangeRate ?? '')
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -35,10 +34,8 @@ export function HeaderEditor({ quotation, onSave, onClose, onUpdateRate, rateLoa
           <legend>Cotización del dólar</legend>
           <p className="exchange-rate-value">{rate.ok ? rate.rateLabel : 'Cotización pendiente'}</p>
           <p className="field-help">{exchangeRateDescription(quotation)}</p>
-          <p className="field-help">Queda fija en este presupuesto. Al actualizar usamos dólar blue, punta venta.</p>
-          <button type="button" className="button secondary" onClick={onUpdateRate} disabled={rateLoading}>
-            {rateLoading ? 'Consultando cotización…' : 'Actualizar cotización'}
-          </button>
+          <p className="field-help">Dólar blue venta. Se actualiza automáticamente cada hora al usar la app, también al reabrir este presupuesto.</p>
+          {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
           {rateError && <p className="field-errors" role="status">{rateError}</p>}
         </fieldset>
         <label>Notas para el cliente <span>(opcional)</span><textarea rows={3} value={draft.notes} maxLength={4000} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>

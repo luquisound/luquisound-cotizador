@@ -15,8 +15,8 @@ also part of hands-on acceptance.
   plus optional personal entries; every selected description and price remains
   editable. A field may be left blank without requiring a catalogue selection.
 - Explicit quantity, unit price, pending price, and included-without-charge state.
-- Automatic ARS and USD totals using a saved rate per quotation, with automatic
-  DolarAPI blue sale lookup for new quotations and explicit updates for saved ones.
+- Automatic ARS and USD totals using a rate saved per quotation, with hourly
+  DolarAPI blue sale refresh for the open quotation, including saved ones.
 - Local drafts, duplicate, reopen, and explicit JSON backup/import.
 - PNG image with only the graphic quotation, plus browser file sharing or download.
 
@@ -58,11 +58,14 @@ is inserted; a plus sign explicitly typed as part of the title is retained.
 - One explicit currency applies to every row of a quotation. Changing that base
   currency requires confirmation and preserves the entered row values.
 - The rate states how many ARS equal one USD, using Argentine separators, a
-  positive value, and up to six decimal places. New quotations request DolarAPI
-  blue sale through the server. Save the value and source timestamp together.
-  Stored quotations, imported backups, and duplicates keep their snapshots;
-  only an explicit update replaces their rate. Legacy manual rates remain valid
-  without inventing provenance. See `EXCHANGE-RATE.md` for lookup and failure rules.
+  positive value, and up to six decimal places. The open quotation requests DolarAPI
+  blue sale through the server automatically when its saved fetch reference is
+  one hour old or absent. Save the value and source timestamp together. This
+  includes reopening saved/imported quotations and duplicates. Only the open
+  quotation changes; inactive snapshots remain stored. Poll while visible and
+  online and check again on return or reconnection. No manual refresh control is
+  provided. Legacy manual rates remain valid without invented provenance until
+  a successful automatic lookup replaces them. See `EXCHANGE-RATE.md`.
 - Sum the rounded base lines first. Convert that final total once using exact
   integer/rational arithmetic, rounding the equivalent half up to cents. Preserve
   the base total exactly. Both ARS and USD totals and the explicit rate appear in

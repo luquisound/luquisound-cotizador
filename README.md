@@ -117,8 +117,8 @@ Catalogue selections copy values into a quotation; later catalogue edits preserv
 the quotation's stored prices.
 
 The compact "Opciones" menu groups duplication, "Mi catalogo", backups, and
-draft cleanup. Expand "Dolar del presupuesto" to inspect or explicitly update
-the saved rate. Catalogue status and local-storage guidance are in the menu;
+draft cleanup. Expand "Dolar del presupuesto" to inspect the automatic rate.
+Catalogue status and local-storage guidance are in the menu;
 storage and service failures remain visible beside the editor.
 
 Import a private catalogue JSON from "Mi catalogo" after reviewing its summary.
@@ -131,13 +131,18 @@ historical references remain separate. Reimporting matches supplier and SKU,
 preserving existing manually approved prices and quotation snapshots. See the
 [private import contract](docs/CATALOG-IMPORT.md). Keep catalogue files private.
 
-Each quotation has one currency for its concepts. New quotations automatically
-request the DolarAPI blue sale rate through a same-origin server endpoint.
+Each quotation has one currency for its concepts. The open quotation automatically
+uses the DolarAPI blue sale rate through a same-origin server endpoint.
 Both totals, the rate, its source, and the source date appear in the preview and
-PNG. Stored quotations and duplicates keep their saved rate until the user
-chooses "Actualizar cotizacion". Legacy manual rates are preserved and labelled
-without inventing source dates. A lookup failure keeps the existing rate; a draft
-without one remains editable and requires a successful update before export.
+PNG. Rates refresh hourly while the app is visible and online. Reopening a saved
+quotation or duplicate, returning to the app, and reconnecting check whether its
+saved reference is due. Fresh references are reused until their fetch-hour boundary;
+inactive quotations retain their snapshots. There is no manual update button.
+A lookup failure keeps the existing rate and retries automatically after one hour
+when active; a draft without a rate stays editable but cannot export yet.
+Legacy manual rates remain labelled without invented source dates until a
+successful automatic lookup replaces them. Automatic updates can change the
+equivalent total and invalidate a prepared image; downloaded files remain unchanged.
 Automatic rates alone do not create saved blank drafts. See
 [exchange-rate behavior](docs/EXCHANGE-RATE.md).
 Changing the concepts' currency preserves the entered prices after confirmation.

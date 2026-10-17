@@ -8,7 +8,8 @@ import { HeaderEditor, RowEditor } from './QuotationDialogs'
 import { CatalogEditor } from './CatalogTools'
 import type { CatalogImportDocument } from './catalog'
 import { loadSharedCatalog, mergeSharedCatalog } from './shared-catalog'
-import { exchangeRateDescription, loadBlueDollarQuote, type BlueDollarQuote } from './exchange-quote'
+import { exchangeRateDescription, type BlueDollarQuote } from './exchange-quote'
+import { startExchangeRateRefresh, type ExchangeRefreshState } from './exchange-refresh'
 import { parseExchangeRate } from './exchange'
 
 interface InitialWorkspace { workspace: Workspace; error: string | null; stored: boolean; persistedIds: string[] }
@@ -37,11 +38,9 @@ export default function QuotationApp() {
   const [sharing, setSharing] = useState(false)
   const [sharedCatalogStatus, setSharedCatalogStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
   const [sharedCatalogAttempt, setSharedCatalogAttempt] = useState(0)
-  const [rateState, setRateState] = useState<{ id: string; loading: boolean; error: string | null } | null>(null)
-  const [rateRequest, setRateRequest] = useState<{ id: string; automatic: boolean; sequence: number } | null>(null)
+  const [rateState, setRateState] = useState<(ExchangeRefreshState & { id: string }) | null>(null)
   const [rateWorkspaceVersion, setRateWorkspaceVersion] = useState(0)
-  const rateGeneration = useRef(0)
-  const copiedRateIds = useRef(new Set<string>())
+  const rateRefresh = useRef<ReturnType<typeof startExchangeRateRefresh> | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const workspaceMenu = useRef<HTMLDetailsElement>(null)
   const generation = useRef(0)
@@ -89,59 +88,35 @@ export default function QuotationApp() {
     window.requestAnimationFrame(() => workspaceMenu.current?.querySelector('summary')?.focus())
   }
 
-  const applyDollarQuote = useEffectEvent((id: string, quote: BlueDollarQuote, automatic: boolean) => {
-    if (!storageEnabled || pausedByAnotherTab.current || workspace.activeQuotationId !== id) return
+  const applyDollarQuote = useEffectEvent((id: string, quote: BlueDollarQuote): boolean => {
+    if (!storageEnabled || pausedByAnotherTab.current || workspace.activeQuotationId !== id) return false
     const current = workspace.quotations.find((entry) => entry.id === id)
-    if (!current || (automatic && current.exchangeRate?.trim())) return
-    if (!updateQuotation({ ...current, exchangeRate: quote.rate, exchangeRateQuote: quote })) {
-      setRateState({ id, loading: false, error: 'No se pudo aplicar la cotización. Tus datos actuales se conservan.' })
-      return
-    }
-    setRateState({ id, loading: false, error: null })
+    if (!current) return false
+    return updateQuotation({ ...current, exchangeRate: quote.rate, exchangeRateQuote: quote })
   })
 
-  function requestDollarQuote(id: string, automatic = false) {
-    if (!storageEnabled || pausedByAnotherTab.current) {
-      setRateState({ id, loading: false, error: 'El guardado local está pausado. Conservá un respaldo y resolvé el guardado antes de actualizar la cotización.' })
-      return
-    }
-    const sequence = ++rateGeneration.current
-    setRateState({ id, loading: true, error: null })
-    setRateRequest({ id, automatic, sequence })
-  }
-
-  const automaticDollarRequest = useEffectEvent(() => {
-    if (!storageEnabled || pausedByAnotherTab.current || persistedIds.current.has(quotation.id)
-      || copiedRateIds.current.has(quotation.id) || quotation.exchangeRate?.trim()) return null
-    return { id: quotation.id, automatic: true, sequence: ++rateGeneration.current }
-  })
+  const currentDollarQuote = useEffectEvent(() => quotation.exchangeRateQuote)
 
   useEffect(() => {
-    const request = rateRequest?.id === quotation.id && rateRequest.sequence === rateGeneration.current
-      ? rateRequest : automaticDollarRequest()
-    if (!request) return
-    const { id, automatic, sequence } = request
-    const controller = new AbortController()
-    let active = true
-    const timeout = window.setTimeout(() => {
-      controller.abort()
-      if (active && sequence === rateGeneration.current) setRateState({ id, loading: false, error: 'La consulta tardó demasiado. Se conserva la cotización guardada; podés reintentar.' })
-    }, 12000)
-    void loadBlueDollarQuote(controller.signal).then((quote) => {
-      if (active && !controller.signal.aborted && sequence === rateGeneration.current) applyDollarQuote(id, quote, automatic)
-    }).catch(() => {
-      if (active && !controller.signal.aborted && sequence === rateGeneration.current) setRateState({ id, loading: false, error: 'No se pudo consultar DolarAPI. Se conserva la cotización guardada; podés reintentar.' })
-    }).finally(() => {
-      window.clearTimeout(timeout)
-      if (active && !controller.signal.aborted && sequence === rateGeneration.current) setRateState((current) => current?.loading ? { ...current, loading: false } : current)
+    if (!storageEnabled) return
+    const refresh = startExchangeRateRefresh({
+      initialQuote: currentDollarQuote(),
+      isActive: () => document.visibilityState !== 'hidden' && navigator.onLine,
+      onQuote: (quote) => applyDollarQuote(quotation.id, quote),
+      onState: (state) => setRateState({ id: quotation.id, ...state }),
     })
+    rateRefresh.current = refresh
+    window.addEventListener('focus', refresh.check)
+    window.addEventListener('online', refresh.check)
+    document.addEventListener('visibilitychange', refresh.check)
     return () => {
-      active = false
-      if (sequence === rateGeneration.current) rateGeneration.current += 1
-      window.clearTimeout(timeout)
-      controller.abort()
+      refresh.stop()
+      if (rateRefresh.current === refresh) rateRefresh.current = null
+      window.removeEventListener('focus', refresh.check)
+      window.removeEventListener('online', refresh.check)
+      document.removeEventListener('visibilitychange', refresh.check)
     }
-  }, [quotation.id, rateRequest, rateWorkspaceVersion])
+  }, [quotation.id, rateWorkspaceVersion, storageEnabled])
 
   function persistSnapshot(next: Workspace) {
     const snapshot = prepareWorkspaceForStorage(next, persistedIds.current)
@@ -214,6 +189,8 @@ export default function QuotationApp() {
     function handleStorage(event: StorageEvent) {
       if (event.key !== STORAGE_KEY && event.key !== null) return
       pausedByAnotherTab.current = true
+      rateRefresh.current?.stop()
+      setRateState(null)
       setStorageEnabled(false)
       setStorageError('Otra pestaña cambió los datos guardados. El guardado se pausó para evitar sobrescribirlos. Descargá un respaldo de esta pestaña y recargá para recuperar la versión guardada.')
     }
@@ -249,7 +226,6 @@ export default function QuotationApp() {
     if (workspace.quotations.length >= 500) { setMessage('Llegaste al máximo de 500 borradores. Descargá un respaldo y eliminá los que ya no necesitás.'); return }
     setMessage('')
     const next = duplicateQuotation(quotation)
-    copiedRateIds.current.add(next.id)
     commitWorkspace({ ...workspace, activeQuotationId: next.id, quotations: [...workspace.quotations, next] })
   }
   function addRow(section: RowSection) {
@@ -288,13 +264,11 @@ export default function QuotationApp() {
       if (file.size > 5 * 1024 * 1024) throw new Error('El respaldo supera el máximo de 5 MB.')
       const next = parseWorkspace(await file.text())
       if (!window.confirm('Importar reemplaza los borradores y el catálogo de este navegador. ¿Continuar?')) return
-      rateGeneration.current += 1
-      setRateRequest(null)
+      rateRefresh.current?.stop()
       setRateState(null)
       setRateWorkspaceVersion((version) => version + 1)
       pausedByAnotherTab.current = false
       const nextIds = next.quotations.map((entry) => entry.id)
-      copiedRateIds.current = new Set(nextIds)
       persistedIds.current = new Set(nextIds); storageExists.current = true; setSavedIds(nextIds)
       setWorkspace(next.quotations.length ? next : ensureBlankQuotation(next)); setStorageEnabled(true); setMessage('Respaldo importado.'); setStorageError(null)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo importar el respaldo.') }
@@ -364,19 +338,19 @@ export default function QuotationApp() {
           <summary><span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span></summary>
           <div className="exchange-panel-details">
             {displayedRate.ok && <p className="field-help">{exchangeRateDescription(quotation)}</p>}
-            <p className="field-help">Queda fijo en este presupuesto. Actualizarlo puede cambiar el total equivalente.</p>
-            <button type="button" className="button secondary" disabled={rateLoading} onClick={() => { void requestDollarQuote(quotation.id) }}>{rateLoading ? 'Consultando…' : 'Actualizar cotización'}</button>
+            <p className="field-help">Se actualiza automáticamente cada hora al usar la app. El total equivalente puede cambiar.</p>
+            {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
           </div>
         </details>
         {quotation.exchangeRateQuote && Date.now() - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
-        {rateError && <div className="exchange-warning" role="alert"><p>{rateError}</p><button type="button" className="button secondary" disabled={rateLoading} onClick={() => { void requestDollarQuote(quotation.id) }}>Reintentar cotización</button></div>}
+        {rateError && <p className="exchange-warning" role="alert">{rateError}</p>}
         <p className="editing-hint">Tocá el título o un concepto para editar.</p>
         <div id="quotation"><QuotationPreview quotation={quotation} onEditHeader={() => setDialog('header')} onEditRow={setEditingRowId} onAddRow={addRow} /></div>
         {!calculation.canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({calculation.issues.length})</summary><ul>{calculation.issues.map((issue, index) => <li key={`${index}-${issue}`}>{issue}</li>)}</ul>{!calculation.conversion.ok && <button type="button" className="button secondary" onClick={() => setDialog('header')}>Revisar cotización del dólar</button>}</details>}
         <input ref={importInput} type="file" accept=".json,application/json" hidden onChange={(event) => { void importBackup(event) }} />
       </main>
       <footer className="export-bar"><p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message || (!calculation.canExport ? 'Completá los datos pendientes para preparar la imagen.' : '')}</p><div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={() => downloadQuotationFile(preparedFile)}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !calculation.canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div></footer>
-      {dialog === 'header' && <HeaderEditor quotation={quotation} rateLoading={rateLoading} rateError={rateError} onUpdateRate={() => { void requestDollarQuote(quotation.id) }} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
+      {dialog === 'header' && <HeaderEditor quotation={quotation} rateLoading={rateLoading} rateError={rateError} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
       {dialog === 'catalog' && <CatalogEditor catalog={workspace.catalog} saveStatus={catalogSaveStatus} saveError={storageError} onClose={closeCatalog} onSave={(catalog) => commitWorkspace({ ...workspace, catalog })} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={workspace.catalog} onClose={() => setEditingRowId(null)} onSave={(row) => { if (updateQuotation({ ...quotation, rows: quotation.rows.map((entry) => entry.id === row.id ? row : entry) })) setEditingRowId(null) }} onRemove={() => { if (updateQuotation({ ...quotation, rows: quotation.rows.filter((entry) => entry.id !== editingRow.id) })) setEditingRowId(null) }} />}
     </div>

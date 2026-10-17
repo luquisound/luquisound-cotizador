@@ -55,9 +55,10 @@ inventory management, invoicing, and a general backend remain outside this stage
 - V1 uses one explicit currency for quotation rows (ARS or USD), safe integer
   cents, and quantity times unit price rounded half up per row. A positive
   ARS-per-USD rate is saved per quotation and converts only the final total, with
-  half-up rounding to cents. New quotations use DolarAPI blue sale automatically;
-  stored quotations and duplicates retain their rate until an explicit update.
-  Preserve source/date metadata and legacy manual rates. Discounts
+  half-up rounding to cents. The open quotation uses DolarAPI blue sale
+  automatically, refreshing hourly while active and when reopened if due.
+  Inactive quotations retain their snapshots until opened. Preserve source/date
+  metadata and legacy values until an automatic lookup succeeds. Discounts
   and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
   calculation contract and remaining decisions.
 - Preserve the approved graphic composition and official brand assets. Private

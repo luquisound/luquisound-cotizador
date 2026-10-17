@@ -10,7 +10,7 @@ export interface BlueDollarQuote {
   fetchedAt: string
 }
 
-export const EXCHANGE_QUOTE_CACHE_TTL_MS = 3 * 60 * 60 * 1000
+export const EXCHANGE_QUOTE_CACHE_TTL_MS = 60 * 60 * 1000
 export const EXCHANGE_QUOTE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 export const EXCHANGE_QUOTE_MAX_BYTES = 16 * 1024
 

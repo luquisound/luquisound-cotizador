@@ -55,7 +55,7 @@ function assertPrivate(response: Response): void {
   assert.equal(response.headers.get('access-control-allow-origin'), null)
 }
 
-test('a cache miss reads only the fixed blue URL and stores the validated sale rate for three hours', async () => {
+test('a cache miss reads only the fixed blue URL and stores the validated sale rate for one hour', async () => {
   const cache = memoryCache()
   const handler = createExchangeRateHandler({
     cache, now: () => NOW,
@@ -75,10 +75,10 @@ test('a cache miss reads only the fixed blue URL and stores the validated sale r
   assertPrivate(response)
   assert.deepEqual(await response.json(), QUOTE)
   assert.deepEqual(cache.reads, ['blue-venta', 'blue-venta'])
-  assert.deepEqual(cache.writes, [{ key: 'blue-venta', value: QUOTE, ttl: 10800 }])
+  assert.deepEqual(cache.writes, [{ key: 'blue-venta', value: QUOTE, ttl: 3600 }])
 })
 
-test('cache reuse has no force-refresh bypass and expires at the three-hour boundary', async () => {
+test('cache reuse has no force-refresh bypass and expires at the one-hour boundary', async () => {
   const cache = memoryCache(QUOTE)
   let time = NOW + EXCHANGE_QUOTE_CACHE_TTL_MS - 1
   let fetches = 0
@@ -95,6 +95,25 @@ test('cache reuse has no force-refresh bypass and expires at the three-hour boun
   assert.equal(refreshed.status, 200)
   assert.equal(fetches, 1)
   assert.deepEqual(await refreshed.json(), { ...QUOTE, fetchedAt: new Date(time).toISOString() })
+})
+
+test('a value cached two hours ago under the previous TTL is refreshed', async () => {
+  const previousFetch = NOW - 2 * 60 * 60 * 1000
+  const cache = memoryCache({
+    ...QUOTE, rate: '1.500,25',
+    updatedAt: new Date(previousFetch - 60000).toISOString(),
+    fetchedAt: new Date(previousFetch).toISOString(),
+  })
+  let fetches = 0
+  const handler = createExchangeRateHandler({
+    cache, now: () => NOW,
+    fetcher: async () => { fetches++; return sourceResponse() },
+  })
+  const response = await handler(request())
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), QUOTE)
+  assert.equal(fetches, 1)
+  assert.deepEqual(cache.writes, [{ key: 'blue-venta', value: QUOTE, ttl: 3600 }])
 })
 
 test('concurrent requests share one upstream operation and each receives its own response', async () => {

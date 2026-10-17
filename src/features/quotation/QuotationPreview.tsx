@@ -196,7 +196,7 @@ export function QuotationPreview({
               </div>
             )
           })}
-          <button type="button" className="quotation-rate" onClick={onEditHeader} aria-label="Ver o actualizar cotización del dólar">
+          <button type="button" className="quotation-rate" onClick={onEditHeader} aria-label="Ver cotización del dólar">
             {calculation.conversion.ok ? calculation.conversion.rateLabel : 'Consultar cotización del dólar'}
           </button>
           <p className="quotation-rate-source">{exchangeRateDescription(quotation)}</p>
