@@ -81,7 +81,6 @@ export default function QuotationApp() {
   const canExport = calculation.canExport && availability.issues.length === 0
   const validationIssues = [...calculation.issues, ...availability.issues]
   const preparedFile = prepared?.quotation === quotation && canExport && prepared.provisional === availability.hasProvisional ? prepared.file : null
-  const historicalSource = availability.hasProvisional || catalog.some((item) => item.availabilityPolicy === 'historical-positive' || item.listPrice?.provisional)
   const savedQuotes = useQuotationLibrary()
   const editingRow = rowEditing?.kind === 'new'
     ? rowEditing.row
@@ -564,18 +563,6 @@ export default function QuotationApp() {
     <div className="quotation-workspace">
       <a className="skip-link" href="#quotation">Ir al presupuesto</a>
       <main className="workspace-main">
-        <div className="workspace-options" ref={optionsContainer} onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setOptionsOpen(false)
-        }}>
-          <button ref={optionsButton} className="workspace-options-toggle" type="button" aria-expanded={optionsOpen} aria-controls={optionsId} onClick={() => setOptionsOpen((open) => !open)}><span aria-hidden="true">⋯</span> Opciones</button>
-          {optionsOpen && <nav id={optionsId} className="workspace-options-panel" aria-label="Opciones del presupuesto">
-            <button ref={bulkButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('bulk')}>Pegar códigos o nombres</button>
-            <button ref={catalogButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('catalog')}>Mi catálogo</button>
-            <button ref={libraryButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('library')}>Presupuestos guardados</button>
-            <button className="button secondary" type="button" onClick={() => { setOptionsOpen(false); startNewQuotation() }}>Nuevo presupuesto</button>
-          </nav>}
-        </div>
-        {historicalSource && <p className="notice pending source-warning" role="note">Fuente histórica provisional. Los precios de lista no tienen descuento automático. El stock corresponde a registros anteriores: disponibilidad a confirmar.</p>}
         <div id="quotation">
           <QuotationPreview
             quotation={quotation}
@@ -598,6 +585,17 @@ export default function QuotationApp() {
               {rateError && <p className="exchange-warning" role="alert">{rateError}</p>}
             </>}
           />
+        </div>
+        <div className="workspace-options" ref={optionsContainer} onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setOptionsOpen(false)
+        }}>
+          <button ref={optionsButton} className="workspace-options-toggle" type="button" aria-expanded={optionsOpen} aria-controls={optionsId} onClick={() => setOptionsOpen((open) => !open)}><span aria-hidden="true">⋯</span> Opciones</button>
+          {optionsOpen && <nav id={optionsId} className="workspace-options-panel" aria-label="Opciones del presupuesto">
+            <button ref={bulkButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('bulk')}>Pegar códigos o nombres</button>
+            <button ref={catalogButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('catalog')}>Mi catálogo</button>
+            <button ref={libraryButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('library')}>Presupuestos guardados</button>
+            <button className="button secondary" type="button" onClick={() => { setOptionsOpen(false); startNewQuotation() }}>Nuevo presupuesto</button>
+          </nav>}
         </div>
         {!canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({validationIssues.length})</summary><ul>{validationIssues.map((issue, index) => <li key={String(index) + '-' + issue}>{issue}</li>)}</ul>{!calculation.conversion.ok && <a className="button secondary" href="#quotation-exchange-rate">Revisar cotización del dólar</a>}</details>}
         <p className="current-quotation-note">El presupuesto en curso se recupera al recargar.</p>

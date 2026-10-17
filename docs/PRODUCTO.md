@@ -38,6 +38,9 @@ not substituted for the actual sale price of a quotation.
 
 ## Graphic contract
 
+The initial view starts directly with the yellow quotation header, without
+leading workspace space or a global historical-source banner. Private source
+metadata and stock rules remain in their existing internal workflows.
 Custom quotations use a yellow #FFDA00 header with the original multicolour
 full horizontal logo, dark title and optional subtitle, and a dark
 separator. Labels, empty-title hints, and keyboard focus also remain dark for
@@ -169,10 +172,11 @@ the current browser and origin. A read-only server endpoint supplies the private
 common catalogue on startup. There is no quotation upload, analytics, or
 synchronization of locally approved prices.
 
-The header contains the brand and editable quotation details. A single discreet
-"Opciones" menu contains bulk entry, "Presupuestos guardados", "Mi catalogo" and
-"Nuevo presupuesto" as secondary actions. The menu starts collapsed; history and
-save controls are accessed inside their workflow, not displayed on entry.
+The header contains the brand and editable quotation details. Below the template
+and contact footer, a single discreet "Opciones" menu contains bulk entry,
+"Presupuestos guardados", "Mi catalogo" and "Nuevo presupuesto" as secondary
+actions. The menu starts collapsed; history and save controls are accessed inside
+their workflow, not displayed on entry.
 "Nuevo presupuesto" replaces only the
 current quotation, confirming before content or an unreadable recovery record is
 replaced. It preserves the catalogue, approved prices and legacy workspace key.
@@ -345,9 +349,11 @@ observation dates and never become fresh at import time.
 The picker, bulk review and open quotation check availability again as time passes
 and before image preparation or delivery. The latest matching catalogue snapshot
 is authoritative for availability but never replaces a row's prices. A blocked
-existing row remains editable and saved, but blocks image export. A historical
-selection shows a provisional warning and adds only "Disponibilidad a confirmar."
-to the customer image, without exposing stock quantities or source details.
+existing row remains editable and saved, but blocks image export. Historical
+source details remain in the private catalogue and row provenance workflows;
+there is no global historical-source banner above the template. Provisional
+availability still adds only "Disponibilidad a confirmar." to the customer image,
+without exposing stock quantities or source details.
 This implements neither a Sheets connector nor stock reservations, deduction or
 guaranteed availability. See `CATALOG-SOURCE-ROADMAP.md`.
 

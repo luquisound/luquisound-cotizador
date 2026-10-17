@@ -39,11 +39,12 @@ inventory management, invoicing, and a general backend remain outside this stage
 
 ## UI conventions
 
-- Keep the graphic quotation as the initial focus. Place bulk entry, saved
+- Start directly with the yellow quotation header, without leading workspace
+  whitespace or a global historical-source banner. Keep private source metadata
+  and stock rules in their existing internal workflows. Place bulk entry, saved
   quotations, catalogue management and New behind the single discreet "Opciones"
-  secondary menu. Do not restore a prominent action toolbar or expose history
-  and save controls on entry; these capabilities remain available inside their
-  secondary workflows.
+  menu below the template and contact footer. Keep history and save controls
+  inside those secondary workflows.
 - Start with narrow-screen layouts and touch controls. Use semantic HTML,
   accessible names, visible keyboard focus, and sufficient contrast.
 - Support safe-area insets where needed and avoid horizontal overflow. Verify

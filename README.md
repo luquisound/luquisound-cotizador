@@ -105,7 +105,9 @@ that library; do not commit the local routing file.
 
 The main screen opens directly on the editable quotation, with the brand and
 editable title in a yellow header with dark text and the original multicolour
-horizontal logo.
+horizontal logo. The header starts at the top of the workspace without leading
+space or a global historical-source banner; private source and stock metadata
+remain in the catalogue and row workflows.
 The preview and PNG share the same palette and logo resource. Fixed quotations
 in Figma retain their dark headers. Exchange-rate details stay beside the totals.
 "Datos del presupuesto" edits only the title and optional subtitle.
@@ -124,8 +126,9 @@ On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
 compact header and readable row sizes; wide screens place totals beside the
 concepts and expand the workspace up to 1680 pixels. Image export controls remain
 fixed at the bottom and are excluded from the PNG along with other editing controls.
-One discreet "Opciones" menu contains the secondary actions "Pegar codigos o
-nombres", "Presupuestos guardados", "Mi catalogo" and "Nuevo presupuesto".
+Below the template and its contact footer, one discreet "Opciones" menu contains
+"Pegar codigos o nombres", "Presupuestos guardados", "Mi catalogo" and
+"Nuevo presupuesto" as secondary actions.
 These actions stay collapsed on entry so the graphic quotation remains the
 focus; history and save controls appear only inside the saved-quotation workflow.
 "Nuevo presupuesto" starts a blank current quotation after confirmation when it
