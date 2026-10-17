@@ -321,7 +321,6 @@ export default function QuotationApp() {
               <details className="exchange-panel">
                 <summary><span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span></summary>
                 <div className="exchange-panel-details">
-                  <p className="field-help">Se actualiza automáticamente cada hora al usar la app. El total equivalente puede cambiar.</p>
                   {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
                 </div>
               </details>
