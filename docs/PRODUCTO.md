@@ -35,8 +35,8 @@ not substituted for the actual sale price of a quotation.
 
 ## Graphic contract
 
-Custom quotations use a yellow #FFDA00 header with the approved black derivative
-of the official full horizontal logo, dark title and optional subtitle, and a dark
+Custom quotations use a yellow #FFDA00 header with the original multicolour
+full horizontal logo, dark title and optional subtitle, and a dark
 separator. Labels, empty-title hints, and keyboard focus also remain dark for
 contrast. The responsive preview and PNG renderer share their palette and logo
 resource through `graphic.ts`. Preserve the white body with two sections,

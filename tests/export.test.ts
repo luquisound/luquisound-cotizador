@@ -240,7 +240,7 @@ test('renders a yellow custom header with dark text and keeps the contact footer
   assert.ok(contacts.every(({ color }) => color === '#FFDA00'))
 })
 
-test('loads the shared black logo resource before preparing the PNG', async () => {
+test('requests the original multicolour logo and reports an unavailable resource', async () => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'Image')
   const requested: string[] = []
   class LogoImage {
@@ -254,7 +254,7 @@ test('loads the shared black logo resource before preparing the PNG', async () =
   Object.defineProperty(globalThis, 'Image', { configurable: true, value: LogoImage })
   try {
     await assert.rejects(createQuotationFile(exportableQuotation()), /logo/)
-    assert.equal(QUOTATION_GRAPHIC.logoUrl, '/brand/luquisound-horizontal-black.svg')
+    assert.equal(QUOTATION_GRAPHIC.logoUrl, '/brand/luquisound-horizontal.svg')
     assert.deepEqual(requested, [QUOTATION_GRAPHIC.logoUrl])
   } finally {
     if (previous) Object.defineProperty(globalThis, 'Image', previous)

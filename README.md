@@ -98,7 +98,8 @@ that library; do not commit the local routing file.
 ## Current quotation and catalogue data
 
 The main screen opens directly on the editable quotation, with the brand and
-editable title in a yellow header with dark text and a black horizontal logo.
+editable title in a yellow header with dark text and the original multicolour
+horizontal logo.
 The preview and PNG share the same palette and logo resource. Fixed quotations
 in Figma retain their dark headers. Exchange-rate details stay beside the totals.
 "Datos del presupuesto" edits only the title and optional subtitle.

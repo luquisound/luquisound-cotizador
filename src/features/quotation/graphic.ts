@@ -2,5 +2,5 @@
 export const QUOTATION_GRAPHIC = {
   yellow: '#FFDA00',
   black: '#141414',
-  logoUrl: '/brand/luquisound-horizontal-black.svg',
+  logoUrl: '/brand/luquisound-horizontal.svg',
 } as const
