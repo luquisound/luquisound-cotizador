@@ -16,7 +16,6 @@ export interface QuotationPreviewProps {
   onEditHeader: () => void
   onEditRow: (rowId: string) => void
   onAddRow: (section: RowSection) => void
-  headerActions: ReactNode
   notices: ReactNode
   exchangeDetails: ReactNode
 }
@@ -104,7 +103,6 @@ export function QuotationPreview({
   onEditHeader,
   onEditRow,
   onAddRow,
-  headerActions,
   notices,
   exchangeDetails,
 }: QuotationPreviewProps) {
@@ -148,7 +146,6 @@ export function QuotationPreview({
               )}
             </button>
           </h1>
-          <div className="quotation-header-actions">{headerActions}</div>
         </header>
 
         <div className="quotation-content">

@@ -97,30 +97,30 @@ that library; do not commit the local routing file.
 
 ## Current quotation and catalogue data
 
-The main screen opens directly on the editable quotation, with "Catalogo" and
-"Nuevo" integrated into its header and exchange-rate details beside the totals.
+The main screen opens directly on the editable quotation, with the brand and
+editable title in its header and exchange-rate details beside the totals.
 On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
 compact header and readable row sizes; wide screens place totals beside the
 concepts and expand the workspace up to 1680 pixels. Image export controls remain
 fixed at the bottom and are excluded from the PNG along with other editing controls.
-There is no quotation list, saved-status label, duplicate, delete, or
-quotation-backup control. "Nuevo" asks for confirmation when the current
-quotation has meaningful content, then replaces it with a blank one. Downloading
-or sharing a PNG leaves the current quotation open.
+There is no quotation list, saved-status label, new-quotation, duplicate, delete,
+or quotation-backup control. Downloading or sharing a PNG leaves the current
+quotation open.
 
 The current quotation is recovered across reloads from
 `luquisound.current-quotation.v1`. The persistent catalogue and approved sale
-prices use the separate `luquisound.catalog.v1` key. New quotations never clear
-the catalogue. An untouched blank quotation and automatic rate updates alone
-do not create recoverable content; a partial concept with a pending price does.
+prices use the separate `luquisound.catalog.v1` key. Catalogue persistence remains
+independent from quotation recovery. An untouched blank quotation and automatic
+rate updates alone do not create recoverable content; a partial concept with a
+pending price does.
 
 When the new catalogue key is absent, a valid legacy `luquisound.workspace.v1`
 may seed its catalogue. Legacy quotations are not reopened, and the old key is
 never rewritten or deleted. Corrupt stored data is not automatically overwritten.
-An unreadable current recovery record remains intact until confirmed replacement
-with "Nuevo". A catalogue reset or resuming paused saving requires an explicit
-user action. Save failures remain visible; changes from another tab pause saving
-for the affected store to avoid overwriting that tab's work. Failures in one
+An unreadable current recovery record remains intact. A catalogue reset or
+resuming paused saving requires an explicit user action. Save failures remain
+visible; changes from another tab pause saving for the affected store to avoid
+overwriting that tab's work. Failures in one
 store do not disable the other, and exchange-rate updates continue independently.
 
 All local data belongs to the current browser and origin. It is not uploaded,
@@ -128,9 +128,11 @@ synchronized between devices, or encrypted by the app. Clearing browser data,
 private browsing, device loss, or an origin change can make it unavailable.
 The private common catalogue is fetched on startup when configured.
 
-Catalogue controls provide private JSON backup and import. Backups preserve IDs,
-approved prices, currencies, and provenance in the existing Workspace v1 envelope
-with `quotations: []` and `activeQuotationId: null`. After confirmation, backup
+Catalogue management remains available from a storage-error notice, with private
+JSON backup and import. Product selection stays in the row editor. Backups
+preserve IDs, approved prices, currencies, and provenance in the existing
+Workspace v1 envelope with `quotations: []` and `activeQuotationId: null`.
+After confirmation, backup
 import replaces the catalogue. A compatible old full-workspace backup contributes
 only its catalogue; it never restores quotation history or replaces the open
 quotation. Keep these files private and outside the public repository.

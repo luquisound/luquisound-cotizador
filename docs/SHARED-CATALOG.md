@@ -26,10 +26,10 @@ retire entries only with an explicit valid source scope; an ordinary empty file
 changes nothing. Removal-only updates are saved normally.
 
 Local copies and approved prices use `luquisound.catalog.v1`, independently of
-the single current quotation's recovery snapshot. "Nuevo" replaces only that
-quotation. Private catalogue JSON backups preserve IDs, approved prices, and
-provenance. Backup import replaces the catalogue after confirmation; an old
-workspace backup contributes only its catalogue and never restores quotations.
+the single current quotation's recovery snapshot. Private catalogue JSON backups
+preserve IDs, approved prices, and provenance. Backup import replaces the
+catalogue after confirmation; an old workspace backup contributes only its
+catalogue and never restores quotations.
 The legacy `luquisound.workspace.v1` storage key remains untouched.
 Startup fetch failures allow continued work with that copy. Loading the common
 catalogue never grants historical references the status of approved sale prices.

@@ -92,11 +92,11 @@ the current browser and origin. A read-only server endpoint supplies the private
 common catalogue on startup. There is no quotation upload, analytics, or
 synchronization of locally approved prices.
 
-"Nuevo" replaces the current quotation, asking for confirmation when it has
-meaningful content. It never clears the catalogue. There is no quotation history,
-selector, duplicate, delete, or quotation-backup workflow, and no saved-status
-label in the main interface. Downloading or sharing a PNG leaves the quotation
-open. Reusable templates and fixed budgets are managed in Figma.
+The header contains the brand and editable quotation details. There is no
+new-quotation action, quotation history, selector, duplicate, delete, or
+quotation-backup workflow, and no saved-status label in the main interface.
+Downloading or sharing a PNG leaves the quotation open. Reusable templates and
+fixed budgets are managed in Figma.
 
 Automatic loading combines the common catalogue with the latest local state by
 supplier and SKU. It updates common metadata and historical references while
@@ -118,7 +118,7 @@ the current one is replaced.
 
 When `luquisound.catalog.v1` is absent, the app may seed its catalogue from a
 validated legacy `luquisound.workspace.v1`. It does not reopen old quotations.
-The legacy key is never rewritten or deleted, including on "Nuevo" or import.
+The legacy key is never rewritten or deleted, including during import.
 Invalid legacy data is not used as a catalogue source.
 
 This is individual browser storage, not shared or access-controlled cloud storage.
@@ -136,10 +136,10 @@ which merges product references without approving commercial prices.
 
 JSON validation checks schema, version, identities, dates, field lengths, and a
 5 MiB limit; unknown properties are discarded. Corrupt stored data is not
-overwritten automatically. An unreadable current recovery record remains until
-the user confirms its replacement with "Nuevo". Resetting an unreadable catalogue
-or resuming paused saving requires an explicit user action. Save failures remain
-visible and isolated to their store. Changes from another tab pause saving for
+overwritten automatically. An unreadable current recovery record remains intact.
+Resetting an unreadable catalogue or resuming paused saving requires an explicit
+user action. Save failures remain visible and isolated to their store.
+Changes from another tab pause saving for
 the affected store to avoid silently overwriting its work; hourly exchange-rate
 updates remain active. Limits are 1000 rows in the current quotation and 2000
 catalogue entries. The legacy parser still validates up to 500 quotations in an
@@ -157,10 +157,11 @@ separately; the application does not add a frontend PIN or claim one is security
 
 ## Optional private catalogue
 
-No catalogue data is embedded in the public application. A configured private
-endpoint loads the common catalogue automatically. A private JSON file can also
-be imported after a summary and explicit confirmation. The catalogue
-combines a category filter with SKU, brand, and name search and limits rendered
+No catalogue data is embedded in the public application. Product selection stays
+in the row editor; catalogue management remains available from a storage-error
+notice. A configured private endpoint loads the common catalogue automatically.
+A private JSON file can also be imported after a summary and explicit confirmation.
+The catalogue combines a category filter with SKU, brand, and name search and limits rendered
 results for mobile use. Both the catalogue editor and quotation product picker
 derive category options from their available data. "Todas" clears the filter;
 missing categories appear as "Sin clasificar". No provider taxonomy or automatic
@@ -202,8 +203,8 @@ Downloading or sharing does not clear or replace the current quotation.
 
 Run typecheck, lint, calculation/persistence/export tests, and build. Check mobile
 and desktop layouts, long text, many rows, pending/zero/included states, decimal
-input, invalid values, confirmed replacement with "Nuevo", current-quotation
-recovery, catalogue backups, legacy catalogue extraction, and share cancellation.
+input, invalid values, current-quotation recovery, catalogue backups, legacy
+catalogue extraction, and share cancellation.
 Browser emulation is useful evidence but does not replace physical Android and
 iPhone checks for PNG saving, Web Share, WhatsApp, and deployment access.
 

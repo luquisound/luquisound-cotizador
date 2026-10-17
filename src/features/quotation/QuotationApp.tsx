@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { calculateQuotation } from './calculation'
-import { createQuotation, createRow, hasQuotationContent, type CatalogItem, type Quotation, type RowSection } from './model'
+import { createQuotation, createRow, type CatalogItem, type Quotation, type RowSection } from './model'
 import { serializeWorkspace, type WorkspaceSaveResult } from './persistence'
 import {
   CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
@@ -51,7 +51,6 @@ export default function QuotationApp() {
   const [sharedCatalogAttempt, setSharedCatalogAttempt] = useState(0)
   const [rateState, setRateState] = useState<(ExchangeRefreshState & { id: string }) | null>(null)
   const [rateCheckedAt, setRateCheckedAt] = useState(Date.now)
-  const rateRefresh = useRef<ReturnType<typeof startExchangeRateRefresh> | null>(null)
   const catalogButton = useRef<HTMLButtonElement>(null)
   const generation = useRef(0)
   const preparedFile = prepared?.quotation === quotation ? prepared.file : null
@@ -70,7 +69,10 @@ export default function QuotationApp() {
   function closeCatalog() {
     setDialog(null)
     // Restore focus after the modal is removed and the page is no longer inert.
-    window.requestAnimationFrame(() => catalogButton.current?.focus())
+    window.requestAnimationFrame(() => {
+      const target = catalogButton.current ?? document.querySelector<HTMLButtonElement>('.quotation-heading-edit')
+      target?.focus()
+    })
   }
 
   function updateQuotation(next: Quotation): boolean {
@@ -103,7 +105,6 @@ export default function QuotationApp() {
       onQuote: (quote) => applyDollarQuote(quotation.id, quote),
       onState: (state) => { setRateState({ id: quotation.id, ...state }); setRateCheckedAt(Date.now()) },
     })
-    rateRefresh.current = refresh
     function checkRate() {
       setRateCheckedAt(Date.now())
       refresh.check()
@@ -113,7 +114,6 @@ export default function QuotationApp() {
     document.addEventListener('visibilitychange', checkRate)
     return () => {
       refresh.stop()
-      if (rateRefresh.current === refresh) rateRefresh.current = null
       window.removeEventListener('focus', checkRate)
       window.removeEventListener('online', checkRate)
       document.removeEventListener('visibilitychange', checkRate)
@@ -197,7 +197,7 @@ export default function QuotationApp() {
       if (event.key === CURRENT_QUOTATION_STORAGE_KEY || event.key === null) {
         recoveryWriteAllowed.current = false
         setRecoveryEnabled(false)
-        setRecoveryError('Otra pestaña cambió el presupuesto en curso. La recuperación de esta pestaña se pausó; podés seguir editando y compartirlo. Recargá para abrir el de la otra pestaña o usá «Nuevo» para empezar otro.')
+        setRecoveryError('Otra pestaña cambió el presupuesto en curso. La recuperación de esta pestaña se pausó; podés seguir editando y compartirlo. Recargá para abrir el de la otra pestaña.')
       }
     }
     function flush() {
@@ -215,29 +215,6 @@ export default function QuotationApp() {
       window.removeEventListener('pagehide', flush)
     }
   }, [catalog, quotation])
-
-  function newQuotation() {
-    if ((hasQuotationContent(quotation) || recoveryError) && !window.confirm('¿Empezar otro presupuesto? Se reemplazará el trabajo en curso. Descargá o compartí su imagen antes si querés conservarlo.')) return
-    if (!hasQuotationContent(quotation) && !recoveryError) return
-    rateRefresh.current?.stop()
-    generation.current += 1
-    const next = createQuotation()
-    let result: WorkspaceSaveResult
-    try { result = saveCurrentQuotation(window.localStorage, next, { overwriteInvalid: true }) }
-    catch { result = { ok: false, error: 'No se pudo reiniciar la recuperación. Al recargar podría aparecer el presupuesto anterior.' } }
-    recoveryWriteAllowed.current = result.ok
-    setRecoveryEnabled(result.ok)
-    setRecoveryError(result.ok ? null : 'No se pudo reiniciar la recuperación. Al recargar podría aparecer el presupuesto anterior.')
-    quotationRef.current = next
-    setQuotation(next)
-    setRateState(null)
-    setDialog(null)
-    setEditingRowId(null)
-    setPrepared(null)
-    setPreparing(false)
-    setSharing(false)
-    setMessage('')
-  }
 
   function addRow(section: RowSection) {
     if (quotation.rows.length >= 1000) { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
@@ -335,13 +312,9 @@ export default function QuotationApp() {
             onEditHeader={() => setDialog('header')}
             onEditRow={setEditingRowId}
             onAddRow={addRow}
-            headerActions={<>
-              <button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Catálogo</button>
-              <button className="button primary" type="button" onClick={newQuotation}>+ Nuevo</button>
-            </>}
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
-              {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
+              {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
               {sharedCatalogStatus === 'error' && <div className="notice error" role="status"><p>No se pudo actualizar el catálogo compartido. Podés seguir usando tus opciones.</p><button className="button secondary" type="button" onClick={retrySharedCatalog}>Reintentar catálogo compartido</button></div>}
             </>}
             exchangeDetails={<>
@@ -358,7 +331,7 @@ export default function QuotationApp() {
           />
         </div>
         {!calculation.canExport && <details className="notice pending"><summary>Datos pendientes para preparar la imagen ({calculation.issues.length})</summary><ul>{calculation.issues.map((issue, index) => <li key={String(index) + '-' + issue}>{issue}</li>)}</ul>{!calculation.conversion.ok && <button type="button" className="button secondary" onClick={() => setDialog('header')}>Revisar cotización del dólar</button>}</details>}
-        <p className="current-quotation-note">Se recupera solo el presupuesto en curso al recargar. «Nuevo» lo reemplaza.</p>
+        <p className="current-quotation-note">Se recupera solo el presupuesto en curso al recargar.</p>
       </main>
       <footer className="export-bar">
         <p className={message ? 'export-message' : 'sr-only'} role="status" aria-live="polite">{message || (!calculation.canExport ? 'Completá los datos pendientes para preparar la imagen.' : '')}</p>
