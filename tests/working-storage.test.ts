@@ -297,7 +297,7 @@ test('catalog-only backups preserve approved zero, missing sale price and histor
 })
 
 test('stock snapshots roundtrip catalogue backups and both storage keys without inventing or refreshing values', () => {
-  for (const quantity of [null, 0, 3]) {
+  for (const quantity of [null, -2.75, 0, 0.125, 27.375, 3]) {
     const catalog = catalogFixture()
     catalog[0]!.stock = { ...stockFixture(), quantity }
     const snapshot = structuredClone(catalog)
@@ -345,7 +345,8 @@ test('malformed stock never replaces valid catalogue, current recovery or legacy
   const before = new Map(memory.values)
   const stock = stockFixture()
   for (const invalidStock of [
-    null, {}, { ...stock, quantity: -Number.MAX_SAFE_INTEGER - 1 }, { ...stock, quantity: 1.5 }, { ...stock, quantity: '0' },
+    null, {}, { ...stock, quantity: -Number.MAX_SAFE_INTEGER - 1 },
+    { ...stock, quantity: Number.MAX_SAFE_INTEGER + 1 }, { ...stock, quantity: '0' },
     { ...stock, checkedAt: undefined }, { ...stock, validUntil: stock.checkedAt },
     { ...stock, source: undefined }, { ...stock, source: { document: '', date: null } },
   ]) {

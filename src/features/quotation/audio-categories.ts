@@ -65,7 +65,8 @@ export function selectAdapterVariant(row: QuotationRow, size: AdapterSize): Quot
   }
   const variant = ADAPTER_VARIANTS.find((candidate) => candidate.id === size)
   if (!variant) throw new RangeError('Eleg\u00ed una medida de aros adaptadores v\u00e1lida.')
-  return { ...row, concept: variant.concept, currency: variant.currency, unitPrice: variant.unitPrice, priceState: 'priced' }
+  const { currencyConversionOrigin: _origin, ...fields } = row
+  return { ...fields, concept: variant.concept, currency: variant.currency, unitPrice: variant.unitPrice, priceState: 'priced' }
 }
 
 export function isDirectExtraRow(row: QuotationRow): boolean {

@@ -187,6 +187,7 @@
   font-size: clamp(0.875rem, 3.2407cqw, 2.1875rem);
   font-weight: 400;
   line-height: 1.25;
+  white-space: pre-wrap;
 }
 
 .quotation-row-detail,
@@ -203,6 +204,7 @@
 }
 
 .quotation-row-price {
+  align-self: start;
   min-width: 48px;
   min-height: 48px;
   padding: 0;
@@ -219,6 +221,51 @@
 .quotation-price-pending {
   color: #805200;
   font-size: clamp(0.8125rem, 2.7778cqw, 1.875rem);
+}
+
+.quotation-harness-description {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.5556cqw;
+  overflow-wrap: anywhere;
+}
+
+.quotation-harness-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.quotation-harness-selection input {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--quotation-black);
+  cursor: pointer;
+}
+
+.quotation-harness-selection input:focus-visible {
+  outline: 3px solid #1459c7;
+  outline-offset: 3px;
+}
+
+.quotation-harness-inactive .quotation-row-price {
+  color: var(--quotation-muted);
+}
+
+.quotation-harness-edit {
+  align-self: flex-start;
+  min-height: 48px;
+  padding: 4px 0;
+  color: var(--quotation-muted);
+  font-size: clamp(0.75rem, 2.037cqw, 1rem);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .quotation-empty-row,

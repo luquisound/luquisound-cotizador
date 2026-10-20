@@ -1,8 +1,9 @@
 import { readAdapterVariant } from './adapters.ts'
-import { isSingleRowCategory } from './audio-categories.ts'
+import { getDirectExtraConcept, isSingleRowCategory, type AudioCategory } from './audio-categories.ts'
 import { calculateQuotation, isEmptyRow, parseMoney, parseQuantity } from './calculation.ts'
-import type { Quotation, QuotationRow } from './model.ts'
+import { createRow, type Currency, type Quotation, type QuotationRow, type RowSection } from './model.ts'
 import { parseRowProvenance } from './row-provenance.ts'
+import { isFixedServiceRow } from './fixed-services.ts'
 
 export type SaveQuotationRowResult = {
   ok: true
@@ -13,6 +14,16 @@ export type SaveQuotationRowResult = {
 
 const MAXIMUM_ROWS = 1000
 const maximumSafeInteger = BigInt(Number.MAX_SAFE_INTEGER)
+
+export function createQuotationRowDraft(section: RowSection, currency: Currency, audioCategory?: AudioCategory): QuotationRow {
+  const row = createRow(section, currency)
+  const concept = section === 'extras' ? getDirectExtraConcept(audioCategory) : undefined
+  return {
+    ...row, ...(audioCategory ? { audioCategory } : {}), ...(concept ? { concept } : {}),
+    ...(section === 'extras' && audioCategory === 'harness'
+      ? { currency: 'ARS' as const, unitPrice: '70.000', priceState: 'priced' as const } : {}),
+  }
+}
 
 function normalizedRow(row: QuotationRow): QuotationRow {
   const { adapterVariant: _variant, ...fields } = row
@@ -39,6 +50,8 @@ function sameProvenance(existing: QuotationRow, incoming: QuotationRow): boolean
 }
 
 function matchesAdapter(existing: QuotationRow, incoming: QuotationRow): boolean {
+  // Keep each conversion reference and its separately rounded source quantity intact.
+  if (existing.currencyConversionOrigin !== undefined || incoming.currencyConversionOrigin !== undefined) return false
   const left = readAdapterVariant(existing.adapterVariant, existing.section, existing.audioCategory)
   const right = incoming.adapterVariant
   const price = priceCents(incoming)
@@ -80,6 +93,9 @@ export function saveQuotationRow(
   quotation: Quotation, row: QuotationRow, kind: 'new' | 'existing',
 ): SaveQuotationRowResult {
   const incoming = normalizedRow(row)
+  if (isFixedServiceRow(incoming) && incoming.quantity !== '1') {
+    return { ok: false, error: 'Cables y mano de obra requieren cantidad 1. Revis\u00e1 el importe del servicio.' }
+  }
   const previous = quotation.rows.find((candidate) => candidate.id === incoming.id)
   if (kind === 'existing' && !previous) return { ok: false, error: 'Este concepto ya no está en el presupuesto.' }
   if (kind === 'new' && previous) return { ok: false, error: 'Este concepto ya está en el presupuesto.' }

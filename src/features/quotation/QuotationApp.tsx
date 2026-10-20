@@ -1,8 +1,8 @@
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
 import { calculateQuotation, isEmptyRow } from './calculation'
-import { createQuotation, createRow, hasQuotationContent, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
-import { getDirectExtraConcept, isDirectExtraRow, isSingleRowCategory, type AudioCategory } from './audio-categories'
-import { saveQuotationRow } from './row-actions'
+import { createQuotation, hasQuotationContent, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
+import { isDirectExtraRow, isSingleRowCategory, type AudioCategory } from './audio-categories'
+import { createQuotationRowDraft, saveQuotationRow } from './row-actions'
 import { serializeWorkspace, type WorkspaceSaveResult } from './persistence'
 import {
   CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
@@ -12,7 +12,7 @@ import { createQuotationFile, downloadQuotationFile, shareQuotationFile } from '
 import { QuotationPreview } from './QuotationPreview'
 import { HeaderEditor, RowEditor } from './QuotationDialogs'
 import { RowPriceEditor } from './RowPriceEditor'
-import { updateRowUnitPrice } from './row-price'
+import { prepareFixedServiceQuotation } from './fixed-services'
 import { CatalogEditor } from './CatalogTools'
 import type { CatalogImportDocument } from './catalog'
 import { loadSharedCatalog, mergeSharedCatalog } from './shared-catalog'
@@ -25,11 +25,13 @@ import { inspectQuotationAvailability } from './quotation-availability'
 import { useCatalogClock } from './useCatalogClock'
 import { QuotationLibraryDialog } from './QuotationLibraryDialog'
 import { useQuotationLibrary } from './useQuotationLibrary'
+import { createHarnessPresetRow, isHarnessPresetRow, setHarnessPresetSelected } from './harness-preset'
 
 function initialData() {
   try {
     const storage = window.localStorage
-    return { catalog: loadCatalog(storage), current: loadCurrentQuotation(storage) }
+    const current = loadCurrentQuotation(storage)
+    return { catalog: loadCatalog(storage), current: { ...current, quotation: prepareFixedServiceQuotation(current.quotation) } }
   } catch {
     return {
       catalog: { catalog: [] as CatalogItem[], error: 'El almacenamiento del catálogo no está disponible.', stored: false, raw: null },
@@ -421,12 +423,14 @@ export default function QuotationApp() {
     setPriceEditingId(rowId)
   }
 
-  function savePrice(unitPrice: string) {
+  function savePrice(nextRow: QuotationRow) {
     const current = quotationRef.current
     const row = current.rows.find((entry) => entry.id === priceEditingId)
     if (!row) { closePriceEditor(); return }
-    const nextRow = updateRowUnitPrice(row, unitPrice)
-    if (nextRow === row || updateQuotation({ ...current, rows: current.rows.map((entry) => entry.id === row.id ? nextRow : entry) })) closePriceEditor()
+    if (nextRow.id !== row.id) return
+    const result = saveQuotationRow(current, nextRow, 'existing')
+    if (!result.ok) { window.alert(result.error); return }
+    if (nextRow === row || updateQuotation({ ...current, rows: result.rows })) closePriceEditor()
   }
 
   function addRow(section: RowSection, audioCategory?: AudioCategory) {
@@ -437,14 +441,43 @@ export default function QuotationApp() {
     if (existing) { editRow(existing.id); return }
     if (current.rows.length >= 1000 && audioCategory !== 'adapters') { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
     rememberRowTrigger()
-    const row = createRow(section, current.currency)
-    const directConcept = section === 'extras' ? getDirectExtraConcept(audioCategory) : undefined
-    setRowEditing({ kind: 'new', row: { ...row, ...(audioCategory ? { audioCategory } : {}), ...(directConcept ? { concept: directConcept } : {}) } })
+    setRowEditing({ kind: 'new', row: createQuotationRowDraft(section, current.currency, audioCategory) })
+  }
+
+  function currentHarnessPreset(): QuotationRow | undefined {
+    const rows = quotationRef.current.rows
+    return rows.find(isHarnessPresetRow)
+      ?? rows.find((row) => row.section === 'extras' && row.audioCategory === 'harness' && !isEmptyRow(row))
+  }
+
+  function setHarnessSelected(enabled: boolean) {
+    const current = quotationRef.current
+    const existing = currentHarnessPreset()
+    if (!existing && !enabled) return
+    if (!existing && current.rows.length >= 1000) {
+      setMessage('Llegaste al m\u00e1ximo de 1000 conceptos en este presupuesto.')
+      return
+    }
+    const selected = existing ? setHarnessPresetSelected(existing, enabled) : createHarnessPresetRow(enabled)
+    updateQuotation({ ...current, rows: existing
+      ? current.rows.map((row) => row.id === existing.id ? selected : row)
+      : [...current.rows, selected] })
+  }
+
+  function editHarnessPreset() {
+    const existing = currentHarnessPreset()
+    if (existing) { editPrice(existing.id); return }
+    if (quotationRef.current.rows.length >= 1000) {
+      setMessage('Llegaste al m\u00e1ximo de 1000 conceptos en este presupuesto.')
+      return
+    }
+    rememberRowTrigger()
+    setRowEditing({ kind: 'new', row: createHarnessPresetRow(false) })
   }
 
   function saveRow(row: QuotationRow, addVariant = false) {
     if (!rowEditing) return
-    if (rowEditing.kind === 'new' && isEmptyRow(row)) { closeRowEditor(); return }
+    if (rowEditing.kind === 'new' && isEmptyRow(row) && !isHarnessPresetRow(row)) { closeRowEditor(); return }
     const current = quotationRef.current
     const result = saveQuotationRow(current, row, rowEditing.kind)
     if (!result.ok) { window.alert(result.error); return }
@@ -583,6 +616,8 @@ export default function QuotationApp() {
             onEditRow={editRow}
             onEditPrice={editPrice}
             onAddRow={addRow}
+            onSetHarnessSelected={setHarnessSelected}
+            onEditHarnessPreset={editHarnessPreset}
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
               {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
@@ -617,7 +652,7 @@ export default function QuotationApp() {
         <div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={downloadPreparedImage}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div>
       </footer>
       {dialog === 'header' && <HeaderEditor quotation={quotation} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
-      {dialog === 'catalog' && <CatalogEditor catalog={catalog} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onRetrySharedCatalog={retrySharedCatalog} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
+      {dialog === 'catalog' && <CatalogEditor catalog={catalog} exchangeRate={quotation.exchangeRate ?? ''} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onRetrySharedCatalog={retrySharedCatalog} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
       {dialog === 'bulk' && <BulkEntryDialog catalog={catalog} canSelect={canSelectCatalogItem} defaultCurrency={quotation.currency} existingRowCount={quotation.rows.length} onApply={addBulkRows} onClose={closeBulk} />}
       {dialog === 'library' && <QuotationLibraryDialog quotation={quotation} library={savedQuotes.library} storageError={savedQuotes.error} savingPaused={savedQuotes.paused} onSaveCurrent={saveNamedQuotation} onOpen={(id) => openNamedQuotation(id)} onDuplicate={(id) => openNamedQuotation(id, true)} onExport={downloadLibraryBackup} onImport={savedQuotes.importLibrary} onResumeSaving={savedQuotes.resumeSaving} onClose={closeLibrary} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} directConcept={isDirectExtraRow(editingRow) ? editingRow.concept : undefined} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} onEditExisting={(rowId) => setRowEditing({ kind: 'existing', rowId })} />}

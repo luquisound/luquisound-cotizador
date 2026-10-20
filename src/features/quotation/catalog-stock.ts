@@ -46,7 +46,8 @@ function timestamp(value: unknown): value is string {
 export function parseCatalogStockFields(
   quantity: unknown, checkedAt: unknown, validUntil: unknown, observation?: unknown,
 ): CatalogStockFields | null {
-  if (quantity !== null && (typeof quantity !== 'number' || !Number.isSafeInteger(quantity))) return null
+  if (quantity !== null && (typeof quantity !== 'number'
+    || !Number.isFinite(quantity) || Math.abs(quantity) > Number.MAX_SAFE_INTEGER)) return null
   if (observation !== undefined && observation !== 'current' && observation !== 'historical') return null
   if (observation === 'historical') {
     // A historical observation may have no exact observation date or validity interval.

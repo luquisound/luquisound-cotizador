@@ -152,6 +152,7 @@ interface CanvasText {
   width: number
   align: string
   color: string
+  font: string
 }
 
 interface CanvasRectangle {
@@ -179,7 +180,7 @@ function renderWithRecordedCanvas(quotation: Quotation, options: QuotationExport
       return { width: Array.from(text).length * size * 0.75 }
     },
     fillText(text: string, x: number, y: number) {
-      texts.push({ text, x, y, width: this.measureText(text).width, align: this.textAlign, color: this.fillStyle })
+      texts.push({ text, x, y, width: this.measureText(text).width, align: this.textAlign, color: this.fillStyle, font: this.font })
     },
     fillRect(x: number, y: number, width: number, height: number) {
       rectangles.push({ x, y, width, height, color: this.fillStyle })
@@ -321,6 +322,51 @@ test('renders mixed row currencies, unit prices and converted totals without cli
   assert.ok(bodyTexts.every((entry) => entry.align === 'right'
     ? entry.x - entry.width >= 64
     : entry.x + entry.width <= 1016))
+})
+
+test('exports complete 500-character product names with separate legible prices and increasing row heights', () => {
+  const quotation = exportableQuotation()
+  const names = [
+    { body: 'Nombre sintetico con espacios y modelo completo ', end: 'FIN MODELO ZX-501' },
+    { body: 'NOMBRESINTETICOSINESPACIOS', end: 'FINMODELOZX502' },
+    { body: 'Primera linea sintetica\nSegunda linea con modelo completo\n', end: '\nFIN MODELO ZX-503' },
+  ].map(({ body, end }) => body.repeat(20).slice(0, 500 - end.length) + end)
+  assert.ok(names.every((name) => name.length === 500))
+  quotation.rows = names.map((concept, index) => ({
+    ...quotation.rows[0], id: `synthetic-long-name-${index}`, concept, detail: '',
+  }))
+  const before = structuredClone(quotation)
+  const result = renderWithRecordedCanvas(quotation)
+  const short = renderWithRecordedCanvas({
+    ...quotation, rows: quotation.rows.map((row) => ({ ...row, concept: 'Nombre sintetico corto' })),
+  })
+  assert.ok(result.height > short.height)
+  assert.equal(result.width, 1080)
+  const nameTexts = result.texts.filter(({ font }) => / 36px /.test(font))
+  const prices = result.texts.filter(({ font }) => / 38px /.test(font))
+  const boundaries = result.rectangles.filter(({ color }) => color === '#D8D8D8')
+  const total = result.texts.find(({ text }) => text === 'TOTAL')
+  assert.ok(total)
+  assert.equal(prices.length, names.length)
+  assert.equal(boundaries.length, names.length)
+  let previousBoundary = result.rectangles[1].height
+  for (const [index, boundary] of boundaries.entries()) {
+    const lines = nameTexts.filter(({ y }) => y > previousBoundary && y < boundary.y)
+    const amounts = prices.filter(({ y }) => y > previousBoundary && y < boundary.y)
+    assert.ok(lines.length > 1)
+    assert.equal(lines.map(({ text }) => text).join('').replace(/\s/g, ''), names[index].replace(/\s/g, ''))
+    assert.equal(amounts.length, 1)
+    const amount = amounts[0]
+    assert.equal(amount.text, 'ARS 2.400,00')
+    assert.equal(amount.align, 'right')
+    assert.ok(amount.y + 38 <= boundary.y)
+    assert.ok(amount.x <= result.width && amount.x - amount.width >= 64)
+    assert.ok(lines.every(({ x, y, width }) => x >= 64 && x + width < amount.x - amount.width
+      && y + 36 <= boundary.y && y + 36 < total.y))
+    previousBoundary = boundary.y
+  }
+  assert.ok(previousBoundary < total.y && total.y < result.footerY)
+  assert.deepEqual(quotation, before)
 })
 
 test('exports categorized concepts in display order without empty suggestions or category controls', () => {

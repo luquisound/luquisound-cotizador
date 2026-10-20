@@ -53,9 +53,13 @@ footer is 11 7358-1958 and @luquisound.ok. Fixed quotations remain in Figma with
 their existing dark headers; this app change does not modify those assets.
 
 Each row has separate edit buttons: its description opens the full row editor;
-its amount opens "Editar precio" with one unit-price field, fixed row currency,
+its amount opens "Editar precio" with one unit-price or service-price field, fixed row currency,
 and Save/Cancel actions. The template amount remains quantity times unit price.
-Quantity, other row fields and provenance stay unchanged. Blank means pending;
+Other row fields and provenance stay unchanged; fixed services use quantity one
+and the service amount described below. Manual price inputs accept up to 15
+characters, including separators. The Argentine money grammar, two-decimal and
+safe-cent checks still apply. Overlong edits fail without truncating historical
+or imported values. Blank means pending;
 zero is priced, except an already included row stays included at zero. A positive
 price makes an included row charged. Invalid nonblank input blocks saving in
 this dedicated editor; Cancel discards its draft.
@@ -66,12 +70,13 @@ unit-price field labelled with the row's ARS or USD currency, and "Agregar" or
 manual entry, without an initial
 catalogue accordion. Only an explicit result choice selects a catalogue product;
 typing, blur or saving never applies a match automatically. Selection preserves
-the row's identity, quantity, section and quotation category while copying the
+the row's identity, section and quotation category while copying the
 selected product's approved price, currency and private provenance together.
+Quantity is preserved for variable-quantity rows; cables and labour use one.
 
-"Mas opciones" contains quantity, optional detail, quotation category, currency,
+"Mas opciones" contains variable quantity, optional detail, quotation category, currency,
 included-without-charge state, private provenance and the existing-row removal
-action. Its closed summary reflects the active quantity, category, currency,
+action. Its closed summary reflects the active variable quantity, category, currency,
 detail presence and included state. Opening or closing it does not reset values.
 The full editor retains pending and invalid drafts; editing only a description
 does not approve a pending amount or change an included state. Cancel leaves the
@@ -113,13 +118,58 @@ The four direct installation concepts use these stable IDs and names:
 | `adapters` | Aros adaptadores 3D | Aros / adaptadores 3D |
 | `labor` | Mano de obra de instalacion | Mano de obra |
 
-An unused installation concept opens a temporary draft with that name, quantity
-one and a pending price in the quotation's default currency. Except new adapters,
+An unused installation concept can open a temporary draft with that name and quantity
+one. The primary harness control uses the explicit checkbox below. Cables and
+labour start with a pending price in the quotation's default
+currency. A new harness draft starts with the approved ARS 70,000 unit price,
+including in a quotation whose default currency is USD; amount and quantity
+remain editable. This harness preset applies only when creating a new draft.
+It never overwrites existing or recovered harnesses, imported prices, manual
+overrides, currencies, included states or pending prices, and is not applied by
+reclassification. Except new adapters,
 which first focus size selection, its modal focuses and selects the unit-price
 input without product search, catalogue or category
-selection. "Mas opciones" retains quantity, detail, currency, explicit included
+selection. "Mas opciones" retains harness quantity, detail, currency, explicit included
 state and removal of an existing row. No detail, supplier data or included state
 is supplied automatically.
+
+The primary harness control shows an explicit checkbox next to its editable
+price. An empty quotation uses a virtual unchecked ARS 70,000 suggestion: it
+creates no stored row, total or PNG content merely by being displayed. Explicit
+selection is stored as `harnessSelection.enabled`. A checked harness participates
+normally; an unchecked harness retains its price and fields for later reuse but
+does not participate in totals or image output. Existing harnesses without that
+metadata remain active with their historical values. Toggling an existing row
+records the user's choice without resetting its price or currency. Exclusion
+is independent of the included-without-charge price state.
+With no active rows, both displayed totals are zero even before an exchange rate
+is available. This does not make an empty quotation eligible for image output.
+
+Cables and labour are fixed services: an `extras` row classified by the exact
+`cables` or `labor` ID always uses the canonical quantity string `1` and one
+editable service amount. This applies to direct, custom and catalogue rows.
+Neither editor shows a quantity control or quantity summary for these services.
+Harnesses, adapters and equipment retain their existing quantity behavior.
+Names alone do not classify a service; bulk entry remains unclassified until an
+explicit category choice.
+
+Preparing a working copy of an older service preserves its rounded native line
+amount. For example, a synthetic quantity two at unit price 100 becomes quantity
+one at service price 200 in the same currency. `fixedServiceOrigin` version 1
+retains the exact original quantity, unit price, price state and currency, plus a
+`requiresPriceReview` flag. Preparation is idempotent and preserves row identity
+and private catalogue provenance. Pending prices, invalid quantities or prices,
+and overflowing charged amounts become a pending service price requiring an
+explicit edit; no amount is invented or approved. An included service with valid
+quantity remains included at zero, retaining its previous amount in the origin
+when it cannot be represented as a valid service price. Review-only drafts remain
+meaningful recoverable content and block image delivery.
+
+Persistence readers and backup/library import preserve raw historical rows and
+validated origin metadata without converting them. The current editable copy is
+prepared after recovery and on opening or duplicating a library entry; saved
+entries and source backups remain intact. New or edited service rows must have
+quantity exactly `1` when applied. Existing duplicate rows remain independent.
 
 New adapter rows require an explicit choice between two user-approved variants:
 
@@ -139,7 +189,8 @@ Existing rows show their measure and offer "Guardar y agregar otra medida";
 this saves current edits and opens a new temporary row without replacing the
 existing one. Correcting the current variant's size is a separate field in
 "Mas opciones". The new direct form has one size selector, with no variant-reuse
-selector. Other direct installation concepts start without a commercial price.
+selector. The new harness uses its separate approved preset; cables and labour
+start without a commercial price.
 
 The direct price input remains enabled for included rows. Entering zero keeps
 included, clearing it means pending and a positive amount becomes priced. Saving
@@ -181,6 +232,32 @@ or a catalogue selection. Unknown values or categories incompatible with the
 row's section are discarded without losing the row or its other fields.
 Category metadata alone is not meaningful quotation content.
 
+### Factory equipment
+
+Equipment classified as `speakers` (including component sets) or `subwoofer` can
+explicitly enable the factory-equipment checkbox. The active description is
+"Parlantes de fabrica" or "Subwoofer de fabrica", with empty detail and an
+ordinary priced zero. Quantity remains unchanged; this is distinct from the
+included-without-charge state. Product, detail, price and included editing are
+disabled while the mode is active. Currency remains editable between ARS and USD;
+the active zero stays zero without requiring a rate or changing the original
+snapshot. Turning it off, or changing to another category, restores the exact
+previous fields and conversion anchor before applying that change.
+Pending, invalid and included originals remain distinguishable.
+
+Private `factoryEquipment` version-1 metadata stores the eligible category and
+the original concept, detail, unit price, price state and currency. The row keeps
+any prior conversion anchor unchanged while factory mode is active. It preserves
+the raw text, quantity, row identity and existing catalogue provenance. Recovery,
+backups and library copies validate and retain that metadata; no factory mode is
+inferred from a legacy name or zero price. The active state is validated against
+its canonical description, zero amount, priced state and valid ARS or USD currency;
+the active currency need not equal the stored original currency. Supplier
+availability does not apply while the row represents equipment already in the vehicle; restoring
+the original sale row restores the normal source checks. The catalogue itself is
+unchanged. Preview and PNG show only the active factory description and zero,
+without the retained original product, detail, source or mode metadata.
+
 ### Adapter variants
 
 Adapter rows can optionally declare an explicit product identity, a positive
@@ -207,8 +284,10 @@ the same identity, size, presentation, concept, detail, currency, price state,
 unit price and provenance snapshot. Pending or invalid amounts do not accumulate. Quantities are
 added using exact integer thousandths, retaining the existing row ID. The
 native rounded amount must equal the sum of the two original line amounts;
-otherwise both rows remain separate. Overflow rejects the change. The 1000-row
-limit applies to the resulting rows, allowing an exact accumulation at the
+otherwise both rows remain separate. Overflow rejects the change.
+Rows with a currency-conversion reference never accumulate automatically: each
+must retain its own source amount and original line rounding when switching back.
+The 1000-row limit applies to the resulting rows, allowing an exact accumulation at the
 limit. Editing, recovering or reloading rows never triggers accumulation.
 
 Declared variants share a visual "Aros adaptadores 3D" block with their size,
@@ -245,16 +324,46 @@ explicit zero, and included states retain their distinct meanings.
   thousands; a comma marks decimals. At most two monetary decimal places.
 - Quantities must be positive, without thousands separators, with at most three
   decimals. Comma or dot is accepted as the quantity decimal separator.
+  Cables and labour in the editable quotation always use quantity one and an
+  editable service price; other categories keep variable quantities.
 - Represent prices and totals as safe integer cents. Compute quantity times
   unit price using integer arithmetic, round each line half up to the nearest
   cent in its own currency, then sum complete lines separately into ARS and USD
   subtotals. Use exact BigInt/integer-rational arithmetic and reject overflow
   before returning safe integer cents.
-- Each row has an explicit ARS or USD currency and preserves its entered amount
-  when that currency changes. New manual rows default to ARS. The retained
+- Each row has an explicit ARS or USD currency. An explicit currency edit converts
+  the entered unit amount using the open quotation's saved `exchangeRate`:
+  `USD = ARS / rate` and `ARS = USD * rate`. Use exact BigInt/rational arithmetic,
+  round half up to cents, and preserve quantity, price state and source provenance.
+  Blank stays blank and explicit zero stays zero without requiring a rate. A zero
+  rounded from a positive conversion retains its base and needs a valid matching
+  rate to restore that positive amount; it is not a new explicit zero. For a
+  nonzero amount, an absent, invalid or overflowing rate blocks the change with
+  an error and leaves both amount and currency unchanged. This action does not
+  fetch or invent a rate, approve a pending price or convert historical rows on
+  recovery. New manual rows default to ARS. The retained
   `quotation.currency` field is only a legacy default: recovered rows without
   currency inherit it, and new rows in those quotations use that default.
   New and edited rows store their currency explicitly.
+- Validated private `currencyConversionOrigin` metadata retains a conversion base
+  on a quotation row. Switching back with the same numerical rate and an
+  untouched amount uses that base to prevent accumulated cent rounding. Recovery,
+  backups, opening and duplication preserve the anchor with the row. Manual
+  price edits, adapter-size choices and explicit catalogue selection reset it;
+  quantity changes do not convert the unit amount. A factory row may change its
+  active zero currency without using or replacing its retained paid-price anchor.
+  Disabling factory mode restores the original product's price and currency,
+  consistent again with that prior row anchor.
+- Converted price text must fit the 15-character input limit. Prefer grouped
+  Argentine notation; if grouping does not fit, use an ungrouped amount with the
+  same comma decimal separator. If neither representation fits, reject the
+  conversion without truncation, partial changes or a different amount.
+- The personal-catalogue editor applies the same explicit conversion to its
+  manual sale price using the open quotation rate passed by the app. It retains
+  a round-trip anchor only within that editor session and does not persist a new
+  catalogue field. Supplier list prices, costs and historical reference amounts
+  retain their source currency and are not converted by this action. Selecting
+  a catalogue product still copies its approved price and currency together.
 - The rate states how many ARS equal one USD, using Argentine separators, a
   positive value, and up to six decimal places. An automatic-mode quotation requests DolarAPI
   blue sale through the server automatically when its saved fetch reference is
@@ -270,8 +379,10 @@ explicit zero, and included states retain their distinct meanings.
   a successful automatic lookup replaces them. See `EXCHANGE-RATE.md`.
 - Convert each currency subtotal once, rounding half up to cents:
   `totalARS = arsSubtotal + halfUp(usdSubtotal * rate)` and
-  `totalUSD = usdSubtotal + halfUp(arsSubtotal / rate)`. Never convert individual
-  rows or derive one total from the other. Both totals and the explicit rate appear
+  `totalUSD = usdSubtotal + halfUp(arsSubtotal / rate)`. This total calculation never
+  converts individual row amounts or derives one total from the other. Explicit
+  row-currency editing is the separate unit-amount operation described above.
+  Both totals and the explicit rate appear
   in the preview and exported image. An absent, invalid, zero, or overflowing rate
   blocks image preparation; a recovered quotation remains editable without an
   invented rate.
@@ -379,7 +490,8 @@ requires confirmation before replacing its entry. The library allows up to 100
 entries in a 5 MiB envelope; limits reject the action instead of deleting older
 records. A new archive requires a row with concept, detail, price or an explicit
 included state. Partial concepts are allowed; title, subtitle, notes, rate,
-quantity or category alone are insufficient. Existing compatible records remain
+quantity or category alone are insufficient. A preserved fixed-service draft
+requiring price review remains meaningful archive content. Existing compatible records remain
 preserved when read or imported.
 
 Snapshots deep-copy rows, prices, currencies, source trace and the rate. Opening

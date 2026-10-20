@@ -5,6 +5,7 @@ import { createQuotation, type QuotationRow } from '../src/features/quotation/mo
 import { updateRowUnitPrice } from '../src/features/quotation/row-price.ts'
 import { getRowPriceOverride } from '../src/features/quotation/row-provenance.ts'
 import { inspectQuotationAvailability } from '../src/features/quotation/quotation-availability.ts'
+import { setRowFactoryMode } from '../src/features/quotation/factory-mode.ts'
 
 function row(changes: Partial<QuotationRow> = {}): QuotationRow {
   return {
@@ -73,4 +74,69 @@ test('unchanged price is a no-op; changing an amount never clears stock protecti
   const quotation = { ...createQuotation(), exchangeRate: '1.000', rows: [updated] }
   assert.ok(inspectQuotationAvailability(quotation, []).issues.length > 0)
   assert.equal(updated.provenance?.selectionBlock, 'Synthetic conflict')
+})
+
+test('price edits accept fifteen characters with local decimal separators and reject sixteen without mutation', () => {
+  const original = Object.freeze(row())
+  const before = structuredClone(original)
+  for (const value of ['123456789012,34', '1.234.567.890,1']) {
+    assert.equal(value.length, 15)
+    const updated = updateRowUnitPrice(original, value)
+    assert.equal(updated.unitPrice, value)
+    assert.equal(updated.currency, original.currency)
+    assert.equal(updated.quantity, original.quantity)
+  }
+  for (const value of ['1234567890123,45', '1.234.567.890,12', ' '.repeat(16)]) {
+    assert.equal(value.length, 16)
+    assert.throws(() => updateRowUnitPrice(original, value), /15 caracteres/)
+    assert.deepEqual(original, before)
+  }
+  for (const value of ['123456789012345', '90071992547410']) {
+    assert.ok(value.length <= 15)
+    assert.throws(() => updateRowUnitPrice(original, value), /seguro/)
+    assert.deepEqual(original, before)
+  }
+})
+
+test('service price edits use quantity one and resolve a legacy review only through an explicit valid amount', () => {
+  for (const audioCategory of ['cables', 'labor'] as const) {
+    const original = row({ section: 'extras', audioCategory, quantity: '2', unitPrice: '100' })
+    const before = structuredClone(original)
+    const updated = updateRowUnitPrice(original, '200,00')
+    assert.equal(updated.quantity, '1')
+    assert.equal(updated.unitPrice, '200,00')
+    assert.equal(updated.currency, 'USD')
+    assert.equal(updated.provenance, original.provenance)
+    assert.equal(updated.fixedServiceOrigin!.quantity, '2')
+    assert.equal(updated.fixedServiceOrigin!.unitPrice, '100')
+    assert.equal(calculateQuotation({ ...createQuotation(), exchangeRate: '1.000', rows: [updated] }).rows[0]!.lineTotalCents, 20000)
+    assert.deepEqual(original, before)
+    const invalid = row({ section: 'extras', audioCategory, quantity: 'legacy invalid quantity' })
+    const resolved = updateRowUnitPrice(invalid, '75,25')
+    assert.equal(resolved.quantity, '1')
+    assert.equal(resolved.priceState, 'priced')
+    assert.equal(resolved.fixedServiceOrigin!.requiresPriceReview, false)
+    assert.equal(resolved.fixedServiceOrigin!.quantity, invalid.quantity)
+    const pending = updateRowUnitPrice(invalid, '')
+    assert.equal(pending.priceState, 'pending')
+    assert.equal(pending.fixedServiceOrigin!.requiresPriceReview, true)
+    for (const rejected of ['1,234', '1234567890123,45']) {
+      const snapshot = structuredClone(invalid)
+      assert.throws(() => updateRowUnitPrice(invalid, rejected))
+      assert.deepEqual(invalid, snapshot)
+    }
+  }
+})
+
+test('factory equipment keeps its priced zero until its mode is explicitly disabled', () => {
+  const factory = setRowFactoryMode(row({ audioCategory: 'speakers' }), true)
+  const before = structuredClone(factory)
+  assert.equal(updateRowUnitPrice(factory, '0'), factory)
+  assert.equal(updateRowUnitPrice(factory, '0,00'), factory)
+  for (const value of ['', '1', '75,25']) {
+    assert.throws(() => updateRowUnitPrice(factory, value), /f\u00e1brica/)
+    assert.deepEqual(factory, before)
+  }
+  const restored = setRowFactoryMode(factory, false)
+  assert.equal(updateRowUnitPrice(restored, '75,25').unitPrice, '75,25')
 })

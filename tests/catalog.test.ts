@@ -609,7 +609,7 @@ test('optional stock preserves unknown and explicit zero with independent proven
   assert.equal(Object.hasOwn(legacy.items[0], 'stock'), false)
   assert.equal(Object.hasOwn(entries()[0], 'stock'), false)
   assert.equal(Object.hasOwn(parse({ ...document(), items: [{ ...item(), stockQuantity: 0 }] }).items[0], 'stock'), false)
-  for (const quantity of [null, 0, 3, Number.MAX_SAFE_INTEGER]) {
+  for (const quantity of [null, -0.125, 0, 0.5, 27.375, 3, Number.MAX_SAFE_INTEGER]) {
     const snapshot = stock(quantity)
     const parsed = parse(document([item({ stock: snapshot })]))
     assert.deepEqual(parsed.items[0].stock, snapshot)
@@ -624,7 +624,8 @@ test('optional stock preserves unknown and explicit zero with independent proven
 test('stock import rejects invalid quantities, validity intervals and missing independent source provenance', () => {
   const valid = stock(0)
   const invalidSnapshots: unknown[] = [null, [], {},
-    ...[undefined, '0', true, 0.5, Number.MAX_SAFE_INTEGER + 1].map((quantity) => ({ ...valid, quantity })),
+    ...[undefined, '0', true, Number.MAX_SAFE_INTEGER + 1, -Number.MAX_SAFE_INTEGER - 1]
+      .map((quantity) => ({ ...valid, quantity })),
     { ...valid, checkedAt: undefined }, { ...valid, checkedAt: '2026-10-17' },
     { ...valid, checkedAt: '2026-10-17T15:00:00+00:00' },
     { ...valid, checkedAt: '2026-02-30T15:00:00.000Z' },

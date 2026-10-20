@@ -18,6 +18,44 @@ export interface AdapterVariant {
   presentation: AdapterPresentation
 }
 
+export interface FixedServiceOrigin {
+  version: 1
+  quantity: string
+  unitPrice: string
+  priceState: PriceState
+  currency: Currency
+  requiresPriceReview: boolean
+}
+
+export interface FactoryEquipment {
+  version: 1
+  category: 'speakers' | 'subwoofer'
+  original: {
+    concept: string
+    detail: string
+    unitPrice: string
+    priceState: PriceState
+    currency: Currency
+  }
+}
+
+export interface HarnessSelection {
+  enabled: boolean
+}
+
+export interface CurrencyConversionOrigin {
+  version: 1
+  sourceCurrency: Currency
+  sourceUnitPrice: string
+  exchangeRate: string
+  derivedCurrency: Currency
+  derivedUnitPrice: string
+}
+
+export interface RowCurrencyConversionOrigin extends CurrencyConversionOrigin {
+  priceState: PriceState
+}
+
 export interface QuotationRow {
   id: string
   section: RowSection
@@ -30,6 +68,10 @@ export interface QuotationRow {
   unitPrice: string
   priceState: PriceState
   provenance?: QuotationRowProvenance
+  fixedServiceOrigin?: FixedServiceOrigin
+  factoryEquipment?: FactoryEquipment
+  harnessSelection?: HarnessSelection
+  currencyConversionOrigin?: RowCurrencyConversionOrigin
 }
 
 export interface Quotation {
@@ -105,6 +147,7 @@ export function hasQuotationContent(quotation: Quotation): boolean {
     || row.detail.trim() !== ''
     || row.unitPrice.trim() !== ''
     || row.priceState === 'included'
+    || row.fixedServiceOrigin?.requiresPriceReview === true
     || row.quantity.trim() !== '1'
   ))
 }

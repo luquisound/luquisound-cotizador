@@ -377,7 +377,7 @@ test('catalogue metadata and independent historical price sources roundtrip exac
 })
 
 test('stock snapshots preserve zero, unknown quantity, expired timestamps and independent sources exactly', () => {
-  for (const quantity of [0, null, 3, Number.MAX_SAFE_INTEGER]) {
+  for (const quantity of [0, null, -2.75, 0.125, 27.375, 3, Number.MAX_SAFE_INTEGER]) {
     const workspace = createMetadataFixture()
     workspace.catalog[0]!.stock = { ...stockFixture(), quantity }
     const snapshot = structuredClone(workspace)
@@ -417,7 +417,7 @@ test('invalid stock quantity, timestamps, intervals and provenance cannot overwr
   const stock = stockFixture()
   const invalidStocks: unknown[] = [
     null, [], {},
-    ...[undefined, 1.5, '0', '', true, Number.MAX_SAFE_INTEGER + 1].map((quantity) => ({ ...stock, quantity })),
+    ...[undefined, '0', '', true, Number.MAX_SAFE_INTEGER + 1, -Number.MAX_SAFE_INTEGER - 1].map((quantity) => ({ ...stock, quantity })),
     ...[undefined, null, '', 0, '2020-01-10', '2020-02-30T15:00:00.000Z', '2020-01-10T15:00:00Z',
       '2020-01-10T15:00:00.000+00:00'].flatMap((timestamp) => [
       { ...stock, checkedAt: timestamp }, { ...stock, validUntil: timestamp },

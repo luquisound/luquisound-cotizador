@@ -9,6 +9,10 @@ import { parseExchangeRate } from './exchange.ts'
 import { readStoredBlueDollarQuote } from './exchange-quote.ts'
 import { readAudioCategory } from './audio-categories.ts'
 import { readAdapterVariant } from './adapters.ts'
+import { parseFixedServiceOrigin } from './fixed-services.ts'
+import { isFactoryRow, parseFactoryEquipment } from './factory-mode.ts'
+import { isHarnessPresetRow, parseHarnessSelection } from './harness-preset.ts'
+import { parseRowCurrencyConversionOrigin } from './row-currency.ts'
 import type { CatalogItem, CatalogReferencePrice, CatalogSource, Currency, PriceState, Quotation, QuotationRow, RowSection, Workspace } from './model.ts'
 
 export interface StorageAdapter {
@@ -90,8 +94,24 @@ function readRow(value: unknown, identifiers: Set<string>, legacyCurrency: Curre
   if (row.provenance !== undefined) {
     try { provenance = parseRowProvenance(row.provenance) } catch { invalidBackup() }
   }
+  let fixedServiceOrigin: QuotationRow['fixedServiceOrigin']
+  if (row.fixedServiceOrigin !== undefined) {
+    try { fixedServiceOrigin = parseFixedServiceOrigin(row.fixedServiceOrigin) } catch { invalidBackup() }
+  }
+  let factoryEquipment: QuotationRow['factoryEquipment']
+  if (row.factoryEquipment !== undefined) {
+    try { factoryEquipment = parseFactoryEquipment(row.factoryEquipment) } catch { invalidBackup() }
+  }
+  let harnessSelection: QuotationRow['harnessSelection']
+  if (row.harnessSelection !== undefined) {
+    try { harnessSelection = parseHarnessSelection(row.harnessSelection) } catch { invalidBackup() }
+  }
+  let currencyConversionOrigin: QuotationRow['currencyConversionOrigin']
+  if (row.currencyConversionOrigin !== undefined) {
+    try { currencyConversionOrigin = parseRowCurrencyConversionOrigin(row.currencyConversionOrigin) } catch { invalidBackup() }
+  }
   const adapterVariant = readAdapterVariant(row.adapterVariant, section, audioCategory)
-  return {
+  const restored: QuotationRow = {
     id: readIdentifier(row.id, identifiers),
     section,
     ...(audioCategory === undefined ? {} : { audioCategory }),
@@ -103,7 +123,14 @@ function readRow(value: unknown, identifiers: Set<string>, legacyCurrency: Curre
     unitPrice: readString(row.unitPrice, 64),
     priceState: readPriceState(row.priceState),
     ...(provenance === undefined ? {} : { provenance }),
+    ...(fixedServiceOrigin === undefined ? {} : { fixedServiceOrigin }),
+    ...(factoryEquipment === undefined ? {} : { factoryEquipment }),
+    ...(harnessSelection === undefined ? {} : { harnessSelection }),
+    ...(currencyConversionOrigin === undefined ? {} : { currencyConversionOrigin }),
   }
+  if (factoryEquipment !== undefined && !isFactoryRow(restored)) invalidBackup()
+  if (harnessSelection !== undefined && !isHarnessPresetRow(restored)) invalidBackup()
+  return restored
 }
 
 function readQuotation(value: unknown, identifiers: Set<string>): Quotation {

@@ -1,4 +1,5 @@
 import { hasQuotationContent, type Quotation } from './model.ts'
+import { prepareFixedServiceQuotation } from './fixed-services.ts'
 import { parseWorkspace, type StorageAdapter } from './persistence.ts'
 
 export const LIBRARY_STORAGE_KEY = 'luquisound.quotation-library.v1'
@@ -75,7 +76,7 @@ export function quotationLibraryNameKey(name: string): string {
 
 export function hasArchivableQuotationContent(quotation: Quotation): boolean {
   return quotation.rows.some((row) => row.concept.trim() !== '' || row.detail.trim() !== ''
-    || row.unitPrice.trim() !== '' || row.priceState === 'included')
+    || row.unitPrice.trim() !== '' || row.priceState === 'included' || row.fixedServiceOrigin?.requiresPriceReview === true)
 }
 
 function validatedQuotation(value: unknown): Quotation {
@@ -158,7 +159,7 @@ export function saveQuotationToLibrary(
 }
 
 export function openLibraryQuotation(entry: QuotationLibraryEntry, options: { duplicate?: boolean } = {}): Quotation {
-  const quotation = cloneWithNewIds(entry.quotation)
+  const quotation = prepareFixedServiceQuotation(cloneWithNewIds(entry.quotation))
   if (!options.duplicate) return quotation
   const now = new Date().toISOString()
   return {

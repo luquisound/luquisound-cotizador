@@ -9,6 +9,11 @@ import { CatalogAvailability } from './CatalogAvailability'
 import { canSelectCatalogItem } from './catalog-stock'
 import { resolveCatalogQuery } from './catalog-search'
 import { Dialog } from './QuotationDialog'
+import { isFactoryEligibleRow, isFactoryRow, setRowFactoryMode } from './factory-mode'
+import { isFixedServiceRow, prepareFixedServiceRow, resolveFixedServicePrice } from './fixed-services'
+import { isInactiveHarnessRow } from './harness-preset'
+import { getPriceInputLengthError } from './price-input'
+import { changeRowCurrency, clearRowCurrencyConversion } from './row-currency'
 import { getRowAvailabilityItem } from './quotation-availability'
 import { getRowPriceOverride } from './row-provenance'
 import { selectCatalogForRow } from './row-selection'
@@ -48,7 +53,7 @@ interface RowEditorProps {
 }
 
 export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, onEditExisting, isNew = false, directConcept }: RowEditorProps) {
-  const [draft, setDraft] = useState(row)
+  const [draft, setDraft] = useState(() => prepareFixedServiceRow(row))
   const [adapterDraft, setAdapterDraft] = useState<AdapterVariantDraft>(() => ({
     productKey: row.adapterVariant?.productKey ?? crypto.randomUUID(),
     size: row.adapterVariant?.size ?? '',
@@ -57,10 +62,15 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
   const [selectedVariantId, setSelectedVariantId] = useState('')
   const [adapterError, setAdapterError] = useState('')
   const [selectionError, setSelectionError] = useState('')
+  const [currencyError, setCurrencyError] = useState('')
   const [priceTouched, setPriceTouched] = useState(!isNew)
+  const [rejectedPriceError, setRejectedPriceError] = useState<string | null>(null)
   const [optionsOpen, setOptionsOpen] = useState(() => !parseQuantity(row.quantity).ok)
-  const [priceBuffer, setPriceBuffer] = useState(row.priceState === 'included' ? '0' : row.unitPrice)
-  const productInput = useRef<HTMLInputElement>(null)
+  const [priceBuffer, setPriceBuffer] = useState(() => {
+    const prepared = prepareFixedServiceRow(row)
+    return prepared.priceState === 'included' ? '0' : prepared.unitPrice
+  })
+  const productInput = useRef<HTMLTextAreaElement>(null)
   const priceInput = useRef<HTMLInputElement>(null)
   const sizeInput = useRef<HTMLSelectElement>(null)
   const includedPriceOrigin = useRef(row.priceState === 'included')
@@ -69,7 +79,10 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
   const priceErrorId = useId()
   const quantityErrorId = useId()
   const selectionErrorId = useId()
+  const currencyErrorId = useId()
   const adapterMode = Boolean(directConcept && row.audioCategory === 'adapters')
+  const fixedService = isFixedServiceRow(draft)
+  const factory = isFactoryRow(draft)
   const adapterSize = getRowAdapterSize(draft)
   const existingAdapters = isNew && !adapterMode ? quotation.rows.filter((entry) => readAdapterVariant(entry.adapterVariant, entry.section, entry.audioCategory)
     && !isEmptyRow(entry)) : []
@@ -84,12 +97,15 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
   const calculated = calculateQuotation({ ...quotation, rows: [draft] }).rows[0]
   const quantity = parseQuantity(draft.quantity)
   const price = draft.priceState === 'priced' ? parseMoney(draft.unitPrice) : null
-  const priceError = price && !price.ok ? price.reason : null
+  const visiblePrice = directConcept ? priceBuffer : draft.priceState === 'included' ? '0' : draft.unitPrice
+  const priceLengthError = rejectedPriceError ?? getPriceInputLengthError(visiblePrice)
+  const priceError = priceLengthError ?? (price && !price.ok ? price.reason : null)
+  const showPriceError = Boolean(priceLengthError || (priceTouched && priceError))
   const arithmeticErrors = quantity.ok && (price?.ok || draft.priceState === 'included') && draft.concept.trim()
     ? calculated?.errors ?? [] : []
   const category = getAudioCategories(draft.section).find((entry) => entry.id === draft.audioCategory)
   const optionsSummary = [
-    `Cant. ${draft.quantity.trim() || 'pendiente'}`, directConcept ? '' : category?.label ?? 'Otro',
+    fixedService ? '' : `Cant. ${draft.quantity.trim() || 'pendiente'}`, directConcept ? '' : category?.label ?? 'Otro',
     draft.detail.trim() ? 'Con detalle' : '', draft.currency,
     draft.priceState === 'included' ? 'Incluido sin cargo' : '',
   ].filter(Boolean).join(' · ')
@@ -100,14 +116,16 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
   }, [adapterMode, adapterSize, directConcept, isNew])
   function chooseCatalog(item: CatalogItem): boolean {
     try {
-      const selected = selectCatalogForRow(draft, item, quotation.currency)
+      const selected = prepareFixedServiceRow(selectCatalogForRow(draft, item, quotation.currency))
       setDraft(selected)
       setAdapterDraft({ productKey: item.id, size: '', presentation: '' })
       setSelectedVariantId('')
       setAdapterError('')
       setPriceBuffer(selected.unitPrice)
+      setRejectedPriceError(null)
       includedPriceOrigin.current = false
       setSelectionError('')
+      setCurrencyError('')
       setPriceTouched(false)
       window.requestAnimationFrame(() => { priceInput.current?.focus() })
       return true
@@ -123,9 +141,9 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
       setSelectionError('Esta variante requiere revisar su disponibilidad antes de agregarla.')
       return
     }
-    const nextDraft = existing?.adapterVariant
+    const nextDraft = clearRowCurrencyConversion(existing?.adapterVariant
       ? { ...existing, id: row.id, quantity: draft.quantity }
-      : { ...row, audioCategory: draft.audioCategory, quantity: draft.quantity }
+      : { ...row, audioCategory: draft.audioCategory, quantity: draft.quantity })
     setSelectedVariantId(rowId)
     setDraft(nextDraft)
     setAdapterDraft(existing?.adapterVariant ? { ...existing.adapterVariant } : { productKey: crypto.randomUUID(), size: '', presentation: '' })
@@ -133,33 +151,50 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
     includedPriceOrigin.current = nextDraft.priceState === 'included'
     priceStateBeforeIncluded.current = nextDraft.priceState === 'included' ? nextDraft.unitPrice.trim() ? 'priced' : 'pending' : nextDraft.priceState
     setPriceTouched(false)
+    setRejectedPriceError(null)
     setSelectionError('')
+    setCurrencyError('')
     setAdapterError('')
   }
   function changeCurrency(currency: Currency) {
     if (currency === draft.currency) return
-    if (draft.unitPrice.trim() && !window.confirm('Cambiar la moneda conserva el importe escrito, sin convertirlo. ¿Continuar?')) return
-    setDraft({ ...draft, currency })
+    try {
+      const next = changeRowCurrency(draft, currency, quotation.exchangeRate)
+      setDraft(next)
+      setPriceBuffer(next.priceState === 'included' ? '0' : next.unitPrice)
+      setCurrencyError('')
+      setRejectedPriceError(null)
+    } catch (cause: unknown) {
+      setCurrencyError(cause instanceof Error ? cause.message : 'No se pudo convertir el precio. Revisá el dólar del presupuesto.')
+    }
   }
   function changeAudioCategory(value: string) {
     const audioCategory = readAudioCategory(value, draft.section)
-    const nextDraft = { ...draft }
+    const nextDraft = { ...setRowFactoryMode(draft, false) }
     if (audioCategory) nextDraft.audioCategory = audioCategory
     else delete nextDraft.audioCategory
+    if (nextDraft.section !== 'extras' || audioCategory !== 'harness') delete nextDraft.harnessSelection
     if (audioCategory !== 'adapters') {
       delete nextDraft.adapterVariant
       setAdapterDraft({ productKey: crypto.randomUUID(), size: '', presentation: '' })
       setSelectedVariantId('')
     }
     setAdapterError('')
-    setDraft(nextDraft)
+    const prepared = prepareFixedServiceRow(nextDraft)
+    setDraft(prepared)
+    setPriceBuffer(prepared.priceState === 'included' ? '0' : prepared.unitPrice)
+    includedPriceOrigin.current = prepared.priceState === 'included'
+    priceStateBeforeIncluded.current = prepared.priceState === 'included' ? prepared.unitPrice.trim() ? 'priced' : 'pending' : prepared.priceState
+    setRejectedPriceError(null)
   }
   function changeIncluded(included: boolean) {
+    setRejectedPriceError(null)
+    setCurrencyError('')
     if (included) {
       if (draft.priceState !== 'included') priceStateBeforeIncluded.current = draft.priceState
       includedPriceOrigin.current = true
       setPriceBuffer('0')
-      setDraft({ ...draft, priceState: 'included' })
+      setDraft(resolveFixedServicePrice({ ...draft, priceState: 'included' }))
     } else {
       includedPriceOrigin.current = false
       setPriceBuffer(draft.unitPrice)
@@ -167,20 +202,33 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
     }
   }
   function changePrice(unitPrice: string) {
+    const lengthError = getPriceInputLengthError(unitPrice)
+    setRejectedPriceError(lengthError)
+    if (lengthError) return
+    setCurrencyError('')
     setPriceBuffer(unitPrice)
     if (directConcept && includedPriceOrigin.current) {
       const parsed = parseMoney(unitPrice)
       if (parsed.ok && parsed.cents === 0) {
         priceStateBeforeIncluded.current = 'priced'
-        setDraft({ ...draft, unitPrice, priceState: 'included' })
+        setDraft(resolveFixedServicePrice(clearRowCurrencyConversion({ ...draft, unitPrice, priceState: 'included' })))
         return
       }
     }
-    setDraft({ ...draft, unitPrice, priceState: unitPrice.trim() ? 'priced' : 'pending' })
+    setDraft(resolveFixedServicePrice(clearRowCurrencyConversion({ ...draft, unitPrice, priceState: unitPrice.trim() ? 'priced' : 'pending' })))
+  }
+  function changeFactory(enabled: boolean) {
+    const next = setRowFactoryMode(draft, enabled)
+    setDraft(next)
+    setPriceBuffer(next.priceState === 'included' ? '0' : next.unitPrice)
+    includedPriceOrigin.current = next.priceState === 'included'
+    priceStateBeforeIncluded.current = next.priceState === 'included' ? next.unitPrice.trim() ? 'priced' : 'pending' : next.priceState
+    setRejectedPriceError(null)
+    setCurrencyError('')
   }
   function changeAdapterSize(value: string) {
     if ((value !== '6.5' && value !== '8') || value === adapterSize) return
-    const selected = selectDirectAdapterSize(draft, value)
+    const selected = clearRowCurrencyConversion(selectDirectAdapterSize(draft, value))
     setSelectedVariantId('')
     setAdapterError('')
     setDraft(selected)
@@ -188,7 +236,9 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
     includedPriceOrigin.current = false
     priceStateBeforeIncluded.current = 'priced'
     setPriceTouched(false)
+    setRejectedPriceError(null)
     setSelectionError('')
+    setCurrencyError('')
     window.requestAnimationFrame(() => { priceInput.current?.focus() })
   }
   function groupLegacyAdapter() {
@@ -202,6 +252,11 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
   }
   function saveDraft(addVariant = false) {
     if (occupiedCategory) return
+    if (getPriceInputLengthError(visiblePrice)) {
+      setPriceTouched(true)
+      priceInput.current?.focus()
+      return
+    }
     if (adapterMode && isNew && !adapterSize) {
       setSelectionError('Elegí el tamaño de los aros.')
       sizeInput.current?.focus()
@@ -224,7 +279,7 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
       if (!next.concept.trim()) next.concept = 'Aros adaptadores 3D'
     }
     // Preserve incomplete drafts and legacy states; only editing the price approves it.
-    onSave(next, addVariant)
+    onSave(prepareFixedServiceRow(next), addVariant)
   }
   const quantityField = <>
     <label>Cantidad<input inputMode="decimal" value={draft.quantity} maxLength={30} aria-invalid={!quantity.ok} aria-describedby={!quantity.ok ? quantityErrorId : undefined} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /></label>
@@ -234,7 +289,7 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
   return (
     <Dialog title={directConcept ? `${isNew ? 'Agregar' : 'Editar'} ${directConcept}` : row.section === 'equipment' ? `${isNew ? 'Agregar' : 'Editar'} equipamiento` : `${isNew ? 'Agregar' : 'Editar'} instalación o accesorio`} onClose={onClose}>
       <form className="form-stack row-editor-form" onSubmit={submit}>
-        {!directConcept && <RowProductPicker catalog={catalog} section={row.section} value={draft.concept} inputRef={productInput} onChange={(concept) => { setDraft({ ...draft, concept }); setSelectionError('') }} onChoose={chooseCatalog} />}
+        {!directConcept && <fieldset className="row-product-lock" disabled={factory}><RowProductPicker catalog={catalog} section={row.section} value={draft.concept} inputRef={productInput} onChange={(concept) => { setDraft({ ...draft, concept }); setSelectionError('') }} onChoose={chooseCatalog} /></fieldset>}
         {selectionError && <p id={selectionErrorId} className="field-errors" role="alert">{selectionError}</p>}
         {provenance && <p className="row-selection-note">Del catálogo{provenance.sku ? ` · ${provenance.sku}` : ''}{getRowPriceOverride(draft) ? ' · Precio editado' : ''}</p>}
         {draft.audioCategory === 'adapters' && !adapterMode && <AdapterVariantFields value={adapterDraft} existingRows={existingAdapters} selectedRowId={selectedVariantId} onChange={(value) => { setAdapterDraft(value); setAdapterError('') }} onChoose={chooseAdapter} />}
@@ -246,9 +301,12 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
         </>}
         {!isNew && draft.audioCategory === 'adapters' && <button type="button" className="button secondary adapter-add-variant" onClick={() => saveDraft(true)}>Guardar y agregar otra medida</button>}
         <div className="row-price-field">
-          <label>Precio unitario · {draft.currency}<input ref={priceInput} inputMode="decimal" value={directConcept ? priceBuffer : draft.priceState === 'included' ? '0' : draft.unitPrice} disabled={draft.priceState === 'included' && !directConcept} maxLength={30} placeholder="Sin precio asignado" aria-invalid={Boolean(priceTouched && priceError)} aria-describedby={`${priceHelpId}${priceTouched && priceError ? ` ${priceErrorId}` : ''}`} onBlur={() => setPriceTouched(true)} onFocus={(event) => { if (directConcept) event.currentTarget.select() }} onInput={(event) => { if (directConcept && event.currentTarget.value === priceBuffer) changePrice(event.currentTarget.value) }} onChange={(event) => changePrice(event.target.value)} /></label>
-          <p id={priceHelpId} className="field-help row-price-status">{draft.priceState === 'included' ? directConcept ? 'Incluido sin cargo.' : 'Incluido sin cargo. Podés cambiarlo en Más opciones.' : draft.priceState === 'pending' ? draft.unitPrice.trim() ? 'Precio pendiente de confirmar. Editá el importe para asignarlo.' : 'Sin precio: queda pendiente.' : quantity.ok && quantity.thousandths !== 1000 && calculated?.lineTotalCents !== null && calculated?.lineTotalCents !== undefined ? `Cantidad ${draft.quantity} · Importe ${formatMoney(calculated.lineTotalCents, draft.currency)}` : 'Precio de una unidad.'}</p>
-          {priceTouched && priceError && <p id={priceErrorId} className="field-errors" role="status">{priceError} Se conserva como borrador.</p>}
+          <div className="row-price-controls">
+            <label className="row-price-input-label">{fixedService ? 'Precio' : 'Precio unitario'} · {draft.currency}<input ref={priceInput} className="compact-price-input" inputMode="decimal" value={visiblePrice} disabled={factory || (draft.priceState === 'included' && !directConcept)} placeholder="Sin precio" aria-invalid={showPriceError} aria-describedby={`${priceHelpId}${showPriceError ? ` ${priceErrorId}` : ''}`} onBlur={() => setPriceTouched(true)} onFocus={(event) => { if (directConcept) event.currentTarget.select() }} onInput={(event) => { if (directConcept && event.currentTarget.value === priceBuffer) changePrice(event.currentTarget.value) }} onChange={(event) => changePrice(event.target.value)} /></label>
+            {isFactoryEligibleRow(draft) && <label className="row-factory-toggle"><input type="checkbox" checked={factory} onChange={(event) => changeFactory(event.target.checked)} /><span>De fábrica</span></label>}
+          </div>
+          <p id={priceHelpId} className="field-help row-price-status">{factory ? 'De fábrica: sin cargo.' : isInactiveHarnessRow(draft) ? 'Sin seleccionar: el precio se conserva sin sumarse al presupuesto.' : draft.priceState === 'included' ? directConcept ? 'Incluido sin cargo.' : 'Incluido sin cargo. Podés cambiarlo en Más opciones.' : draft.priceState === 'pending' ? draft.unitPrice.trim() ? 'Precio pendiente de confirmar. Editá el importe para asignarlo.' : 'Sin precio: queda pendiente.' : fixedService ? 'Precio total del concepto.' : quantity.ok && quantity.thousandths !== 1000 && calculated?.lineTotalCents !== null && calculated?.lineTotalCents !== undefined ? `Cantidad ${draft.quantity} · Importe ${formatMoney(calculated.lineTotalCents, draft.currency)}` : 'Precio de una unidad.'}</p>
+          {showPriceError && <p id={priceErrorId} className="field-errors" role="status">{priceError}{priceLengthError ? '' : ' Se conserva como borrador.'}</p>}
           {arithmeticErrors.length > 0 && <ul className="field-errors">{arithmeticErrors.map((error) => <li key={error}>{error}</li>)}</ul>}
         </div>
         {occupiedCategory && <div className="notice pending" role="status"><p>Esta categoría ya tiene un concepto. Podés editarlo o elegir otra categoría para esta fila.</p><button type="button" className="button secondary" onClick={() => onEditExisting(occupiedCategory.id)}>Editar concepto existente</button></div>}
@@ -257,11 +315,12 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
           <summary><span>Más opciones</span><span className="row-options-summary">{optionsSummary}</span></summary>
           <div className="form-stack row-options-content">
             {adapterMode && !isNew && sizeField}
-            {!adapterMode && quantityField}
-            <label>Detalle <span>(opcional)</span><textarea rows={2} value={draft.detail} maxLength={2000} onChange={(event) => setDraft({ ...draft, detail: event.target.value })} /></label>
+            {!adapterMode && !fixedService && quantityField}
+            <label>Detalle <span>(opcional)</span><textarea rows={2} value={draft.detail} disabled={factory} maxLength={2000} onChange={(event) => setDraft({ ...draft, detail: event.target.value })} /></label>
             {!directConcept && <label>Categoría del presupuesto<select value={draft.audioCategory ?? ''} onChange={(event) => changeAudioCategory(event.target.value)}>{getAudioCategories(draft.section).map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}<option value="">Otro</option></select></label>}
-            <label>Moneda del ítem<select value={draft.currency} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">ARS · Pesos argentinos</option><option value="USD">USD · Dólares estadounidenses</option></select></label>
-            <label className="row-included-toggle"><input type="checkbox" checked={draft.priceState === 'included'} onChange={(event) => changeIncluded(event.target.checked)} /><span>Incluido sin cargo</span></label>
+            <label>Moneda del ítem<select value={draft.currency} aria-invalid={Boolean(currencyError)} aria-describedby={currencyError ? currencyErrorId : undefined} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">ARS · Pesos argentinos</option><option value="USD">USD · Dólares estadounidenses</option></select></label>
+            {currencyError && <p id={currencyErrorId} className="field-errors" role="alert">{currencyError}</p>}
+            <label className="row-included-toggle"><input type="checkbox" checked={draft.priceState === 'included'} disabled={factory} onChange={(event) => changeIncluded(event.target.checked)} /><span>Incluido sin cargo</span></label>
             {provenance && <details className="catalog-metadata">
               <summary>Origen y precio de esta fila <span>(privado)</span></summary>
               <div className="form-stack">
@@ -278,7 +337,7 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
             {!isNew && <button type="button" className="button danger row-remove" onClick={() => { if (window.confirm('¿Eliminar este concepto del presupuesto?')) onRemove() }}>Eliminar concepto</button>}
           </div>
         </details>
-        <div className="dialog-actions row-editor-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button primary" disabled={Boolean(occupiedCategory)}>{isNew ? 'Agregar' : 'Guardar'}</button></div>
+        <div className="dialog-actions row-editor-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button primary" disabled={Boolean(occupiedCategory || getPriceInputLengthError(visiblePrice))}>{isNew ? 'Agregar' : 'Guardar'}</button></div>
       </form>
     </Dialog>
   )

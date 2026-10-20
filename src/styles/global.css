@@ -85,7 +85,8 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .form-stack label span { display: contents; font-weight: 400; color: #6b6b65; }
 input, select, textarea { display: block; width: 100%; max-width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid #bdbdb3; background: white; color: #20201d; font: inherit; font-size: 16px; border-radius: 6px; }
 textarea { resize: vertical; line-height: 1.5; }
-input:disabled { background: #e9e8e1; color: #575751; }
+.product-name-input { resize: none; overflow-y: hidden; overflow-wrap: anywhere; }
+input:disabled, select:disabled, textarea:disabled { background: #e9e8e1; color: #575751; }
 input::placeholder, textarea::placeholder { color: #818179; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-grid > * { min-width: 0; }
@@ -102,6 +103,14 @@ ul.field-errors { padding-left: 30px; }
 .row-selection-note, .row-price-status { margin: 0; font-size: 13px; line-height: 1.5; color: #66665e; overflow-wrap: anywhere; }
 .row-selection-note { margin-top: -10px; }
 .row-price-field { display: grid; gap: 6px; }
+.row-price-controls { display: flex; align-items: flex-end; gap: 12px; min-width: 0; }
+.row-price-input-label { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.compact-price-input { width: calc(15ch + 26px); min-width: 0; max-width: 100%; font-variant-numeric: tabular-nums; }
+.form-stack .row-factory-toggle { display: flex; flex-shrink: 0; align-items: center; gap: 8px; min-height: 46px; white-space: nowrap; }
+.row-factory-toggle input { width: 22px; height: 22px; min-height: 22px; padding: 0; accent-color: #947500; }
+.form-stack .row-factory-toggle span { display: block; color: inherit; }
+.row-product-lock { min-width: 0; margin: 0; padding: 0; border: 0; }
+.row-price-concept { overflow-wrap: anywhere; white-space: pre-wrap; }
 .row-more-options { min-width: 0; border-block: 1px solid #deddd6; }
 .row-more-options > summary { min-height: 48px; padding: 12px 2px; line-height: 1.5; font-size: 14px; }
 .row-options-summary { display: block; margin-top: 4px; color: #6a6a61; font-size: 12px; overflow-wrap: anywhere; }

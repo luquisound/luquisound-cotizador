@@ -3,6 +3,7 @@ import { isEmptyRow } from './calculation.ts'
 import { getCatalogAvailabilityPolicy, getCatalogSelectionStatus, parseCatalogStockFields } from './catalog-stock.ts'
 import type { CatalogSelectionReason, CatalogStockSnapshot } from './catalog-stock.ts'
 import type { CatalogItem, Quotation, QuotationRow } from './model.ts'
+import { isFactoryRow } from './factory-mode.ts'
 
 export function describeCatalogAvailability(item: CatalogItem, now = Date.now()): {
   quantityLabel: string
@@ -49,6 +50,7 @@ function keyMatches(first: { supplier?: string; sku?: string }, second: { suppli
 export function getRowAvailabilityItem(
   row: QuotationRow, catalog: readonly CatalogItem[] = [],
 ): CatalogItem | undefined {
+  if (isFactoryRow(row)) return undefined
   const provenance = row.provenance
   if (!provenance) return undefined
   const policy = getCatalogAvailabilityPolicy(provenance)

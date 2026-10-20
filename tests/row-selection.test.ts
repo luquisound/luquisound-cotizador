@@ -10,6 +10,17 @@ const source = {
   kind: 'snapshot' as const, version: 'synthetic-v1', checksum: 'a'.repeat(64),
 }
 
+test('selecting another product preserves the independent inactive bypass selection', () => {
+  const original = row({ audioCategory: 'harness', harnessSelection: { enabled: false } })
+  const before = structuredClone(original)
+  const selected = selectCatalogForRow(original, item(), 'ARS', now)
+  assert.deepEqual(selected.harnessSelection, { enabled: false })
+  assert.notEqual(selected.harnessSelection, original.harnessSelection)
+  assert.equal(selected.provenance?.catalogItemId, item().id)
+  assert.equal(selected.unitPrice, '12,50')
+  assert.deepEqual(original, before)
+})
+
 function item(changes: Partial<CatalogItem> = {}): CatalogItem {
   return {
     id: 'synthetic-catalog-item', concept: 'Synthetic selected component', detail: 'Selected description',
@@ -32,13 +43,13 @@ function row(changes: Partial<QuotationRow> = {}): QuotationRow {
   }
 }
 
-test('selection preserves row identity, quantity, section and category while using the native list price', () => {
+test('selection keeps fixed service quantity at one while copying the native list price and private trace', () => {
   const draft = row()
   const selectedItem = item()
   const selected = selectCatalogForRow(draft, selectedItem, 'ARS', now)
   assert.notEqual(selected, draft)
   assert.equal(selected.id, draft.id)
-  assert.equal(selected.quantity, '2,500')
+  assert.equal(selected.quantity, '1')
   assert.equal(selected.section, 'extras')
   assert.equal(selected.audioCategory, 'cables')
   assert.equal(selected.concept, selectedItem.concept)
@@ -52,6 +63,32 @@ test('selection preserves row identity, quantity, section and category while usi
     listPrice: selectedItem.listPrice, stock: selectedItem.stock, availabilityPolicy: 'fresh-positive',
   })
   assert.equal(getRowPriceOverride(selected), false)
+  assert.equal(draft.quantity, '2,500')
+})
+
+test('catalogue selection preserves quantities for equipment, adapters, harnesses and unclassified concepts', () => {
+  for (const fields of [
+    { section: 'equipment' as const, audioCategory: 'speakers' as const },
+    { section: 'extras' as const, audioCategory: 'adapters' as const },
+    { section: 'extras' as const, audioCategory: 'harness' as const },
+    { section: 'extras' as const, audioCategory: undefined },
+  ]) {
+    const draft = row(fields)
+    const before = structuredClone(draft)
+    const selected = selectCatalogForRow(draft, item(), 'ARS', now)
+    assert.equal(selected.quantity, '2,500')
+    assert.equal(selected.section, draft.section)
+    assert.equal(selected.audioCategory, draft.audioCategory)
+    assert.equal(selected.unitPrice, '12,50')
+    assert.equal(selected.currency, 'USD')
+    assert.deepEqual(draft, before)
+  }
+  const labor = row({ audioCategory: 'labor', quantity: 'invalid legacy quantity' })
+  const selected = selectCatalogForRow(labor, item(), 'ARS', now)
+  assert.equal(selected.quantity, '1')
+  assert.equal(selected.unitPrice, '12,50')
+  assert.equal(selected.priceState, 'priced')
+  assert.equal(labor.quantity, 'invalid legacy quantity')
 })
 
 test('a previous manual override and previous product provenance never migrate to the selected product', () => {

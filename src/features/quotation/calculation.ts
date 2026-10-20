@@ -1,6 +1,7 @@
 import type { Currency, Quotation, QuotationRow } from './model.ts'
 import { convertMixedTotals, type ConvertedTotalsResult } from './exchange.ts'
 import { orderQuotationRows } from './audio-categories.ts'
+import { isInactiveHarnessRow } from './harness-preset.ts'
 
 type ParseFailure = { ok: false; reason: string }
 export type MoneyResult = { ok: true; cents: number } | ParseFailure
@@ -67,7 +68,9 @@ export function formatMoney(cents: number, currency: Currency): string {
 }
 
 export function isEmptyRow(row: QuotationRow): boolean {
-  if (row.concept.trim() || row.detail.trim() || row.unitPrice.trim() || row.priceState !== 'pending') {
+  if (isInactiveHarnessRow(row)) return true
+  if (row.concept.trim() || row.detail.trim() || row.unitPrice.trim() || row.priceState !== 'pending'
+    || row.fixedServiceOrigin?.requiresPriceReview) {
     return false
   }
   if (!row.quantity.trim()) return true
@@ -75,7 +78,7 @@ export function isEmptyRow(row: QuotationRow): boolean {
   return quantity.ok && quantity.thousandths === 1000
 }
 
-function calculateRow(row: QuotationRow): CalculatedRow {
+export function calculateRow(row: QuotationRow): CalculatedRow {
   const errors: string[] = []
   if (!row.concept.trim()) errors.push('Ingresá el concepto de la fila.')
   if (row.currency !== 'ARS' && row.currency !== 'USD') errors.push('Seleccioná una moneda válida para el ítem: ARS o USD.')
@@ -133,6 +136,10 @@ export function calculateQuotation(quotation: Quotation): QuotationCalculation {
   const conversion = convertMixedTotals(nativeTotals.ARS, nativeTotals.USD, quotation.exchangeRate ?? '')
   if (!conversion.ok) issues.push(conversion.reason)
   const totals: Record<Currency, number | null> = { ARS: null, USD: null }
+  if (!rows.length) {
+    totals.ARS = 0
+    totals.USD = 0
+  }
   if (itemsComplete) {
     if (conversion.ok) {
       totals.ARS = conversion.arsCents

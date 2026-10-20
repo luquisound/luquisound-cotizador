@@ -1,7 +1,10 @@
 import type { CSSProperties, ReactNode } from 'react'
 import {
   calculateQuotation,
+  calculateRow,
   formatMoney,
+  isEmptyRow,
+  parseMoney,
   parseQuantity,
 } from './calculation.ts'
 import type { CalculatedRow } from './calculation.ts'
@@ -12,6 +15,9 @@ import { exchangeRateDescription } from './exchange-quote'
 import { QUOTATION_GRAPHIC } from './graphic.ts'
 import { adapterVariantAmount, adapterVariantDescription, buildQuotationPresentation } from './presentation.ts'
 import type { AdapterPresentationBlock, QuotationPresentationItem } from './presentation.ts'
+import {
+  HARNESS_PRESET_CONCEPT, HARNESS_PRESET_CURRENCY, HARNESS_PRESET_UNIT_PRICE, isHarnessPresetRow,
+} from './harness-preset.ts'
 import './preview.css'
 import './exchange-ui.css'
 
@@ -26,6 +32,8 @@ export interface QuotationPreviewProps {
   onEditRow: (rowId: string) => void
   onEditPrice: (rowId: string) => void
   onAddRow: (section: RowSection, audioCategory?: AudioCategory) => void
+  onSetHarnessSelected: (enabled: boolean) => void
+  onEditHarnessPreset: () => void
   notices: ReactNode
   exchangeDetails: ReactNode
 }
@@ -65,6 +73,47 @@ function PreviewRow({ row, calculated, onEdit, onEditPrice }: PreviewRowProps) {
         {quantityLabel && <span className="quotation-row-quantity">{quantityLabel}</span>}
       </button>
       <button type="button" className={`quotation-row-price${hasErrors ? ' quotation-price-pending' : ''}`} data-row-price-id={row.id} onClick={onEditPrice} aria-label={`Editar precio unitario de ${concept}. Importe de la fila: ${amount}`} title="Tocá para editar sólo el precio unitario">
+        {amount}
+      </button>
+    </div>
+  )
+}
+
+function PreviewHarnessPreset({
+  row, onSelect, onEditPrice, onEditRow,
+}: {
+  row: QuotationRow | undefined
+  onSelect: (enabled: boolean) => void
+  onEditPrice: () => void
+  onEditRow: (rowId: string) => void
+}) {
+  const selected = row?.harnessSelection?.enabled ?? row !== undefined
+  const concept = row?.concept.trim() || HARNESS_PRESET_CONCEPT
+  const price = parseMoney(row?.unitPrice ?? HARNESS_PRESET_UNIT_PRICE)
+  const savedPrice = (row === undefined || row.priceState !== 'pending') && price.ok
+    ? formatMoney(price.cents, row?.currency ?? HARNESS_PRESET_CURRENCY) : 'Pendiente'
+  const calculated = selected && row ? calculateRow(row) : undefined
+  const amount = calculated
+    ? calculated.lineTotalCents === null || calculated.errors.length ? 'Pendiente'
+      : row?.priceState === 'included' ? 'Incluido' : formatMoney(calculated.lineTotalCents, row!.currency)
+    : savedPrice
+  const quantity = row === undefined ? undefined : parseQuantity(row.quantity)
+  const quantityLabel = row && (!quantity?.ok || quantity.thousandths !== 1000)
+    ? `Cantidad: ${row.quantity.trim() || 'pendiente'}` : ''
+  return (
+    <div className={`quotation-row quotation-harness-preset${selected ? '' : ' quotation-harness-inactive'}`}>
+      <div className="quotation-harness-description">
+        <label className="quotation-harness-selection">
+          <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={`Incluir ${concept}`} />
+          <span className="quotation-row-concept">{concept}</span>
+        </label>
+        {row?.detail.trim() && <span className="quotation-row-detail">{row.detail.trim()}</span>}
+        {quantityLabel && <span className="quotation-row-quantity">{quantityLabel}</span>}
+        {!selected && <span className="quotation-row-quantity">Sin seleccionar</span>}
+        {selected && row?.priceState === 'included' && <span className="quotation-row-quantity">Incluido sin cargo</span>}
+        {row && <button type="button" className="quotation-harness-edit" data-row-id={row.id} onClick={() => onEditRow(row.id)} aria-label={`Editar datos de ${concept}`}>Editar datos</button>}
+      </div>
+      <button type="button" className={`quotation-row-price${amount === 'Pendiente' ? ' quotation-price-pending' : ''}`} data-row-price-id={row?.id} onClick={onEditPrice} aria-label={`Editar precio unitario de ${concept}. ${selected ? 'Importe de la fila' : 'Precio guardado'}: ${amount}`} title="Editar el precio guardado, sin cambiar la selección">
         {amount}
       </button>
     </div>
@@ -168,10 +217,14 @@ export function QuotationPreview({
   onEditRow,
   onEditPrice,
   onAddRow,
+  onSetHarnessSelected,
+  onEditHarnessPreset,
   notices,
   exchangeDetails,
 }: QuotationPreviewProps) {
   const calculation = calculateQuotation(quotation)
+  const harnessRows = quotation.rows.filter((row) => row.section === 'extras' && row.audioCategory === 'harness')
+  const harnessPreset = harnessRows.find(isHarnessPresetRow) ?? harnessRows.find((row) => !isEmptyRow(row))
 
   return (
     <div className="quotation-preview" style={graphicStyle}>
@@ -219,11 +272,16 @@ export function QuotationPreview({
               <section className="quotation-section" key={section} aria-label={label}>
                 <h2 className="quotation-section-title">{label}</h2>
                 {getAudioCategories(section).map((category) => {
-                  const categoryRows = sectionRows.filter(({ row }) => row.audioCategory === category.id)
+                  const isHarnessCategory = section === 'extras' && category.id === 'harness'
+                  const categoryRows = sectionRows.filter(({ row }) => row.audioCategory === category.id
+                    && (!isHarnessCategory || row.id !== harnessPreset?.id))
                   const items = buildQuotationPresentation(categoryRows)
                   return (
                     <div className="quotation-audio-category" key={category.id} data-audio-category={category.id}>
-                      {categoryRows.length === 0 ? (
+                      {isHarnessCategory && (
+                        <PreviewHarnessPreset row={harnessPreset} onSelect={onSetHarnessSelected} onEditPrice={onEditHarnessPreset} onEditRow={onEditRow} />
+                      )}
+                      {categoryRows.length === 0 && !isHarnessCategory ? (
                         <button
                           type="button"
                           className="quotation-empty-row"
@@ -233,7 +291,7 @@ export function QuotationPreview({
                         >
                           <span aria-hidden="true">+</span> {category.label}
                         </button>
-                      ) : (
+                      ) : categoryRows.length > 0 ? (
                         <>
                           {section === 'equipment' && (
                             <h3 className="quotation-category-label">{category.label}</h3>
@@ -251,7 +309,7 @@ export function QuotationPreview({
                             </button>
                           )}
                         </>
-                      )}
+                      ) : null}
                     </div>
                   )
                 })}

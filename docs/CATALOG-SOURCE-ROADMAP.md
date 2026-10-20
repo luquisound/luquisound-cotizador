@@ -65,9 +65,11 @@ for the activation task. No new periodic job is part of this preparation.
 ```
 
 This example is synthetic, not a promise of current availability. Quantity is a
-safe integer or explicit `null` for unknown. Negative values remain an anomaly
+finite number with absolute value at most `Number.MAX_SAFE_INTEGER`, or explicit
+`null` for unknown. Decimal quantities are preserved. Negative values remain an anomaly
 and block protected selection. Missing `stock` also means no observation.
-Strings, blanks, errors, fractions and unresolved formulas must not become zero.
+Strings, blanks, errors and unresolved formulas must not become zero. The source
+adapter must validate unformatted decimal values without truncation or precision loss.
 The adapter must report ambiguous supplier conventions before mapping them.
 
 For a current observation, `checkedAt` and `validUntil` are canonical UTC instants
@@ -124,6 +126,16 @@ outside it. There is no blanket manual override for an exact blocked product in
 bulk entry.
 
 ## Deferred live-source activation
+
+The offline `prepare:instaler` command reads a local XLSX without evaluating
+formulas, prepares unformatted `Precios` A:E values and compares them with a
+provided local catalogue. It has no network adapter, credentials, schedule or
+publication path. Its private output is explicitly a partial-scope review,
+not an import envelope or a verified live source. Source descriptions are not
+imported; combined or overlong source text requires explicit name review. See
+[snapshot preparation](INSTALER-SNAPSHOT-PREPARATION.md) for its mapping, validation
+and remaining access/freshness boundaries. Existing deployment configuration and
+the published snapshot are unchanged by this code.
 
 The policy and UI above do not create a Sheets connection. Before activating one:
 

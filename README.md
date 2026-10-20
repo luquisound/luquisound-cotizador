@@ -116,9 +116,12 @@ in Figma retain their dark headers. Exchange-rate details stay beside the totals
 Previously stored notes are retained in recovery and PNG output.
 
 Each row has separate edit buttons: its description opens the full row editor;
-its amount opens "Editar precio" with one unit-price field, fixed row currency,
+its amount opens "Editar precio" with one unit-price or service-price field, fixed row currency,
 and Save/Cancel actions. The template amount remains quantity times unit price.
-Quantity, other row fields and provenance stay unchanged. Blank means pending;
+Other row fields and provenance stay unchanged; cables and labour use quantity
+one and a service amount as described below. Manual price inputs allow 15
+characters, including separators, while retaining the money-format and safe-cent
+checks. Overlong edits are rejected without truncating stored data. Blank means pending;
 zero is priced, except an already included row stays included at zero. A positive
 price makes an included row charged. Invalid nonblank input blocks saving in
 this dedicated editor; Cancel discards its draft.
@@ -128,13 +131,25 @@ the unit price labelled ARS or USD, and "Agregar" or "Guardar". "Producto"
 searches by SKU, brand or name and also accepts an independent manual concept.
 Choosing a catalogue result is explicit;
 typing or leaving the field never selects one silently. There is no initial
-catalogue accordion. "Mas opciones" contains quantity, optional detail, quotation
+catalogue accordion. "Mas opciones" contains variable quantity, optional detail, quotation
 category, currency, included-without-charge state, private provenance and removal.
-Its closed summary shows the active quantity, category, currency, detail presence
+Its closed summary shows the active variable quantity, category, currency, detail presence
 and included state. Opening or closing these options preserves the draft.
 The full editor still saves pending or invalid drafts for later completion;
 editing only a description preserves its price state. Cancel discards all modal
 changes. This presentation preserves pricing, source and availability rules.
+
+Speakers/component sets and subwoofers offer an explicit factory-equipment
+checkbox. It shows "Parlantes de fabrica" or "Subwoofer de fabrica" with a priced
+zero and retains the equipment quantity. Product, detail, price and included
+editing are disabled while active. Its currency remains editable; either ARS or
+USD keeps the active zero without changing the original product snapshot.
+Turning it off restores the exact prior fields and conversion anchor, including
+the original price, currency and any pending or invalid draft. The original
+product and source remain private; the PNG uses only the active factory description and
+amount. Supplier availability does not apply to equipment already in the vehicle;
+restoring the sale row restores its normal source checks. Old wording or a zero
+price never enables this mode automatically.
 
 On mobile, the sheet fills the screen width. Tablet and desktop layouts use a
 compact header and readable row sizes; wide screens place totals beside the
@@ -154,7 +169,8 @@ Downloading or sharing a PNG leaves the current quotation open.
 Equipment keeps optional amplifier/DSP, additional amplifier, subwoofer and
 speaker groups, including several independent rows in one group. Installation
 offers four optional direct concepts: "Cables y accesorios", "Ficha bypass
-estereo", "Aros adaptadores 3D" and "Mano de obra de instalacion". Opening an
+estereo", "Aros adaptadores 3D" and "Mano de obra de instalacion". The primary
+harness control uses the checkbox described below. Opening another
 unused concept prefills its name in a temporary draft and focuses its unit
 price. It supplies no included state. Cancel leaves the quotation
 and any prepared image unchanged; unused concepts never enter the PNG.
@@ -168,22 +184,44 @@ amounts and overrides. Existing rows show their current measure and offer
 "Guardar y agregar otra medida" to save edits before opening a separate addition.
 Correcting the current row's size is available in "Mas opciones".
 Legacy generic adapter rows can keep an unspecified size; their size is never
-inferred from price. The other direct concepts start with a blank pending price.
+inferred from price. A new "Ficha bypass estereo" draft starts at the approved
+ARS 70,000 unit price, including when the quotation defaults to USD. The amount
+and quantity remain editable. Existing and recovered harnesses, reclassification
+and imported prices retain their values, currencies and pending states. Cables
+and labour start with a blank pending service price.
+
+The primary harness control places an explicit checkbox beside its editable
+price. A blank quotation shows an unchecked ARS 70,000 suggestion without
+creating or charging a row. Checking includes the harness; unchecking excludes
+it from totals and the PNG while retaining its saved price and other fields.
+Older harness rows without explicit checkbox metadata remain active with their
+original amounts. The checkbox does not mark a harness as included without charge.
 
 The direct editor hides product search and category selection. "Mas opciones"
-retains quantity (outside the adapter main form), detail, currency, included
+retains harness quantity, detail, currency, included
 state and existing-row removal.
 Its price input stays editable when included: zero preserves included, blank
 means pending and a positive amount becomes priced. Opening and saving without
 editing preserves an included row's stored amount. Custom concepts and all rows
 with catalogue provenance retain the full editor and source/stock rules.
 
+Cables and installation labour use one editable service amount and quantity one,
+with no quantity control or quantity summary. The rule follows their quotation
+category IDs, including custom wording and catalogue selections. Adapters,
+harnesses and equipment retain their normal quantities. Older service rows are
+prepared in the working copy with their rounded native line amount preserved;
+their original fields remain in private metadata. Invalid or pending data still
+requires a price review. Reading backups or archived quotations leaves their raw
+values intact; opening or duplicating an archive prepares only the editable copy.
+
 Equipment and adapters keep a named add action below their current items.
 Structured adapter variants share one visual block with a quantity, size and
 sale-presentation breakdown. Every variant retains its own editable row, price,
 currency and provenance. Selecting an existing variant reuses its identity for
 an addition; matching commercial values accumulate only when rounding remains
-unchanged. Direct size selections identify the approved unit preset explicitly;
+unchanged. Rows with currency-conversion references stay separate to preserve their original
+rounded amounts when switching back.
+Direct size selections identify the approved unit preset explicitly;
 custom and catalogue variants also declare their presentation. Units, pairs and
 sets are never converted into one another. Older adapter rows are not inferred
 or merged; their size and presentation can be declared explicitly when desired.
@@ -197,7 +235,7 @@ without being renamed on recovery or save. Equipment, unclassified rows and
 custom wording retain their behavior. Add controls have full-width touch targets
 at least 48 pixels high. PNG output uses the same variant presentation and
 excludes unused concepts and editor controls. Catalogue categories remain independent; selecting a
-concept supplies no price except the explicit approved adapter size presets. See
+concept supplies no price except the approved new harness and adapter presets. See
 [the optional audio row contract](docs/PRODUCTO.md#optional-audio-categories).
 
 The current quotation is recovered across reloads from
@@ -294,6 +332,11 @@ never replaced by a catalogue refresh. A newly blocked row must be reviewed befo
 export. Provisional images include "Disponibilidad a confirmar."
 No Sheets connector or live-stock promise is implemented. See the
 [source preparation and activation boundaries](docs/CATALOG-SOURCE-ROADMAP.md).
+The offline [snapshot review command](docs/INSTALER-SNAPSHOT-PREPARATION.md) reads
+a supplied XLSX, preserves cached values/formulas as private evidence, validates
+decimal stock and compares a local catalogue baseline. It imports no source
+description; ambiguous combined names require review. It has no Google connection,
+schedule or publication path and does not change the published catalogue.
 
 Each row has its own editable ARS or USD currency. New manual rows default to ARS;
 legacy quotations retain their previous currency as the row default. A catalogue
@@ -322,7 +365,28 @@ contributions to both totals and invalidate a prepared image; downloaded files
 remain unchanged.
 Automatic-mode updates continue when local saving is unavailable or paused. See
 [exchange-rate behavior](docs/EXCHANGE-RATE.md).
-Changing a row's currency preserves its entered price.
+Explicitly changing a row's currency converts its entered unit amount with the
+open quotation's saved rate: ARS to USD divides by the rate; USD to ARS multiplies
+by it. Conversion rounds half up to cents with exact integer arithmetic and
+preserves quantity and price state. Blank stays blank and zero stays zero without
+a rate. A positive base that rounded to zero retains its conversion reference and
+needs a valid matching rate to restore that amount. A nonzero amount requires a
+valid saved rate; otherwise the draft stays
+unchanged and shows an error. The currency action does not request a new rate.
+A validated `currencyConversionOrigin` travels with the row through recovery,
+backups and saved copies, preventing rounding drift when switching back at the
+same rate with an untouched amount. Manual price edits, adapter-size choices and
+catalogue selections reset that base. Converted input prefers grouped Argentine
+notation, falls back to ungrouped notation within 15 characters, and rejects an
+amount that still does not fit. It never truncates a number.
+
+The personal-catalogue editor also converts its manual sale price on an explicit
+currency change using the open quotation's rate. Its round-trip anchor lasts only
+for that editor session; it adds no persisted catalogue metadata. Reviewed source
+list prices and historical references retain their original amounts and
+currencies. Catalogue selection still copies an approved amount and its currency
+together. Recovery, opening saved quotations and rate refreshes do not convert
+stored row prices automatically.
 
 Selecting a catalogue product snapshots its private source, stock, price basis,
 original amount and currency into the row. The row editor shows that provenance

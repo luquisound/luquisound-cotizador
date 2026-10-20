@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type Ref } from 'react'
+import { useDeferredValue, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type Ref } from 'react'
 import { parseMoney } from './calculation.ts'
 import {
   applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES, CATALOG_IMPORT_MAX_ITEMS,
@@ -13,6 +13,8 @@ import { canSelectCatalogItem } from './catalog-stock.ts'
 import { CatalogAvailability } from './CatalogAvailability.tsx'
 import { getCatalogSelectionPrice } from './row-provenance.ts'
 import { useCatalogClock } from './useCatalogClock.ts'
+import { getPriceInputLengthError } from './price-input.ts'
+import { changePriceCurrency, type CurrencyConversionOrigin } from './row-currency.ts'
 import './catalog-ui.css'
 
 const PAGE_SIZE = 25
@@ -155,13 +157,35 @@ function CatalogCategorySelect({ label, options, value, onChange }: CatalogCateg
   )
 }
 
+function useNameInput(value: string) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const field = ref.current
+    if (!field) return
+    let width = field.clientWidth
+    const resize = () => {
+      field.style.height = 'auto'
+      field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`
+    }
+    resize()
+    const observer = new ResizeObserver(() => {
+      if (field.clientWidth === width) return
+      width = field.clientWidth
+      resize()
+    })
+    observer.observe(field)
+    return () => observer.disconnect()
+  }, [value])
+  return ref
+}
+
 interface RowProductPickerProps {
   catalog: CatalogItem[]
   section: RowSection
   value: string
   onChange: (value: string) => void
   onChoose: (item: CatalogItem) => boolean
-  inputRef?: Ref<HTMLInputElement>
+  inputRef?: Ref<HTMLTextAreaElement>
 }
 
 export function RowProductPicker({ catalog, section, value, onChange, onChoose, inputRef }: RowProductPickerProps) {
@@ -169,7 +193,7 @@ export function RowProductPicker({ catalog, section, value, onChange, onChoose, 
   const [selectedCategory, setSelectedCategory] = useState('')
   const [showUnavailable, setShowUnavailable] = useState(false)
   const [selectionError, setSelectionError] = useState('')
-  const localInputRef = useRef<HTMLInputElement>(null)
+  const localInputRef = useNameInput(value)
   const interacted = useRef(false)
   const suppressFocus = useRef(false)
   const inputId = useId()
@@ -185,7 +209,7 @@ export function RowProductPicker({ catalog, section, value, onChange, onChoose, 
   const exactBlocked = (resolution.matchKind === 'sku' || resolution.matchKind === 'name')
     && resolution.blockedCandidates.length > 0
   const showResults = resultsOpen && value.trim().length > 0
-  useImperativeHandle(inputRef, () => localInputRef.current!, [])
+  useImperativeHandle(inputRef, () => localInputRef.current!, [localInputRef])
 
   function keepManualText(): void {
     setResultsOpen(false)
@@ -214,7 +238,7 @@ export function RowProductPicker({ catalog, section, value, onChange, onChoose, 
       }
     }}>
       <label className="row-product-field" htmlFor={inputId}>Producto
-        <input ref={localInputRef} id={inputId} type="text" autoFocus autoComplete="off" maxLength={500}
+        <textarea ref={localInputRef} className="product-name-input" id={inputId} rows={2} autoFocus autoComplete="off" maxLength={500}
           value={value} placeholder="Buscar por código o nombre, o escribir manual" aria-describedby={helpId}
           onPointerDown={() => {
             interacted.current = true
@@ -223,7 +247,8 @@ export function RowProductPicker({ catalog, section, value, onChange, onChoose, 
             // Automatic initial focus must not open an unrequested catalogue list.
             if (interacted.current && !suppressFocus.current && value.trim()) setResultsOpen(true)
           }} onKeyDown={(event) => {
-            if (event.key === 'ArrowDown' && value.trim()) {
+            if (event.key === 'ArrowDown' && value.trim()
+              && event.currentTarget.selectionStart === value.length && event.currentTarget.selectionEnd === value.length) {
               event.preventDefault()
               interacted.current = true
               setResultsOpen(true)
@@ -273,6 +298,7 @@ export function RowProductPicker({ catalog, section, value, onChange, onChoose, 
 
 interface CatalogEditorProps {
   catalog: CatalogItem[]
+  exchangeRate?: string
   saveStatus: string
   saveError: string | null
   sharedCatalogStatus: 'loading' | 'ready' | 'unavailable' | 'error'
@@ -285,13 +311,15 @@ interface CatalogEditorProps {
 }
 
 export function CatalogEditor({
-  catalog, saveStatus, saveError, sharedCatalogStatus, onRetrySharedCatalog,
+  catalog, exchangeRate, saveStatus, saveError, sharedCatalogStatus, onRetrySharedCatalog,
   onExportBackup, onImportBackup, onEnableStorage, onSave, onClose,
 }: CatalogEditorProps) {
   const [draft, setDraft] = useState<CatalogItem>(emptyItem)
   const [baseline, setBaseline] = useState(() => editableSignature(draft))
   const [editBaseline, setEditBaseline] = useState(() => captureCatalogEditBaseline(draft, false))
   const [error, setError] = useState('')
+  const [currencyError, setCurrencyError] = useState('')
+  const currencyOrigin = useRef<CurrencyConversionOrigin | undefined>(undefined)
   const [feedback, setFeedback] = useState('')
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -305,10 +333,14 @@ export function CatalogEditor({
   const [preview, setPreview] = useState<CatalogImportPreview | null>(null)
   const [fileName, setFileName] = useState('')
   const [allowUpdates, setAllowUpdates] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useNameInput(draft.concept)
   const readToken = useRef(0)
   const backupController = useRef<AbortController | null>(null)
   const searchId = useId()
+  const priceErrorId = useId()
+  const currencyErrorId = useId()
+  const [rejectedPriceError, setRejectedPriceError] = useState<string | null>(null)
+  const priceLengthError = rejectedPriceError ?? getPriceInputLengthError(draft.unitPrice)
   const deferredQuery = useDeferredValue(query)
   const now = useCatalogClock(catalog)
   const categories = useMemo(() => getCatalogCategories(catalog), [catalog])
@@ -339,6 +371,9 @@ export function CatalogEditor({
     setBaseline(editableSignature(next))
     setEditBaseline(captureCatalogEditBaseline(next, catalog.some((entry) => entry.id === next.id)))
     setError('')
+    setCurrencyError('')
+    currencyOrigin.current = undefined
+    setRejectedPriceError(null)
   }
 
   function resetMissingCategory(nextCatalog: CatalogItem[]): void {
@@ -474,6 +509,7 @@ export function CatalogEditor({
 
   function saveItem(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault()
+    if (getPriceInputLengthError(draft.unitPrice)) return
     let next: CatalogItem[]
     try {
       next = buildCatalogEdit(catalog, draft, editBaseline)
@@ -506,8 +542,25 @@ export function CatalogEditor({
   }
 
   function changeCurrency(value: Currency): void {
-    if (value !== draft.currency && draft.unitPrice.trim() && !window.confirm('Cambiar la moneda no convierte el precio de venta. El mismo importe quedará expresado en la nueva moneda. ¿Continuar?')) return
-    setDraft({ ...draft, currency: value })
+    if (value === draft.currency) return
+    try {
+      const converted = changePriceCurrency({ currency: draft.currency, unitPrice: draft.unitPrice, conversionOrigin: currencyOrigin.current }, value, exchangeRate)
+      currencyOrigin.current = converted.conversionOrigin
+      setDraft({ ...draft, currency: converted.currency, unitPrice: converted.unitPrice })
+      setCurrencyError('')
+      setRejectedPriceError(null)
+    } catch (cause: unknown) {
+      setCurrencyError(cause instanceof Error ? cause.message : 'No se pudo convertir el precio. Revisá el dólar del presupuesto.')
+    }
+  }
+  function changePrice(unitPrice: string): void {
+    const lengthError = getPriceInputLengthError(unitPrice)
+    setRejectedPriceError(lengthError)
+    if (!lengthError) {
+      currencyOrigin.current = undefined
+      setCurrencyError('')
+      setDraft({ ...draft, unitPrice })
+    }
   }
 
   const resultStart = visiblePage * PAGE_SIZE
@@ -637,13 +690,15 @@ export function CatalogEditor({
         </section>
         <form className="form-stack catalog-edit-form" onSubmit={saveItem}>
           <h3>{editingExisting ? 'Editar opción' : 'Nueva opción'}</h3>
-          <label>Concepto<input ref={inputRef} value={draft.concept} maxLength={500} onChange={(event) => setDraft({ ...draft, concept: event.target.value })} /></label>
+          <label>Concepto<textarea ref={inputRef} className="product-name-input" rows={2} value={draft.concept} maxLength={500} onChange={(event) => setDraft({ ...draft, concept: event.target.value })} /></label>
           <label>Detalle para el cliente <span>(opcional)</span><textarea rows={2} value={draft.detail} maxLength={2000} onChange={(event) => setDraft({ ...draft, detail: event.target.value })} /></label>
           <div className="form-grid">
             <label>Sección sugerida<select value={draft.section} onChange={(event) => setDraft({ ...draft, section: event.target.value as RowSection })}><option value="equipment">Equipamiento</option><option value="extras">Instalación y accesorios</option></select></label>
-            <label>Moneda del precio<select value={draft.currency} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">ARS</option><option value="USD">USD</option></select></label>
+            <label>Moneda del precio<select value={draft.currency} aria-invalid={Boolean(currencyError)} aria-describedby={currencyError ? currencyErrorId : undefined} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">ARS</option><option value="USD">USD</option></select></label>
           </div>
-          <label>Precio manual para próximas selecciones · {draft.currency} <span>(opcional)</span><input inputMode="decimal" placeholder={draft.listPrice ? 'Usar lista aprobada' : 'Precio pendiente'} value={draft.unitPrice} maxLength={64} onChange={(event) => setDraft({ ...draft, unitPrice: event.target.value })} /></label>
+          {currencyError && <p id={currencyErrorId} className="field-errors" role="alert">{currencyError}</p>}
+          <label>Precio manual para próximas selecciones · {draft.currency} <span>(opcional)</span><input className="compact-price-input" inputMode="decimal" placeholder={draft.listPrice ? 'Usar lista aprobada' : 'Precio pendiente'} value={draft.unitPrice} aria-invalid={Boolean(priceLengthError)} aria-describedby={priceLengthError ? priceErrorId : undefined} onChange={(event) => changePrice(event.target.value)} /></label>
+          {priceLengthError && <p id={priceErrorId} className="field-errors" role="alert">{priceLengthError}</p>}
           <p className="field-help">Este precio se guarda en el catálogo para futuras selecciones. Coma para decimales; cero es válido. Cambiarlo no modifica filas ya cargadas. Las referencias sin aprobar requieren confirmación.</p>
           {draft.listPrice && <div className="notice pending">
             <p>Lista {draft.listPrice.provisional ? 'histórica provisional' : 'aprobada'}: {draft.listPrice.currency} {draft.listPrice.amount.replace('.', ',')}, PVP antes del 20% de descuento. Si dejás vacío el precio manual, se usará esta lista y su moneda al elegir el producto.</p>
@@ -665,11 +720,11 @@ export function CatalogEditor({
               <p className="field-help">Identificación y procedencia son datos privados del catálogo. No se agregan al detalle para el cliente.</p>
             </div>
           </details>
-          <HistoricalReferences key={draft.id} item={draft} currency={draft.currency} onUse={(unitPrice) => setDraft({ ...draft, unitPrice })} />
+          <HistoricalReferences key={draft.id} item={draft} currency={draft.currency} onUse={changePrice} />
           {error && <p className="field-errors" role="alert">{error}</p>}
           <div className="dialog-actions">
             <button type="button" className="button secondary" onClick={() => { if (discardDraftChanges()) resetDraft() }}>Nueva opción</button>
-            <button type="submit" className="button primary">Guardar opción</button>
+            <button type="submit" className="button primary" disabled={Boolean(getPriceInputLengthError(draft.unitPrice))}>Guardar opción</button>
           </div>
         </form>
         </fieldset>

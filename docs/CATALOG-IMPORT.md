@@ -155,7 +155,8 @@ values never refresh from a catalogue price change.
 ## Optional stock observations
 
 An item may include `stock` without changing schema version 1. It contains
-`quantity` (a safe integer or explicit `null`), observation timestamps and its own
+`quantity` (a finite number with absolute value at most `Number.MAX_SAFE_INTEGER`,
+including decimals, or explicit `null`), observation timestamps and its own
 required `source` using the same provenance schema. Negative values are preserved
 as a source anomaly and cannot qualify for selection. For current observations,
 `checkedAt` and `validUntil` are canonical UTC millisecond timestamps, with a

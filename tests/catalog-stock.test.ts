@@ -15,18 +15,31 @@ function snapshot(quantity: number | null): CatalogStockSnapshot {
 }
 
 test('stock keeps an explicit zero distinct from unknown without assigning a default validity period', () => {
-  for (const quantity of [null, 0, 1, Number.MAX_SAFE_INTEGER]) {
+  for (const quantity of [null, -Number.MAX_SAFE_INTEGER, -2.75, 0, 0.125, 1, 27.375, Number.MAX_SAFE_INTEGER]) {
     assert.deepEqual(parseCatalogStockFields(quantity, checkedAt, validUntil), { quantity, checkedAt, validUntil })
   }
   assert.equal(parseCatalogStockFields(0, checkedAt, undefined), null)
   assert.equal(parseCatalogStockFields(undefined, checkedAt, validUntil), null)
 })
 
-test('stock rejects fractional, coerced and unsafe quantities while preserving signed observations', () => {
+test('stock rejects non-finite, coerced and unsafe quantities while preserving signed observations', () => {
   assert.equal(parseCatalogStockFields(-1, checkedAt, validUntil)?.quantity, -1)
-  for (const quantity of [0.5, '0', '', false, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+  for (const quantity of ['0', '0.5', '', false, Number.NaN, Infinity, -Infinity,
+    Number.MAX_SAFE_INTEGER + 1, -Number.MAX_SAFE_INTEGER - 1]) {
     assert.equal(parseCatalogStockFields(quantity, checkedAt, validUntil), null)
   }
+})
+
+test('decimal stock keeps its sign and value without truncation or changing freshness', () => {
+  for (const quantity of [-2.75, 0.125, 27.375]) {
+    const stock = snapshot(quantity)
+    const before = structuredClone(stock)
+    assert.equal(classifyCatalogStock(stock, now), quantity < 0 ? 'negative' : 'available')
+    assert.equal(classifyCatalogStock(stock, Date.parse(validUntil)), 'stale')
+    assert.deepEqual(stock, before)
+  }
+  assert.equal(classifyCatalogStock(snapshot(0.125), now, 1), 'low')
+  assert.equal(classifyCatalogStock(snapshot(1.125), now, 1), 'available')
 })
 
 test('stock requires canonical UTC instants and an explicit positive validity interval', () => {

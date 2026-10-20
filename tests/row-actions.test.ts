@@ -4,8 +4,15 @@ import { AUDIO_CATEGORIES, hasRepeatCategoryAction, isSingleRowCategory } from '
 import { calculateQuotation } from '../src/features/quotation/calculation.ts'
 import { createQuotation, createRow } from '../src/features/quotation/model.ts'
 import type { Quotation, QuotationRow } from '../src/features/quotation/model.ts'
-import { saveQuotationRow } from '../src/features/quotation/row-actions.ts'
+import { createQuotationRowDraft, saveQuotationRow } from '../src/features/quotation/row-actions.ts'
 import type { QuotationRowProvenance } from '../src/features/quotation/row-provenance.ts'
+import { prepareFixedServiceRow } from '../src/features/quotation/fixed-services.ts'
+import { parseWorkspace, serializeWorkspace } from '../src/features/quotation/persistence.ts'
+import {
+  createQuotationLibrary, openLibraryQuotation, parseQuotationLibraryBackup, saveQuotationToLibrary, serializeQuotationLibrary,
+} from '../src/features/quotation/quotation-library.ts'
+import { updateRowUnitPrice } from '../src/features/quotation/row-price.ts'
+import { changeRowCurrency } from '../src/features/quotation/row-currency.ts'
 
 function adapter(id: string, fields: Partial<QuotationRow> = {}): QuotationRow {
   return {
@@ -18,6 +25,23 @@ function adapter(id: string, fields: Partial<QuotationRow> = {}): QuotationRow {
 function quotation(rows: QuotationRow[]): Quotation {
   return { ...createQuotation(), rows, exchangeRate: '1000' }
 }
+
+test('converted adapters remain separate to preserve each original rounded amount on currency restoration', () => {
+  for (const [firstPrice, secondPrice, quantity] of [
+    ['0,01', '0,02', '1'], ['0,01', '0,01', '0,5'],
+  ] as const) {
+    const originals = [adapter('first', { unitPrice: firstPrice, quantity }), adapter('second', { unitPrice: secondPrice, quantity })]
+    const converted = originals.map((row) => changeRowCurrency(row, 'USD', '1000'))
+    assert.equal(converted.every((row) => row.unitPrice === '0'), true)
+    const result = saveQuotationRow(quotation([converted[0]!]), converted[1]!, 'new')
+    assert.equal(result.ok, true)
+    if (!result.ok) continue
+    assert.equal(result.merged, false)
+    assert.equal(result.rows.length, 2)
+    const restored = result.rows.map((row) => changeRowCurrency(row, 'ARS', '1000'))
+    assert.deepEqual(calculateQuotation(quotation(restored)).nativeTotals, calculateQuotation(quotation(originals)).nativeTotals)
+  }
+})
 
 function provenance(): QuotationRowProvenance {
   const source = { document: 'Synthetic snapshot', date: null, kind: 'snapshot' as const, version: 'synthetic-v1', checksum: 'a'.repeat(64) }
@@ -36,6 +60,79 @@ test('category policies keep equipment and adapters repeatable and singleton rul
   ])
   assert.deepEqual(AUDIO_CATEGORIES.filter((category) => isSingleRowCategory(category.id)).map((category) => category.id), ['cables', 'labor'])
   assert.equal(isSingleRowCategory(undefined), false)
+})
+
+test('only a new harness draft receives the editable ARS preset even from a USD quotation', () => {
+  const current = quotation([])
+  current.currency = 'USD'
+  const before = structuredClone(current)
+  const draft = createQuotationRowDraft('extras', current.currency, 'harness')
+  assert.equal(draft.audioCategory, 'harness')
+  assert.equal(draft.quantity, '1')
+  assert.equal(draft.unitPrice, '70.000')
+  assert.equal(draft.currency, 'ARS')
+  assert.equal(draft.priceState, 'priced')
+  assert.deepEqual(current, before)
+  for (const category of ['cables', 'labor', 'adapters'] as const) {
+    const other = createQuotationRowDraft('extras', 'USD', category)
+    assert.equal(other.unitPrice, '')
+    assert.equal(other.currency, 'USD')
+    assert.equal(other.priceState, 'pending')
+  }
+  const edited = { ...updateRowUnitPrice(draft, '81.250,50'), quantity: '2' }
+  const applied = saveQuotationRow(current, edited, 'new')
+  assert.equal(applied.ok, true)
+  if (!applied.ok) return
+  const saved = { ...current, rows: applied.rows }
+  assert.equal(saved.rows[0]!.unitPrice, '81.250,50')
+  assert.equal(saved.rows[0]!.quantity, '2')
+  const text = serializeWorkspace({ version: 1, activeQuotationId: saved.id, quotations: [saved], catalog: [] })
+  assert.deepEqual(parseWorkspace(text).quotations[0], saved)
+  const library = saveQuotationToLibrary(createQuotationLibrary(), saved, 'Synthetic edited harness')
+  const libraryText = serializeQuotationLibrary(library)
+  const restored = parseQuotationLibraryBackup(libraryText)
+  for (const duplicate of [false, true]) {
+    const opened = openLibraryQuotation(restored.entries[0]!, { duplicate })
+    assert.equal(opened.rows[0]!.unitPrice, '81.250,50')
+    assert.equal(opened.rows[0]!.quantity, '2')
+    assert.equal(opened.rows[0]!.currency, 'ARS')
+    assert.equal(opened.exchangeRateMode, 'frozen')
+  }
+  assert.equal(serializeQuotationLibrary(restored), libraryText)
+})
+
+test('reading, reopening and reclassifying old harnesses never apply the new-row preset', () => {
+  for (const fields of [
+    { unitPrice: '', priceState: 'pending' as const },
+    { unitPrice: '0', priceState: 'priced' as const },
+    { unitPrice: '25,75', priceState: 'priced' as const },
+    { unitPrice: '99', priceState: 'included' as const },
+  ]) {
+    const row = {
+      ...createRow('extras', 'USD'), audioCategory: 'harness' as const,
+      concept: 'Synthetic legacy harness', quantity: '3', ...fields,
+    }
+    const original = quotation([row])
+    const text = serializeWorkspace({ version: 1, activeQuotationId: original.id, quotations: [original], catalog: [] })
+    assert.deepEqual(parseWorkspace(text).quotations[0], original)
+    const library = saveQuotationToLibrary(createQuotationLibrary(), original, 'Synthetic historical harness')
+    for (const duplicate of [false, true]) {
+      const opened = openLibraryQuotation(library.entries[0]!, { duplicate })
+      assert.equal(opened.rows[0]!.unitPrice, row.unitPrice)
+      assert.equal(opened.rows[0]!.priceState, row.priceState)
+      assert.equal(opened.rows[0]!.currency, 'USD')
+      assert.equal(opened.rows[0]!.quantity, '3')
+    }
+  }
+  const manual = { ...createRow('extras', 'USD'), concept: 'Synthetic custom connector', quantity: '2,5' }
+  const result = saveQuotationRow(quotation([manual]), { ...manual, audioCategory: 'harness' }, 'existing')
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.rows[0]!.unitPrice, '')
+    assert.equal(result.rows[0]!.currency, 'USD')
+    assert.equal(result.rows[0]!.priceState, 'pending')
+    assert.equal(result.rows[0]!.quantity, '2,5')
+  }
 })
 
 test('new matching adapters accumulate into the surviving row without mutating either input', () => {
@@ -294,6 +391,50 @@ test('saving an existing classified singleton unchanged preserves legacy duplica
     const result = saveQuotationRow(current, existing, 'existing')
     assert.equal(result.ok, true)
     if (result.ok) assert.deepEqual(result.rows, current.rows)
+  }
+})
+
+test('service saves reject noncanonical quantities without coercing, repricing or changing existing work', () => {
+  for (const audioCategory of ['cables', 'labor'] as const) {
+    const existing = { ...createRow('extras'), id: 'fixed-service', audioCategory, concept: 'Synthetic service', unitPrice: '100', priceState: 'priced' as const }
+    const current = quotation([existing])
+    const before = structuredClone(current)
+    for (const quantity of ['2', '1,0', ' 1 ', '', 'invalid quantity']) {
+      const incoming = { ...existing, quantity }
+      const snapshot = structuredClone(incoming)
+      const result = saveQuotationRow(current, incoming, 'existing')
+      assert.equal(result.ok, false)
+      if (!result.ok) assert.match(result.error, /cantidad 1/)
+      assert.deepEqual(incoming, snapshot)
+      assert.deepEqual(current, before)
+      const added = saveQuotationRow(quotation([]), { ...incoming, id: 'new-fixed-service' }, 'new')
+      assert.equal(added.ok, false)
+    }
+    const legacy = { ...existing, quantity: '2' }
+    const prepared = prepareFixedServiceRow(legacy)
+    const result = saveQuotationRow(quotation([legacy]), prepared, 'existing')
+    assert.equal(result.ok, true)
+    if (result.ok) {
+      assert.equal(result.rows[0]!.quantity, '1')
+      assert.equal(result.rows[0]!.unitPrice, '200,00')
+      assert.equal(result.rows[0]!.fixedServiceOrigin!.quantity, '2')
+      assert.equal(calculateQuotation(quotation(result.rows)).nativeTotals.ARS, 20000)
+    }
+    assert.equal(legacy.quantity, '2')
+    assert.equal(legacy.unitPrice, '100')
+  }
+})
+
+test('fixed service save guards leave quantities for harnesses, adapters and equipment editable', () => {
+  for (const fields of [
+    { section: 'extras' as const, audioCategory: 'harness' as const },
+    { section: 'extras' as const, audioCategory: 'adapters' as const },
+    { section: 'equipment' as const, audioCategory: 'speakers' as const },
+  ]) {
+    const incoming = { ...createRow(fields.section), ...fields, concept: 'Synthetic independent work', quantity: '2,5' }
+    const result = saveQuotationRow(quotation([]), incoming, 'new')
+    assert.equal(result.ok, true)
+    if (result.ok) assert.equal(result.rows[0]!.quantity, '2,5')
   }
 })
 
