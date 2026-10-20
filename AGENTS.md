@@ -71,7 +71,16 @@ inventory management, invoicing, and a general backend remain outside this stage
   Direct editing requires the matching category, an exact recognized name or
   approved adapter variant, and no provenance; custom and catalogue rows retain
   the full editor and source guards.
-  Installation has no category headings or per-category add-another action;
+  Equipment and adapters retain a named add action below their current items.
+  Cables and labour accept one concept for new entries or reclassification,
+  preserving all existing duplicate rows. Harness suggestions are offered once,
+  without blocking another manually classified harness. Installation omits
+  standalone category headings; declared adapter variants share a product
+  heading and retain independently editable rows, amounts and provenance.
+  Accumulate new adapters only with an explicit matching identity, size,
+  presentation and commercial snapshot, preserving native rounded amounts.
+  Never infer metadata or merge recovered rows. Direct presets use units;
+  custom and catalogue variants can explicitly use units, pairs or sets.
   "Otro concepto" keeps independent manual/catalogue entry available.
 - Start with narrow-screen layouts and touch controls. Use semantic HTML,
   accessible names, visible keyboard focus, and sufficient contrast.

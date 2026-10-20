@@ -41,6 +41,112 @@ test('all audio categories roundtrip with identities, raw draft fields and mixed
   assert.equal(duplicated.rows.some((row) => workspace.quotations[0].rows.some((original) => row.id === original.id)), false)
 })
 
+test('adapter variants roundtrip independently with quantities, prices and product identities intact', () => {
+  const workspace = createFixture()
+  workspace.quotations[0].rows = ['6,5', '8'].map((size, index) => ({
+    ...workspace.quotations[0].rows[index]!, id: `adapter-${index}`, section: 'extras', audioCategory: 'adapters',
+    adapterVariant: { productKey: 'synthetic-ring', size, presentation: index === 0 ? 'pair' : 'unit' },
+    concept: 'Synthetic adapter', quantity: index === 0 ? '2' : '0,5', currency: index === 0 ? 'ARS' : 'USD',
+  }))
+  const snapshot = structuredClone(workspace)
+  const restored = parseWorkspace(serializeWorkspace(workspace))
+  assert.deepEqual(restored, snapshot)
+  assert.deepEqual(workspace, snapshot)
+  assert.notEqual(restored.quotations[0].rows[0]?.adapterVariant, workspace.quotations[0].rows[0]?.adapterVariant)
+  const duplicate = duplicateQuotation(workspace.quotations[0])
+  assert.deepEqual(duplicate.rows[0]?.adapterVariant, workspace.quotations[0].rows[0]?.adapterVariant)
+  assert.notEqual(duplicate.rows[0]?.adapterVariant, workspace.quotations[0].rows[0]?.adapterVariant)
+  duplicate.rows[0]!.adapterVariant!.size = '10'
+  assert.equal(workspace.quotations[0].rows[0]?.adapterVariant?.size, '6,5')
+})
+
+test('adapter identities coexist with frozen rates and private catalogue provenance through recovery and duplication', () => {
+  const workspace = createFixture()
+  const source = { document: 'Synthetic snapshot', date: null, kind: 'snapshot' as const, version: 'synthetic-v1', checksum: 'a'.repeat(64) }
+  workspace.quotations[0]!.exchangeRate = '1000'
+  workspace.quotations[0]!.exchangeRateMode = 'frozen'
+  workspace.quotations[0]!.rows = [{
+    ...workspace.quotations[0]!.rows[0]!, section: 'extras', audioCategory: 'adapters',
+    adapterVariant: { productKey: 'synthetic-ring', size: '6,5', presentation: 'pair' },
+    provenance: {
+      catalogItemId: 'synthetic-ring', source, originalUnitPrice: '10,50', originalCurrency: 'ARS', priceBasis: 'list',
+      listPrice: { amount: '10.50', currency: 'ARS', basis: 'retail-list-before-discount', provisional: true, source },
+      stock: { quantity: 3, checkedAt: null, validUntil: null, observation: 'historical', source },
+      availabilityPolicy: 'historical-positive',
+    },
+  }]
+  const restored = parseWorkspace(serializeWorkspace(workspace))
+  assert.deepEqual(restored, workspace)
+  const copy = duplicateQuotation(restored.quotations[0]!)
+  assert.equal(copy.exchangeRateMode, 'frozen')
+  assert.deepEqual(copy.rows[0]!.adapterVariant, workspace.quotations[0]!.rows[0]!.adapterVariant)
+  assert.deepEqual(copy.rows[0]!.provenance, workspace.quotations[0]!.rows[0]!.provenance)
+  copy.rows[0]!.adapterVariant!.size = '8'
+  copy.rows[0]!.provenance!.stock!.quantity = 0
+  assert.equal(restored.quotations[0]!.rows[0]!.adapterVariant!.size, '6,5')
+  assert.equal(restored.quotations[0]!.rows[0]!.provenance!.stock!.quantity, 3)
+})
+
+test('invalid adapter metadata is discarded without losing any required row data', () => {
+  const workspace = createFixture()
+  const row: QuotationRow = { ...workspace.quotations[0].rows[1]!, audioCategory: 'adapters' }
+  for (const adapterVariant of [
+    undefined, null, [], {}, '6,5',
+    { productKey: 'synthetic', size: '6,5', presentation: 'invalid' },
+    { productKey: 'with spaces', size: '6,5', presentation: 'unit' },
+    { productKey: 'synthetic', size: '0', presentation: 'unit' },
+  ]) {
+    const input = { ...workspace, quotations: [{ ...workspace.quotations[0], rows: [{ ...row, adapterVariant }] }] }
+    const restored = parseWorkspace(JSON.stringify(input))
+    assert.deepEqual(restored.quotations[0].rows, [row])
+    assert.equal(Object.hasOwn(restored.quotations[0].rows[0]!, 'adapterVariant'), false)
+  }
+})
+
+test('adapter metadata is normalized and discarded when its row classification is incompatible', () => {
+  const workspace = createFixture()
+  const adapterVariant = { productKey: 'synthetic', size: '06.500', presentation: 'pair', unknown: 'discard' }
+  const classified = { ...workspace.quotations[0].rows[1]!, audioCategory: 'adapters' }
+  const restored = parseWorkspace(JSON.stringify({
+    ...workspace, quotations: [{ ...workspace.quotations[0], rows: [{ ...classified, adapterVariant }] }],
+  }))
+  assert.deepEqual(restored.quotations[0].rows[0]?.adapterVariant, { productKey: 'synthetic', size: '6,5', presentation: 'pair' })
+  for (const row of [
+    workspace.quotations[0].rows[0]!,
+    { ...classified, audioCategory: 'harness' },
+    { ...classified, audioCategory: undefined },
+  ]) {
+    const input = { ...workspace, quotations: [{ ...workspace.quotations[0], rows: [{ ...row, adapterVariant }] }] }
+    const retained = parseWorkspace(JSON.stringify(input)).quotations[0].rows[0]!
+    assert.equal(Object.hasOwn(retained, 'adapterVariant'), false)
+    assert.equal(retained.concept, row.concept)
+    assert.equal(retained.quantity, row.quantity)
+  }
+})
+
+test('legacy adapter descriptions never infer size, presentation or product identity', () => {
+  const workspace = createFixture()
+  workspace.quotations[0].rows[1] = {
+    ...workspace.quotations[0].rows[1]!, audioCategory: 'adapters', concept: 'Aros adaptadores 3D 6,5 pulgadas',
+    detail: 'Synthetic pair', quantity: '2',
+  }
+  const restored = parseWorkspace(serializeWorkspace(workspace))
+  assert.deepEqual(restored, workspace)
+  assert.equal(Object.hasOwn(restored.quotations[0].rows[1]!, 'adapterVariant'), false)
+})
+
+test('adapter metadata alone leaves quotation content empty', () => {
+  const quotation = createQuotation()
+  quotation.rows[1] = {
+    ...quotation.rows[1]!, audioCategory: 'adapters',
+    adapterVariant: { productKey: 'synthetic', size: '6,5', presentation: 'unit' },
+  }
+  assert.equal(hasQuotationContent(quotation), false)
+  assert.deepEqual(prepareWorkspaceForStorage({
+    version: 1, activeQuotationId: quotation.id, quotations: [quotation], catalog: [],
+  }, new Set()), { version: 1, activeQuotationId: null, quotations: [], catalog: [] })
+})
+
 test('unknown, malformed or incompatible audio categories discard only optional classification', () => {
   const workspace = createFixture()
   const first = workspace.quotations[0].rows[0]!

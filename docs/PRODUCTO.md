@@ -150,10 +150,14 @@ Recovery and save never rename old concepts. Custom wording, unclassified manual
 catalogue provenance retain the full editor; source prices, original amounts
 and availability policies are preserved. No classification is inferred from text.
 
-Installation renders all existing rows without category headings or per-category
-add-another controls, including multiple legacy rows in one category. It never
-merges or drops them. "Otro concepto" remains a secondary repeatable action for
-manual or catalogue entry. Equipment keeps its group controls. Add controls fill
+Equipment and adapters retain their named add action below current entries.
+Cables and labour accept one concept for new entries or reclassification; an
+occupied category directs the user to edit it. Existing repeated concepts in
+those categories remain editable and are never merged or removed automatically.
+The harness suggestion disappears when occupied, but another harness can still
+be classified manually. Installation omits standalone category headings, while
+declared adapter variants use a common product heading. "Otro concepto" remains
+a secondary repeatable action for manual or catalogue entry. Add controls fill
 their own row width with a minimum 48-pixel height without covering neighbouring
 rows or price controls. Unused suggestions create no quotation rows, prices,
 totals, image content or recoverable content; legacy blank rows remain inert.
@@ -173,12 +177,56 @@ or a catalogue selection. Unknown values or categories incompatible with the
 row's section are discarded without losing the row or its other fields.
 Category metadata alone is not meaningful quotation content.
 
+### Adapter variants
+
+Adapter rows can optionally declare an explicit product identity, a positive
+diameter in inches with up to three decimal places, and a sale presentation
+(unit, pair or set). The quantity and unit price refer to that presentation;
+the app never converts a pair or set into individual physical units. Size accepts
+comma or dot decimal input and is stored canonically with a comma. A completed
+variant may use the generic "Aros adaptadores 3D" concept when no description was
+entered. Merely opening or cancelling its editor still creates nothing.
+
+Selecting an existing adapter variant for a new addition copies its identity
+and editable commercial snapshot, while the entered quantity is the amount to
+add. Explicit direct size selection supplies the stable approved preset identity
+and a unit presentation, preserving the editable amount rules above. Direct
+variant reuse is restricted to direct rows without catalogue provenance; other
+variants remain available in the full editor. A catalogue selection copies the product ID as a quotation-local reference;
+the size and presentation must still be declared explicitly. Future catalogue
+updates never change these quotation values. Manual variants receive their own
+identity; matching words alone do not identify the same product.
+
+Only a new adapter addition can accumulate into a unique existing variant with
+the same identity, size, presentation, concept, detail, currency, price state,
+unit price and provenance snapshot. Pending or invalid amounts do not accumulate. Quantities are
+added using exact integer thousandths, retaining the existing row ID. The
+native rounded amount must equal the sum of the two original line amounts;
+otherwise both rows remain separate. Overflow rejects the change. The 1000-row
+limit applies to the resulting rows, allowing an exact accumulation at the
+limit. Editing, recovering or reloading rows never triggers accumulation.
+
+Declared variants share a visual "Aros adaptadores 3D" block with their size,
+quantity, presentation and meaningful descriptions. Every source row remains
+independently editable and removable. ARS and USD summaries stay separate;
+pending, explicit zero and included states remain distinct. Summary amounts
+sum already-rounded source line amounts without calculating a common price or
+converting currencies. In the PNG the same breakdown is plain text, without
+editing controls. Text wraps and increases the image height rather than clipping.
+
+Optional variant metadata is validated and recovered alongside its row. Missing,
+invalid or incompatible metadata is omitted without losing the original row.
+Legacy adapter descriptions are never parsed to guess their size or identity;
+they remain independent until explicitly classified in the editor. No group
+record or new storage key is introduced, and catalogue backups remain separate.
+
 The preview and PNG use the table's category order within each section, keeping
 the existing relative order of items in each category. Free-form and legacy
 unclassified concepts appear after categorized items, preserving their own
 relative order. Validation issue numbers refer to that order of nonempty
-concepts. PNG output contains only entered concepts under the existing two
-section headings; category labels, empty suggestions, and controls are omitted.
+concepts. PNG output contains entered concepts and declared adapter groups under
+the existing two section headings; unused category labels, empty suggestions,
+and controls are omitted.
 
 Quotation categories are independent of imported catalogue categories. Product
 selection preserves the chosen quotation category and follows the existing

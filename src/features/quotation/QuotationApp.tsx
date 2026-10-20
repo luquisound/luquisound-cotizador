@@ -1,7 +1,8 @@
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
 import { calculateQuotation, isEmptyRow } from './calculation'
 import { createQuotation, createRow, hasQuotationContent, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
-import { getDirectExtraConcept, isDirectExtraRow, type AudioCategory } from './audio-categories'
+import { getDirectExtraConcept, isDirectExtraRow, isSingleRowCategory, type AudioCategory } from './audio-categories'
+import { saveQuotationRow } from './row-actions'
 import { serializeWorkspace, type WorkspaceSaveResult } from './persistence'
 import {
   CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
@@ -383,14 +384,18 @@ export default function QuotationApp() {
     rowEditorTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
   }
 
-  function closeRowEditor(rowId?: string) {
+  function closeRowEditor(rowId?: string, audioCategory = editingRow?.audioCategory) {
     setRowEditing(null)
     window.requestAnimationFrame(() => {
       const rowButton = rowId
         ? document.querySelector<HTMLElement>(`[data-row-id="${rowId}"]`)
         : null
       const previous = rowEditorTrigger.current
-      const target = rowButton ?? (previous?.isConnected ? previous : document.querySelector<HTMLElement>('.quotation-add-row'))
+      const categoryTarget = audioCategory
+        ? document.querySelector<HTMLElement>(`button[data-audio-category="${audioCategory}"]`)
+          ?? document.querySelector<HTMLElement>(`[data-audio-category="${audioCategory}"] [data-row-id]`)
+        : null
+      const target = rowButton ?? (previous?.isConnected ? previous : categoryTarget ?? document.querySelector<HTMLElement>('.quotation-add-row'))
       target?.focus()
     })
   }
@@ -425,9 +430,14 @@ export default function QuotationApp() {
   }
 
   function addRow(section: RowSection, audioCategory?: AudioCategory) {
-    if (quotationRef.current.rows.length >= 1000) { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
+    const current = quotationRef.current
+    const existing = isSingleRowCategory(audioCategory)
+      ? current.rows.find((row) => row.section === section && row.audioCategory === audioCategory && !isEmptyRow(row))
+      : undefined
+    if (existing) { editRow(existing.id); return }
+    if (current.rows.length >= 1000 && audioCategory !== 'adapters') { setMessage('Llegaste al máximo de 1000 conceptos en este presupuesto.'); return }
     rememberRowTrigger()
-    const row = createRow(section, quotationRef.current.currency)
+    const row = createRow(section, current.currency)
     const directConcept = section === 'extras' ? getDirectExtraConcept(audioCategory) : undefined
     setRowEditing({ kind: 'new', row: { ...row, ...(audioCategory ? { audioCategory } : {}), ...(directConcept ? { concept: directConcept } : {}) } })
   }
@@ -436,20 +446,22 @@ export default function QuotationApp() {
     if (!rowEditing) return
     if (rowEditing.kind === 'new' && isEmptyRow(row)) { closeRowEditor(); return }
     const current = quotationRef.current
-    if (rowEditing.kind === 'new' && current.rows.length >= 1000) {
-      window.alert('Llegaste al máximo de 1000 conceptos en este presupuesto.')
-      return
+    const result = saveQuotationRow(current, row, rowEditing.kind)
+    if (!result.ok) { window.alert(result.error); return }
+    if (updateQuotation({ ...current, rows: result.rows })) {
+      closeRowEditor(result.rowId, row.audioCategory)
+      if (result.merged) setMessage('Se sumó la cantidad a la variante de aros existente.')
     }
-    const rows = rowEditing.kind === 'new'
-      ? [...current.rows, row]
-      : current.rows.map((entry) => entry.id === row.id ? row : entry)
-    if (updateQuotation({ ...current, rows })) closeRowEditor(row.id)
   }
 
   function removeRow() {
     if (rowEditing?.kind !== 'existing') return
     const current = quotationRef.current
-    if (updateQuotation({ ...current, rows: current.rows.filter((row) => row.id !== rowEditing.rowId) })) closeRowEditor()
+    const removed = current.rows.find((row) => row.id === rowEditing.rowId)
+    const categoryRows = current.rows.filter((row) => row.section === removed?.section && row.audioCategory === removed?.audioCategory && !isEmptyRow(row))
+    const index = categoryRows.findIndex((row) => row.id === rowEditing.rowId)
+    const neighbor = categoryRows[index + 1] ?? categoryRows[index - 1]
+    if (updateQuotation({ ...current, rows: current.rows.filter((row) => row.id !== rowEditing.rowId) })) closeRowEditor(neighbor?.id, removed?.audioCategory)
   }
 
   function exportCatalogBackup() {
@@ -607,7 +619,7 @@ export default function QuotationApp() {
       {dialog === 'catalog' && <CatalogEditor catalog={catalog} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onRetrySharedCatalog={retrySharedCatalog} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
       {dialog === 'bulk' && <BulkEntryDialog catalog={catalog} canSelect={canSelectCatalogItem} defaultCurrency={quotation.currency} existingRowCount={quotation.rows.length} onApply={addBulkRows} onClose={closeBulk} />}
       {dialog === 'library' && <QuotationLibraryDialog quotation={quotation} library={savedQuotes.library} storageError={savedQuotes.error} savingPaused={savedQuotes.paused} onSaveCurrent={saveNamedQuotation} onOpen={(id) => openNamedQuotation(id)} onDuplicate={(id) => openNamedQuotation(id, true)} onExport={downloadLibraryBackup} onImport={savedQuotes.importLibrary} onResumeSaving={savedQuotes.resumeSaving} onClose={closeLibrary} />}
-      {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} directConcept={isDirectExtraRow(editingRow) ? editingRow.concept : undefined} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} />}
+      {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} directConcept={isDirectExtraRow(editingRow) ? editingRow.concept : undefined} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} onEditExisting={(rowId) => setRowEditing({ kind: 'existing', rowId })} />}
       {priceEditingRow && <RowPriceEditor key={priceEditingRow.id} row={priceEditingRow} quotation={quotation} onClose={closePriceEditor} onSave={savePrice} />}
     </div>
   )

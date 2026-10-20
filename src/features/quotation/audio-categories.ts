@@ -1,3 +1,4 @@
+import { readAdapterVariant } from './adapters.ts'
 import type { QuotationRow, RowSection } from './model.ts'
 
 export type AudioCategory = 'amplifier-dsp' | 'additional-amplifier' | 'subwoofer' | 'speakers'
@@ -71,9 +72,23 @@ export function isDirectExtraRow(row: QuotationRow): boolean {
   if (row.section !== 'extras' || row.provenance !== undefined) return false
   const category = readAudioCategory(row.audioCategory, 'extras')
   if (category === undefined) return false
+  if (row.adapterVariant !== undefined) {
+    const metadata = readAdapterVariant(row.adapterVariant, row.section, category)
+    if (!metadata || metadata.presentation !== 'unit' || (metadata.size !== '6,5' && metadata.size !== '8')) return false
+    const variant = getAdapterVariant(row.concept)
+    if (variant && metadata.size !== variant.id.replace('.', ',')) return false
+  }
   const concept = getDirectExtraConcept(category)
   return concept !== undefined && (row.concept === concept || row.concept === legacyExtraConcepts[category]
     || (category === 'adapters' && getAdapterVariant(row.concept) !== undefined))
+}
+
+export function isSingleRowCategory(category: AudioCategory | undefined): boolean {
+  return category === 'cables' || category === 'labor'
+}
+
+export function hasRepeatCategoryAction(category: AudioCategory): boolean {
+  return !isSingleRowCategory(category) && category !== 'harness'
 }
 
 function rowOrder(row: QuotationRow): number {

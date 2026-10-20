@@ -8,6 +8,7 @@ import { parseRowProvenance } from './row-provenance.ts'
 import { parseExchangeRate } from './exchange.ts'
 import { readStoredBlueDollarQuote } from './exchange-quote.ts'
 import { readAudioCategory } from './audio-categories.ts'
+import { readAdapterVariant } from './adapters.ts'
 import type { CatalogItem, CatalogReferencePrice, CatalogSource, Currency, PriceState, Quotation, QuotationRow, RowSection, Workspace } from './model.ts'
 
 export interface StorageAdapter {
@@ -89,10 +90,12 @@ function readRow(value: unknown, identifiers: Set<string>, legacyCurrency: Curre
   if (row.provenance !== undefined) {
     try { provenance = parseRowProvenance(row.provenance) } catch { invalidBackup() }
   }
+  const adapterVariant = readAdapterVariant(row.adapterVariant, section, audioCategory)
   return {
     id: readIdentifier(row.id, identifiers),
     section,
     ...(audioCategory === undefined ? {} : { audioCategory }),
+    ...(adapterVariant === undefined ? {} : { adapterVariant }),
     currency: row.currency === undefined ? legacyCurrency : readCurrency(row.currency),
     concept: readString(row.concept, 500),
     detail: readString(row.detail, 2000),

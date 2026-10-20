@@ -1,6 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
-import { calculateQuotation, formatMoney, parseMoney, parseQuantity } from './calculation'
-import { ADAPTER_VARIANTS, getAdapterVariant, getAudioCategories, readAudioCategory, selectAdapterVariant, type AdapterSize } from './audio-categories'
+import { calculateQuotation, formatMoney, isEmptyRow, parseMoney, parseQuantity } from './calculation'
+import { ADAPTER_VARIANTS, getAdapterVariant, getAudioCategories, isDirectExtraRow, isSingleRowCategory, readAudioCategory, selectAdapterVariant, type AdapterSize } from './audio-categories'
+import { readAdapterVariant } from './adapters'
+import { AdapterVariantFields, type AdapterVariantDraft } from './AdapterVariantFields'
 import { RowProductPicker } from './CatalogTools'
 import { CatalogAvailability } from './CatalogAvailability'
 import { canSelectCatalogItem } from './catalog-stock'
@@ -39,17 +41,38 @@ export function HeaderEditor({ quotation, onSave, onClose }: HeaderEditorProps) 
 interface RowEditorProps {
   row: QuotationRow; quotation: Quotation; catalog: CatalogItem[]
   onSave: (row: QuotationRow) => void; onRemove: () => void; onClose: () => void
+  onEditExisting: (rowId: string) => void
   isNew?: boolean
   directConcept?: string
 }
 
-export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, isNew = false, directConcept }: RowEditorProps) {
+function getRowAdapterSize(row: QuotationRow): AdapterSize | '' {
+  const variant = readAdapterVariant(row.adapterVariant, row.section, row.audioCategory)
+  if (variant?.presentation === 'unit') {
+    if (variant.size === '6,5') return '6.5'
+    if (variant.size === '8') return '8'
+  }
+  return getAdapterVariant(row.concept)?.id ?? ''
+}
+
+function directAdapterDraft(size: AdapterSize): AdapterVariantDraft {
+  return { productKey: `direct-adapter-${size.replace('.', '_')}`, size: size === '6.5' ? '6,5' : '8', presentation: 'unit' }
+}
+
+export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, onEditExisting, isNew = false, directConcept }: RowEditorProps) {
   const [draft, setDraft] = useState(row)
+  const [adapterDraft, setAdapterDraft] = useState<AdapterVariantDraft>(() => ({
+    productKey: row.adapterVariant?.productKey ?? crypto.randomUUID(),
+    size: row.adapterVariant?.size ?? '',
+    presentation: row.adapterVariant?.presentation ?? '',
+  }))
+  const [selectedVariantId, setSelectedVariantId] = useState('')
+  const [adapterError, setAdapterError] = useState('')
   const [selectionError, setSelectionError] = useState('')
   const [priceTouched, setPriceTouched] = useState(!isNew)
   const [optionsOpen, setOptionsOpen] = useState(() => !parseQuantity(row.quantity).ok)
   const [priceBuffer, setPriceBuffer] = useState(row.priceState === 'included' ? '0' : row.unitPrice)
-  const [adapterSize, setAdapterSize] = useState<AdapterSize | ''>(() => getAdapterVariant(row.concept)?.id ?? '')
+  const [adapterSize, setAdapterSize] = useState<AdapterSize | ''>(() => getRowAdapterSize(row))
   const productInput = useRef<HTMLInputElement>(null)
   const priceInput = useRef<HTMLInputElement>(null)
   const sizeInput = useRef<HTMLSelectElement>(null)
@@ -60,6 +83,11 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
   const quantityErrorId = useId()
   const selectionErrorId = useId()
   const adapterMode = Boolean(directConcept && row.audioCategory === 'adapters')
+  const existingAdapters = isNew ? quotation.rows.filter((entry) => readAdapterVariant(entry.adapterVariant, entry.section, entry.audioCategory)
+    && !isEmptyRow(entry) && (!adapterMode || isDirectExtraRow(entry))) : []
+  const occupiedCategory = isSingleRowCategory(draft.audioCategory) && (isNew || row.audioCategory !== draft.audioCategory)
+    ? quotation.rows.find((entry) => entry.id !== row.id && entry.section === draft.section && entry.audioCategory === draft.audioCategory && !isEmptyRow(entry))
+    : undefined
   const observedRows = useMemo(() => [draft], [draft])
   const now = useCatalogClock(catalog, observedRows)
   const availabilityItem = getRowAvailabilityItem(draft, catalog)
@@ -86,6 +114,9 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
     try {
       const selected = selectCatalogForRow(draft, item, quotation.currency)
       setDraft(selected)
+      setAdapterDraft({ productKey: item.id, size: '', presentation: '' })
+      setSelectedVariantId('')
+      setAdapterError('')
       setPriceBuffer(selected.unitPrice)
       includedPriceOrigin.current = false
       setSelectionError('')
@@ -97,6 +128,27 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
       return false
     }
   }
+  function chooseAdapter(rowId: string) {
+    const existing = existingAdapters.find((entry) => entry.id === rowId)
+    const existingAvailability = existing ? getRowAvailabilityItem(existing, catalog) : undefined
+    if (existingAvailability && !canSelectCatalogItem(existingAvailability, now)) {
+      setSelectionError('Esta variante requiere revisar su disponibilidad antes de agregarla.')
+      return
+    }
+    const nextDraft = existing?.adapterVariant
+      ? { ...existing, id: row.id, quantity: draft.quantity }
+      : { ...row, audioCategory: draft.audioCategory, quantity: draft.quantity }
+    setSelectedVariantId(rowId)
+    setDraft(nextDraft)
+    setAdapterDraft(existing?.adapterVariant ? { ...existing.adapterVariant } : { productKey: crypto.randomUUID(), size: '', presentation: '' })
+    setAdapterSize(getRowAdapterSize(nextDraft))
+    setPriceBuffer(nextDraft.priceState === 'included' ? '0' : nextDraft.unitPrice)
+    includedPriceOrigin.current = nextDraft.priceState === 'included'
+    priceStateBeforeIncluded.current = nextDraft.priceState === 'included' ? nextDraft.unitPrice.trim() ? 'priced' : 'pending' : nextDraft.priceState
+    setPriceTouched(false)
+    setSelectionError('')
+    setAdapterError('')
+  }
   function changeCurrency(currency: Currency) {
     if (currency === draft.currency) return
     if (draft.unitPrice.trim() && !window.confirm('Cambiar la moneda conserva el importe escrito, sin convertirlo. ¿Continuar?')) return
@@ -107,6 +159,12 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
     const nextDraft = { ...draft }
     if (audioCategory) nextDraft.audioCategory = audioCategory
     else delete nextDraft.audioCategory
+    if (audioCategory !== 'adapters') {
+      delete nextDraft.adapterVariant
+      setAdapterDraft({ productKey: crypto.randomUUID(), size: '', presentation: '' })
+      setSelectedVariantId('')
+    }
+    setAdapterError('')
     setDraft(nextDraft)
   }
   function changeIncluded(included: boolean) {
@@ -137,6 +195,9 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
     if ((value !== '6.5' && value !== '8') || value === adapterSize) return
     const selected = selectAdapterVariant(draft, value)
     setAdapterSize(value)
+    setAdapterDraft(directAdapterDraft(value))
+    setSelectedVariantId('')
+    setAdapterError('')
     setDraft(selected)
     setPriceBuffer(selected.unitPrice)
     includedPriceOrigin.current = false
@@ -145,8 +206,14 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
     setSelectionError('')
     window.requestAnimationFrame(() => { priceInput.current?.focus() })
   }
+  function groupLegacyAdapter() {
+    if (!adapterSize) return
+    setAdapterDraft(directAdapterDraft(adapterSize))
+    setAdapterError('')
+  }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (occupiedCategory) return
     if (adapterMode && isNew && !adapterSize) {
       setSelectionError('Elegí el tamaño de los aros.')
       sizeInput.current?.focus()
@@ -157,8 +224,19 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
       productInput.current?.focus()
       return
     }
+    const next = { ...draft }
+    delete next.adapterVariant
+    const adapterVariant = readAdapterVariant(adapterDraft, draft.section, draft.audioCategory)
+    if (draft.audioCategory === 'adapters' && (adapterDraft.size.trim() || adapterDraft.presentation) && !adapterVariant) {
+      setAdapterError('Ingresá una medida positiva con hasta tres decimales y seleccioná si la cantidad corresponde a unidades, pares o juegos.')
+      return
+    }
+    if (adapterVariant) {
+      next.adapterVariant = adapterVariant
+      if (!next.concept.trim()) next.concept = 'Aros adaptadores 3D'
+    }
     // Preserve incomplete drafts and legacy states; only editing the price approves it.
-    onSave(draft)
+    onSave(next)
   }
   const quantityField = <>
     <label>Cantidad<input inputMode="decimal" value={draft.quantity} maxLength={30} aria-invalid={!quantity.ok} aria-describedby={!quantity.ok ? quantityErrorId : undefined} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /></label>
@@ -170,9 +248,12 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
         {!directConcept && <RowProductPicker catalog={catalog} section={row.section} value={draft.concept} inputRef={productInput} onChange={(concept) => { setDraft({ ...draft, concept }); setSelectionError('') }} onChoose={chooseCatalog} />}
         {selectionError && <p id={selectionErrorId} className="field-errors" role="alert">{selectionError}</p>}
         {provenance && <p className="row-selection-note">Del catálogo{provenance.sku ? ` · ${provenance.sku}` : ''}{getRowPriceOverride(draft) ? ' · Precio editado' : ''}</p>}
+        {draft.audioCategory === 'adapters' && (!adapterMode || existingAdapters.length > 0) && <AdapterVariantFields value={adapterDraft} existingRows={existingAdapters} selectedRowId={selectedVariantId} showVariantFields={!adapterMode} onChange={(value) => { setAdapterDraft(value); setAdapterError('') }} onChoose={chooseAdapter} />}
+        {adapterError && <p className="field-errors" role="alert">{adapterError}</p>}
         {adapterMode && <>
           <label>Tamaño<select ref={sizeInput} value={adapterSize} aria-invalid={Boolean(selectionError && !adapterSize)} aria-describedby={selectionError && !adapterSize ? selectionErrorId : undefined} onChange={(event) => changeAdapterSize(event.target.value)}><option value="" disabled>{isNew ? 'Elegir tamaño' : 'Sin especificar (presupuesto anterior)'}</option>{ADAPTER_VARIANTS.map((variant) => <option key={variant.id} value={variant.id}>{variant.label} · ARS {variant.unitPrice} / unidad</option>)}</select></label>
           {quantityField}
+          {!isNew && !row.adapterVariant && adapterSize && !readAdapterVariant(adapterDraft, draft.section, draft.audioCategory) && <button type="button" className="button secondary" onClick={groupLegacyAdapter}>Agrupar por esta medida</button>}
         </>}
         <div className="row-price-field">
           <label>Precio unitario · {draft.currency}<input ref={priceInput} inputMode="decimal" value={directConcept ? priceBuffer : draft.priceState === 'included' ? '0' : draft.unitPrice} disabled={draft.priceState === 'included' && !directConcept} maxLength={30} placeholder="Sin precio asignado" aria-invalid={Boolean(priceTouched && priceError)} aria-describedby={`${priceHelpId}${priceTouched && priceError ? ` ${priceErrorId}` : ''}`} onBlur={() => setPriceTouched(true)} onFocus={(event) => { if (directConcept) event.currentTarget.select() }} onInput={(event) => { if (directConcept && event.currentTarget.value === priceBuffer) changePrice(event.currentTarget.value) }} onChange={(event) => changePrice(event.target.value)} /></label>
@@ -180,6 +261,7 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
           {priceTouched && priceError && <p id={priceErrorId} className="field-errors" role="status">{priceError} Se conserva como borrador.</p>}
           {arithmeticErrors.length > 0 && <ul className="field-errors">{arithmeticErrors.map((error) => <li key={error}>{error}</li>)}</ul>}
         </div>
+        {occupiedCategory && <div className="notice pending" role="status"><p>Esta categoría ya tiene un concepto. Podés editarlo o elegir otra categoría para esta fila.</p><button type="button" className="button secondary" onClick={() => onEditExisting(occupiedCategory.id)}>Editar concepto existente</button></div>}
         {availabilityItem && !canSelectCatalogItem(availabilityItem, now) && <p className="field-errors" role="status">Este producto requiere revisar su disponibilidad en Más opciones antes de exportar.</p>}
         <details className="row-more-options" open={optionsOpen} onToggle={(event) => setOptionsOpen(event.currentTarget.open)}>
           <summary><span>Más opciones</span><span className="row-options-summary">{optionsSummary}</span></summary>
@@ -205,7 +287,7 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
             {!isNew && <button type="button" className="button danger row-remove" onClick={() => { if (window.confirm('¿Eliminar este concepto del presupuesto?')) onRemove() }}>Eliminar concepto</button>}
           </div>
         </details>
-        <div className="dialog-actions row-editor-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button primary">{isNew ? 'Agregar' : 'Guardar'}</button></div>
+        <div className="dialog-actions row-editor-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button primary" disabled={Boolean(occupiedCategory)}>{isNew ? 'Agregar' : 'Guardar'}</button></div>
       </form>
     </Dialog>
   )

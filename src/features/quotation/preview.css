@@ -94,7 +94,7 @@
 .quotation-heading-edit {
   display: block;
   width: 100%;
-  min-height: 44px;
+  min-height: 48px;
   padding: 0;
 }
 
@@ -177,7 +177,7 @@
   flex-direction: column;
   gap: 0.5556cqw;
   min-width: 0;
-  min-height: 44px;
+  min-height: 48px;
   justify-content: center;
   padding: 0;
   overflow-wrap: anywhere;
@@ -203,8 +203,8 @@
 }
 
 .quotation-row-price {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 48px;
+  min-height: 48px;
   padding: 0;
   max-width: 40cqw;
   color: var(--quotation-black);
@@ -227,7 +227,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: 48px;
   max-width: 100%;
   padding: 8px 0;
   color: #5c5c5c;
@@ -262,6 +262,61 @@
 
 .quotation-category-add {
   border-bottom: 1px dashed var(--quotation-rule);
+}
+
+.quotation-adapter-group {
+  padding-top: 1.8519cqw;
+  border-bottom: 1px solid var(--quotation-rule);
+}
+
+.quotation-adapter-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 2.2222cqw;
+}
+
+.quotation-adapter-heading h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.quotation-adapter-heading .quotation-row-price {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5556cqw;
+}
+
+.quotation-adapter-variants {
+  margin-top: 0.7407cqw;
+}
+
+.quotation-adapter-variant {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 0;
+  color: var(--quotation-muted);
+  font-size: clamp(0.75rem, 2.4074cqw, 1.625rem);
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.quotation-adapter-variant-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2.2222cqw;
+}
+
+.quotation-adapter-price {
+  color: var(--quotation-muted);
+  font-size: clamp(0.75rem, 2.4074cqw, 1.625rem);
+}
+
+.quotation-adapter-variants li + li {
+  border-top: 1px dashed var(--quotation-rule);
 }
 
 .quotation-empty-row > span,
@@ -465,8 +520,21 @@
   }
 
   .quotation-row-detail,
+  .quotation-adapter-variant,
   .quotation-price-pending {
     font-size: 16px;
+  }
+
+  .quotation-adapter-group {
+    padding-top: 12px;
+  }
+
+  .quotation-adapter-heading {
+    gap: 20px;
+  }
+
+  .quotation-adapter-variants {
+    margin-top: 4px;
   }
 
   .quotation-row-quantity {

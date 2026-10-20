@@ -10,11 +10,19 @@ export type { CatalogStockSnapshot } from './catalog-stock.ts'
 export type Currency = 'ARS' | 'USD'
 export type RowSection = 'equipment' | 'extras'
 export type PriceState = 'pending' | 'priced' | 'included'
+export type AdapterPresentation = 'unit' | 'pair' | 'set'
+
+export interface AdapterVariant {
+  productKey: string
+  size: string
+  presentation: AdapterPresentation
+}
 
 export interface QuotationRow {
   id: string
   section: RowSection
   audioCategory?: AudioCategory
+  adapterVariant?: AdapterVariant
   currency: Currency
   concept: string
   detail: string

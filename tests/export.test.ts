@@ -512,3 +512,123 @@ test('a verified latest observation can replace expired stored stock while curre
     else Reflect.deleteProperty(globalThis, 'Image')
   }
 })
+
+test('exports adapter variants under one heading with separate native currency amounts', () => {
+  const quotation = exportableQuotation()
+  const sample = quotation.rows[0]
+  quotation.rows = [
+    {
+      ...sample, id: 'small', section: 'extras', audioCategory: 'adapters',
+      concept: 'Aros adaptadores 3D', quantity: '2', unitPrice: '100',
+      adapterVariant: { productKey: 'small', size: '6,5', presentation: 'pair' },
+    },
+    {
+      ...sample, id: 'large', section: 'extras', audioCategory: 'adapters',
+      concept: 'Aros adaptadores 3D', quantity: '2', unitPrice: '5', currency: 'USD',
+      adapterVariant: { productKey: 'large', size: '8', presentation: 'unit' },
+    },
+  ]
+  const snapshot = structuredClone(quotation)
+  const result = renderWithRecordedCanvas(quotation)
+  assert.equal(result.texts.filter(({ text }) => text === 'Aros adaptadores 3D').length, 1)
+  const text = result.texts.map(({ text: entry }) => entry).join(' ')
+  assert.ok(text.includes('2 pares × 6,5″ · ARS 200,00'))
+  assert.ok(text.includes('2 unidades × 8″ · USD 10,00'))
+  const amounts = result.texts.filter(({ align }) => align === 'right').map(({ text: entry }) => entry)
+  assert.ok(amounts.includes('ARS 200,00'))
+  assert.ok(amounts.includes('USD 10,00'))
+  assert.ok(!text.includes('Agregar') && !text.includes('Editar'))
+  assert.deepEqual(quotation, snapshot)
+})
+
+test('exports every long adapter description below the heading and above totals without clipping', () => {
+  const quotation = exportableQuotation()
+  const sample = quotation.rows[0]
+  quotation.rows = [
+    {
+      ...sample, id: 'long-ring', section: 'extras', audioCategory: 'adapters',
+      concept: 'Aro sintético reforzado para prueba',
+      detail: `${'Detalle extenso de prueba '.repeat(60)}Final de la variante`,
+      adapterVariant: { productKey: 'long-ring', size: '6,5', presentation: 'set' },
+    },
+    {
+      ...sample, id: 'other-ring', section: 'extras', audioCategory: 'adapters',
+      concept: 'Aros adaptadores 3D', currency: 'USD',
+      adapterVariant: { productKey: 'other-ring', size: '8', presentation: 'pair' },
+    },
+  ]
+  const result = renderWithRecordedCanvas(quotation)
+  const text = result.texts.map(({ text: entry }) => entry).join(' ')
+  assert.ok(text.includes('Aro sintético reforzado para prueba'))
+  assert.ok(text.includes('Final de la variante'))
+  assert.ok(text.includes('1 juego × 6,5″'))
+  assert.ok(text.includes('1 par × 8″'))
+  const heading = result.texts.find(({ text: entry }) => entry === 'Aros adaptadores 3D')
+  const totalLabel = result.texts.find(({ text: entry }) => entry === 'TOTAL')
+  assert.ok(heading && totalLabel)
+  const detailLines = result.texts.filter(({ y, align }) => y > heading.y && y < totalLabel.y && align === 'left')
+  assert.ok(detailLines.length > 10)
+  assert.ok(detailLines.every(({ x, y, width }) => x + width <= 1016 && y + 32 < totalLabel.y))
+  const groupAmounts = result.texts.filter(({ y, align }) => y >= heading.y && y <= heading.y + 46 && align === 'right')
+  assert.equal(groupAmounts.length, 2)
+  assert.ok(detailLines.every(({ y }) => y > Math.max(...groupAmounts.map((amount) => amount.y)) + 38))
+})
+
+test('keeps legacy adapters, repeated equipment, included and explicit zero variants distinct in PNG', () => {
+  const quotation = exportableQuotation()
+  const sample = quotation.rows[0]
+  quotation.rows = [
+    { ...sample, id: 'bass-a', audioCategory: 'subwoofer', concept: 'Subwoofer sintético A' },
+    { ...sample, id: 'bass-b', audioCategory: 'subwoofer', concept: 'Subwoofer sintético B' },
+    {
+      ...sample, id: 'legacy', section: 'extras', audioCategory: 'adapters',
+      concept: 'Aros anteriores de 6,5 pulgadas', detail: 'Texto conservado',
+    },
+    {
+      ...sample, id: 'included', section: 'extras', audioCategory: 'adapters',
+      concept: 'Aros adaptadores 3D', priceState: 'included', unitPrice: '',
+      adapterVariant: { productKey: 'included', size: '6,5', presentation: 'unit' },
+    },
+    {
+      ...sample, id: 'zero', section: 'extras', audioCategory: 'adapters',
+      concept: 'Aros adaptadores 3D', unitPrice: '0',
+      adapterVariant: { productKey: 'zero', size: '8', presentation: 'unit' },
+    },
+  ]
+  const result = renderWithRecordedCanvas(quotation)
+  const text = result.texts.map(({ text: entry }) => entry).join(' ')
+  assert.ok(text.includes('Subwoofer sintético A') && text.includes('Subwoofer sintético B'))
+  assert.ok(text.includes('Aros anteriores de 6,5 pulgadas Texto conservado'))
+  assert.ok(text.includes('1 unidad × 6,5″ · Incluido'))
+  assert.ok(text.includes('1 unidad × 8″ · ARS 0,00'))
+  assert.ok(result.texts.some(({ text: entry, align }) => entry === 'ARS 0,00' && align === 'right'))
+})
+
+test('blocks PNG generation when one explicitly grouped adapter remains pending', async () => {
+  const quotation = exportableQuotation()
+  quotation.rows = [
+    {
+      ...quotation.rows[0], id: 'pending-ring', section: 'extras', audioCategory: 'adapters',
+      priceState: 'pending', unitPrice: '',
+      adapterVariant: { productKey: 'pending-ring', size: '6,5', presentation: 'unit' },
+    },
+  ]
+  await assert.rejects(createQuotationFile(quotation), /campos pendientes/)
+})
+
+test('keeps grouped adapter provenance private while preserving availability guards and the customer warning', async () => {
+  const quotation = provisionalQuotation()
+  quotation.rows[0] = {
+    ...quotation.rows[0], section: 'extras', audioCategory: 'adapters',
+    concept: 'Aros adaptadores 3D',
+    adapterVariant: { productKey: 'private-item', size: '6,5', presentation: 'pair' },
+  }
+  const result = renderWithRecordedCanvas(quotation)
+  const text = result.texts.map(({ text: entry }) => entry).join(' ')
+  assert.ok(text.includes('1 par × 6,5″ · ARS 2.400,00'))
+  assert.equal(result.texts.filter(({ text: entry }) => entry === 'Disponibilidad a confirmar.').length, 1)
+  assert.doesNotMatch(text, /PRIVATE-|ffff|private-item|Stock|Histórico/)
+  quotation.rows[0].provenance!.stock!.quantity = 0
+  await assert.rejects(createQuotationFile(quotation), /stock/)
+  assert.throws(() => renderQuotationCanvas(quotation, {} as CanvasImageSource), /stock/)
+})

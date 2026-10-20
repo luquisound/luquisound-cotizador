@@ -89,6 +89,10 @@ input:disabled { background: #e9e8e1; color: #575751; }
 input::placeholder, textarea::placeholder { color: #818179; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-grid > * { min-width: 0; }
+.adapter-fields { display: grid; gap: 14px; min-width: 0; padding: 16px; border: 1px solid #deddd6; border-radius: 6px; }
+.adapter-fields legend { padding-inline: 6px; }
+.adapter-fields .field-help { margin: 0; }
+.adapter-fields .form-grid { grid-template-columns: minmax(0, 1fr); }
 .field-help { color: #6a6a61; font-size: 13px; line-height: 1.6; }
 .field-errors { color: #a12620; background: #fff0eb; border-radius: 6px; padding: 12px 16px; font-size: 14px; list-style: disc; }
 ul.field-errors { padding-left: 30px; }
@@ -135,6 +139,7 @@ ul.field-errors { padding-left: 30px; }
 .skip-link { position: fixed; top: -80px; left: 12px; z-index: 100; padding: 12px 16px; background: #ffda00; color: black; font-weight: 400; }
 .skip-link:focus { top: 12px; }
 @media (min-width: 40rem) {
+  .adapter-fields .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace-main { max-width: 1680px; }
   .quotation-workspace { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
   .workspace-options button { scroll-margin-block-end: calc(100px + env(safe-area-inset-bottom, 0px)); }

@@ -105,6 +105,41 @@ test('categorized current recovery preserves all row data without modifying cata
   assert.deepEqual(memory.writes, [CURRENT_QUOTATION_STORAGE_KEY])
 })
 
+test('current adapter recovery keeps independent variants and leaves catalogue and legacy bytes untouched', () => {
+  const legacyText = serializeWorkspace(legacyFixture())
+  const catalogText = serializeCatalogBackup(catalogFixture())
+  const memory = memoryStorage({ [STORAGE_KEY]: legacyText, [CATALOG_STORAGE_KEY]: catalogText })
+  const quotation = createQuotation()
+  quotation.rows = ['6,5', '8'].map((size, index) => ({
+    ...createRow('extras', index === 0 ? 'ARS' : 'USD'), audioCategory: 'adapters',
+    adapterVariant: { productKey: 'synthetic-ring', size, presentation: 'pair' },
+    concept: 'Synthetic adapter', quantity: '2', unitPrice: index === 0 ? '10,25' : '20,50', priceState: 'priced',
+  }))
+  const snapshot = structuredClone(quotation)
+  assert.equal(saveCurrentQuotation(memory.storage, quotation).ok, true)
+  assert.deepEqual(loadCurrentQuotation(memory.storage), {
+    quotation: snapshot, error: null, raw: memory.values.get(CURRENT_QUOTATION_STORAGE_KEY),
+  })
+  assert.equal(memory.values.get(CATALOG_STORAGE_KEY), catalogText)
+  assert.equal(memory.values.get(STORAGE_KEY), legacyText)
+  assert.deepEqual(memory.writes, [CURRENT_QUOTATION_STORAGE_KEY])
+  assert.deepEqual(quotation, snapshot)
+})
+
+test('adapter metadata without commercial content never creates a recoverable quotation', () => {
+  const quotation = createQuotation()
+  quotation.rows[1] = {
+    ...quotation.rows[1]!, audioCategory: 'adapters',
+    adapterVariant: { productKey: 'synthetic-ring', size: '6,5', presentation: 'unit' },
+  }
+  const memory = memoryStorage()
+  assert.equal(saveCurrentQuotation(memory.storage, quotation).ok, true)
+  assert.deepEqual(parseWorkspace(memory.values.get(CURRENT_QUOTATION_STORAGE_KEY)!), {
+    version: 1, activeQuotationId: null, quotations: [], catalog: [],
+  })
+  assert.equal(hasQuotationContent(loadCurrentQuotation(memory.storage).quotation), false)
+})
+
 test('category-only suggestions never persist as current work or alter catalogue and legacy bytes', () => {
   const legacyText = serializeWorkspace(legacyFixture())
   const catalogText = serializeCatalogBackup(catalogFixture())

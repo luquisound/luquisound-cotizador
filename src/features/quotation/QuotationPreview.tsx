@@ -2,15 +2,16 @@ import type { CSSProperties, ReactNode } from 'react'
 import {
   calculateQuotation,
   formatMoney,
-  isEmptyRow,
   parseQuantity,
 } from './calculation.ts'
 import type { CalculatedRow } from './calculation.ts'
-import { getAudioCategories, orderQuotationRows, readAudioCategory } from './audio-categories.ts'
+import { getAudioCategories, hasRepeatCategoryAction, readAudioCategory } from './audio-categories.ts'
 import type { AudioCategory } from './audio-categories.ts'
 import type { Quotation, QuotationRow, RowSection } from './model.ts'
 import { exchangeRateDescription } from './exchange-quote'
 import { QUOTATION_GRAPHIC } from './graphic.ts'
+import { adapterVariantAmount, adapterVariantDescription, buildQuotationPresentation } from './presentation.ts'
+import type { AdapterPresentationBlock, QuotationPresentationItem } from './presentation.ts'
 import './preview.css'
 import './exchange-ui.css'
 
@@ -70,6 +71,78 @@ function PreviewRow({ row, calculated, onEdit, onEditPrice }: PreviewRowProps) {
   )
 }
 
+function PreviewAdapterGroup({
+  block, onEditRow, onEditPrice,
+}: {
+  block: AdapterPresentationBlock
+  onEditRow: (rowId: string) => void
+  onEditPrice: (rowId: string) => void
+}) {
+  return (
+    <div className="quotation-adapter-group">
+      <div className="quotation-adapter-heading">
+        <h3 className="quotation-row-concept">{block.title}</h3>
+        <span className={`quotation-row-price${block.pending ? ' quotation-price-pending' : ''}`}>
+          {block.amounts.map((amount) => <span key={amount}>{amount}</span>)}
+        </span>
+      </div>
+      <ul className="quotation-rows quotation-adapter-variants">
+        {block.items.map((item, index) => (
+          <li key={item.row.id} className="quotation-adapter-variant-row">
+            <button
+              type="button"
+              className="quotation-adapter-variant"
+              data-row-id={item.row.id}
+              onClick={() => onEditRow(item.row.id)}
+              aria-label={`Editar aros adaptadores: ${block.details[index]}`}
+              title="Tocá para editar esta variante"
+            >
+              {adapterVariantDescription(item)}
+            </button>
+            <button
+              type="button"
+              className={`quotation-row-price quotation-adapter-price${item.errors.length ? ' quotation-price-pending' : ''}`}
+              data-row-price-id={item.row.id}
+              onClick={() => onEditPrice(item.row.id)}
+              aria-label={`Editar precio unitario de aros adaptadores: ${block.details[index]}`}
+              title="Tocá para editar sólo el precio unitario de esta variante"
+            >
+              {adapterVariantAmount(item)}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function PreviewItems({
+  items, onEditRow, onEditPrice,
+}: {
+  items: QuotationPresentationItem[]
+  onEditRow: (rowId: string) => void
+  onEditPrice: (rowId: string) => void
+}) {
+  return (
+    <ul className="quotation-rows">
+      {items.map((item) => (
+        <li key={item.kind === 'row' ? item.item.row.id : item.items[0].row.id}>
+          {item.kind === 'adapters' ? (
+            <PreviewAdapterGroup block={item} onEditRow={onEditRow} onEditPrice={onEditPrice} />
+          ) : (
+            <PreviewRow
+              row={item.item.row}
+              calculated={item.item}
+              onEdit={() => onEditRow(item.item.row.id)}
+              onEditPrice={() => onEditPrice(item.item.row.id)}
+            />
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function WhatsAppIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
@@ -99,8 +172,6 @@ export function QuotationPreview({
   exchangeDetails,
 }: QuotationPreviewProps) {
   const calculation = calculateQuotation(quotation)
-  const calculatedById = new Map(calculation.rows.map((row) => [row.row.id, row]))
-  const visibleRows = orderQuotationRows(quotation.rows).filter((row) => !isEmptyRow(row))
 
   return (
     <div className="quotation-preview" style={graphicStyle}>
@@ -142,19 +213,21 @@ export function QuotationPreview({
         <div className="quotation-content">
           {notices}
           {sections.map(({ section, label, accessibleLabel }) => {
-            const sectionRows = visibleRows.filter((row) => row.section === section)
-            const freeRows = sectionRows.filter((row) => !readAudioCategory(row.audioCategory, section))
+            const sectionRows = calculation.rows.filter(({ row }) => row.section === section)
+            const freeRows = sectionRows.filter(({ row }) => !readAudioCategory(row.audioCategory, section))
             return (
               <section className="quotation-section" key={section} aria-label={label}>
                 <h2 className="quotation-section-title">{label}</h2>
                 {getAudioCategories(section).map((category) => {
-                  const categoryRows = sectionRows.filter((row) => row.audioCategory === category.id)
+                  const categoryRows = sectionRows.filter(({ row }) => row.audioCategory === category.id)
+                  const items = buildQuotationPresentation(categoryRows)
                   return (
-                    <div className="quotation-audio-category" key={category.id}>
+                    <div className="quotation-audio-category" key={category.id} data-audio-category={category.id}>
                       {categoryRows.length === 0 ? (
                         <button
                           type="button"
                           className="quotation-empty-row"
+                          data-audio-category={category.id}
                           onClick={() => onAddRow(section, category.id)}
                           aria-label={`Agregar ${category.label}`}
                         >
@@ -162,45 +235,28 @@ export function QuotationPreview({
                         </button>
                       ) : (
                         <>
-                          {section === 'equipment' && <h3 className="quotation-category-label">{category.label}</h3>}
-                          <ul className="quotation-rows">
-                            {categoryRows.map((row) => (
-                              <li key={row.id}>
-                                <PreviewRow
-                                  row={row}
-                                  calculated={calculatedById.get(row.id)}
-                                  onEdit={() => onEditRow(row.id)}
-                                  onEditPrice={() => onEditPrice(row.id)}
-                                />
-                              </li>
-                            ))}
-                          </ul>
-                          {section === 'equipment' && <button
-                            type="button"
-                            className="quotation-category-add"
-                            onClick={() => onAddRow(section, category.id)}
-                            aria-label={`Agregar otro ítem en ${category.label}`}
-                          >
-                            <span aria-hidden="true">+</span> Agregar otro
-                          </button>}
+                          {section === 'equipment' && (
+                            <h3 className="quotation-category-label">{category.label}</h3>
+                          )}
+                          <PreviewItems items={items} onEditRow={onEditRow} onEditPrice={onEditPrice} />
+                          {hasRepeatCategoryAction(category.id) && (
+                            <button
+                              type="button"
+                              className="quotation-category-add"
+                              data-audio-category={category.id}
+                              onClick={() => onAddRow(section, category.id)}
+                              aria-label={`Agregar ${category.label}`}
+                            >
+                              <span aria-hidden="true">+</span> {category.label}
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
                   )
                 })}
                 {freeRows.length > 0 && (
-                  <ul className="quotation-rows">
-                    {freeRows.map((row) => (
-                      <li key={row.id}>
-                        <PreviewRow
-                          row={row}
-                          calculated={calculatedById.get(row.id)}
-                          onEdit={() => onEditRow(row.id)}
-                          onEditPrice={() => onEditPrice(row.id)}
-                        />
-                      </li>
-                    ))}
-                  </ul>
+                  <PreviewItems items={buildQuotationPresentation(freeRows)} onEditRow={onEditRow} onEditPrice={onEditPrice} />
                 )}
                 <button
                   type="button"

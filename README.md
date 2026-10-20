@@ -175,14 +175,25 @@ means pending and a positive amount becomes priced. Opening and saving without
 editing preserves an included row's stored amount. Custom concepts and all rows
 with catalogue provenance retain the full editor and source/stock rules.
 
-Installation shows entered rows without category headings or per-category
-"Agregar otro" controls; it preserves every existing row, even several in one
-category. "Otro concepto" remains a secondary manual/catalogue action. Category
+Equipment and adapters keep a named add action below their current items.
+Structured adapter variants share one visual block with a quantity, size and
+sale-presentation breakdown. Every variant retains its own editable row, price,
+currency and provenance. Selecting an existing variant reuses its identity for
+an addition; matching commercial values accumulate only when rounding remains
+unchanged. Direct size selections identify the approved unit preset explicitly;
+custom and catalogue variants also declare their presentation. Units, pairs and
+sets are never converted into one another. Older adapter rows are not inferred
+or merged; their size and presentation can be declared explicitly when desired.
+
+Installation omits standalone category headings. Cables and labour use one
+concept for new entries or reclassification, preserving every existing row.
+The harness suggestion is offered once without blocking another manually
+classified harness. "Otro concepto" remains a secondary manual/catalogue action. Category
 IDs and ordering remain compatible; recognized old manual names open directly
 without being renamed on recovery or save. Equipment, unclassified rows and
 custom wording retain their behavior. Add controls have full-width touch targets
-at least 48 pixels high. PNG output keeps row order and excludes unused concepts
-and editor controls. Catalogue categories remain independent; selecting a
+at least 48 pixels high. PNG output uses the same variant presentation and
+excludes unused concepts and editor controls. Catalogue categories remain independent; selecting a
 concept supplies no price except the explicit approved adapter size presets. See
 [the optional audio row contract](docs/PRODUCTO.md#optional-audio-categories).
 
