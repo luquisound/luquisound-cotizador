@@ -25,7 +25,7 @@ import { inspectQuotationAvailability } from './quotation-availability'
 import { useCatalogClock } from './useCatalogClock'
 import { QuotationLibraryDialog } from './QuotationLibraryDialog'
 import { useQuotationLibrary } from './useQuotationLibrary'
-import { createHarnessPresetRow, isHarnessPresetRow, setHarnessPresetSelected } from './harness-preset'
+import { createHarnessPresetRow, isHarnessPresetRow } from './harness-preset'
 
 function initialData() {
   try {
@@ -63,7 +63,7 @@ export default function QuotationApp() {
   const optionsContainer = useRef<HTMLDivElement>(null)
   const optionsButton = useRef<HTMLButtonElement>(null)
   const [rowEditing, setRowEditing] = useState<RowEditingState | null>(null)
-  const [priceEditingId, setPriceEditingId] = useState<string | null>(null)
+  const [priceEditing, setPriceEditing] = useState<RowEditingState | null>(null)
   const [message, setMessage] = useState('')
   const [prepared, setPrepared] = useState<{ file: File; quotation: Quotation; provisional: boolean } | null>(null)
   const [preparing, setPreparing] = useState(false)
@@ -87,7 +87,9 @@ export default function QuotationApp() {
   const editingRow = rowEditing?.kind === 'new'
     ? rowEditing.row
     : quotation.rows.find((row) => row.id === rowEditing?.rowId)
-  const priceEditingRow = quotation.rows.find((row) => row.id === priceEditingId)
+  const priceEditingRow = priceEditing?.kind === 'new'
+    ? priceEditing.row
+    : quotation.rows.find((row) => row.id === priceEditing?.rowId)
   const rateLoading = quotation.exchangeRateMode !== 'frozen' && rateState?.id === quotation.id && rateState.loading
   const rateError = quotation.exchangeRateMode !== 'frozen' && rateState?.id === quotation.id ? rateState.error : null
   const displayedRate = parseExchangeRate(quotation.exchangeRate ?? '')
@@ -409,8 +411,8 @@ export default function QuotationApp() {
 
   function closePriceEditor() {
     const previous = rowEditorTrigger.current
-    const rowId = priceEditingId
-    setPriceEditingId(null)
+    const rowId = priceEditingRow?.id
+    setPriceEditing(null)
     window.requestAnimationFrame(() => {
       const target = rowId ? document.querySelector<HTMLElement>(`[data-row-price-id="${rowId}"]`) : null
       const focusTarget = target ?? (previous?.isConnected ? previous : optionsButton.current)
@@ -420,17 +422,20 @@ export default function QuotationApp() {
 
   function editPrice(rowId: string) {
     rememberRowTrigger()
-    setPriceEditingId(rowId)
+    setPriceEditing({ kind: 'existing', rowId })
   }
 
   function savePrice(nextRow: QuotationRow) {
+    if (!priceEditing) return
     const current = quotationRef.current
-    const row = current.rows.find((entry) => entry.id === priceEditingId)
+    const row = priceEditing.kind === 'new'
+      ? priceEditing.row
+      : current.rows.find((entry) => entry.id === priceEditing.rowId)
     if (!row) { closePriceEditor(); return }
     if (nextRow.id !== row.id) return
-    const result = saveQuotationRow(current, nextRow, 'existing')
+    const result = saveQuotationRow(current, nextRow, priceEditing.kind)
     if (!result.ok) { window.alert(result.error); return }
-    if (nextRow === row || updateQuotation({ ...current, rows: result.rows })) closePriceEditor()
+    if ((priceEditing.kind === 'existing' && nextRow === row) || updateQuotation({ ...current, rows: result.rows })) closePriceEditor()
   }
 
   function addRow(section: RowSection, audioCategory?: AudioCategory) {
@@ -450,20 +455,6 @@ export default function QuotationApp() {
       ?? rows.find((row) => row.section === 'extras' && row.audioCategory === 'harness' && !isEmptyRow(row))
   }
 
-  function setHarnessSelected(enabled: boolean) {
-    const current = quotationRef.current
-    const existing = currentHarnessPreset()
-    if (!existing && !enabled) return
-    if (!existing && current.rows.length >= 1000) {
-      setMessage('Llegaste al m\u00e1ximo de 1000 conceptos en este presupuesto.')
-      return
-    }
-    const selected = existing ? setHarnessPresetSelected(existing, enabled) : createHarnessPresetRow(enabled)
-    updateQuotation({ ...current, rows: existing
-      ? current.rows.map((row) => row.id === existing.id ? selected : row)
-      : [...current.rows, selected] })
-  }
-
   function editHarnessPreset() {
     const existing = currentHarnessPreset()
     if (existing) { editPrice(existing.id); return }
@@ -472,7 +463,7 @@ export default function QuotationApp() {
       return
     }
     rememberRowTrigger()
-    setRowEditing({ kind: 'new', row: createHarnessPresetRow(false) })
+    setPriceEditing({ kind: 'new', row: createHarnessPresetRow(false) })
   }
 
   function saveRow(row: QuotationRow, addVariant = false) {
@@ -616,7 +607,6 @@ export default function QuotationApp() {
             onEditRow={editRow}
             onEditPrice={editPrice}
             onAddRow={addRow}
-            onSetHarnessSelected={setHarnessSelected}
             onEditHarnessPreset={editHarnessPreset}
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}

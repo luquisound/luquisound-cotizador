@@ -12,6 +12,8 @@ import {
   createQuotationLibrary, openLibraryQuotation, parseQuotationLibrary, saveQuotationToLibrary, serializeQuotationLibrary,
 } from '../src/features/quotation/quotation-library.ts'
 import { updateRowUnitPrice } from '../src/features/quotation/row-price.ts'
+import { saveQuotationRow } from '../src/features/quotation/row-actions.ts'
+import { changeRowCurrency } from '../src/features/quotation/row-currency.ts'
 import { CURRENT_QUOTATION_STORAGE_KEY, loadCurrentQuotation, saveCurrentQuotation } from '../src/features/quotation/working-storage.ts'
 
 function quotation(harness?: QuotationRow): Quotation {
@@ -84,6 +86,36 @@ test('repeated selection preserves custom prices, currencies, quantities, descri
   const inactiveEdited = updateRowUnitPrice(setHarnessPresetSelected(current, false), '23,45')
   assert.equal(inactiveEdited.harnessSelection?.enabled, false)
   assert.equal(setHarnessPresetSelected(inactiveEdited, true).unitPrice, '23,45')
+})
+
+test('saving only bypass selection preserves pending and included prices and exact currency restoration', () => {
+  const original = createHarnessPresetRow(true)
+  const converted = changeRowCurrency(original, 'USD', '1100')
+  assert.equal(converted.unitPrice, '63,64')
+  for (const source of [
+    converted,
+    { ...original, unitPrice: '99', priceState: 'pending' as const },
+    { ...original, unitPrice: '', priceState: 'pending' as const },
+    { ...original, unitPrice: '99', priceState: 'included' as const },
+  ]) {
+    const before = structuredClone(source)
+    for (const enabled of [false, true]) {
+      const result = saveQuotationRow(quotation(source), setHarnessPresetSelected(source, enabled), 'existing')
+      assert.ok(result.ok)
+      const saved = result.rows.find((candidate) => candidate.id === source.id)!
+      assert.deepEqual(saved, { ...before, harnessSelection: { enabled } })
+      const recovered = parseWorkspace(serializeWorkspace(workspace(quotation(saved)))).quotations[0]!.rows[1]!
+      assert.deepEqual(recovered, saved)
+      if (source === converted) {
+        const restored = changeRowCurrency(recovered, 'ARS', '1100')
+        assert.equal(restored.unitPrice, original.unitPrice)
+        assert.equal(restored.currency, original.currency)
+        assert.deepEqual(restored.harnessSelection, { enabled })
+        assert.equal(changeRowCurrency(changeRowCurrency(restored, 'USD', '1100'), 'ARS', '1100').unitPrice, '70.000')
+      }
+    }
+    assert.deepEqual(source, before)
+  }
 })
 
 test('inactive bypass contributes no amounts or validation while unchecked, including retained invalid drafts', () => {

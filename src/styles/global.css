@@ -109,6 +109,9 @@ ul.field-errors { padding-left: 30px; }
 .form-stack .row-factory-toggle { display: flex; flex-shrink: 0; align-items: center; gap: 8px; min-height: 46px; white-space: nowrap; }
 .row-factory-toggle input { width: 22px; height: 22px; min-height: 22px; padding: 0; accent-color: #947500; }
 .form-stack .row-factory-toggle span { display: block; color: inherit; }
+.form-stack .row-harness-toggle { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+.row-harness-toggle input { flex-shrink: 0; width: 22px; height: 22px; min-height: 22px; padding: 0; accent-color: #947500; }
+.form-stack .row-harness-toggle span { display: block; color: inherit; }
 .row-product-lock { min-width: 0; margin: 0; padding: 0; border: 0; }
 .row-price-concept { overflow-wrap: anywhere; white-space: pre-wrap; }
 .row-more-options { min-width: 0; border-block: 1px solid #deddd6; }

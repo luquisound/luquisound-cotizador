@@ -231,27 +231,15 @@
   overflow-wrap: anywhere;
 }
 
-.quotation-harness-selection {
+.quotation-harness-open {
   display: flex;
   align-items: center;
   gap: 8px;
   min-height: 48px;
+  padding: 0;
+  text-align: left;
   cursor: pointer;
   touch-action: manipulation;
-}
-
-.quotation-harness-selection input {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  accent-color: var(--quotation-black);
-  cursor: pointer;
-}
-
-.quotation-harness-selection input:focus-visible {
-  outline: 3px solid #1459c7;
-  outline-offset: 3px;
 }
 
 .quotation-harness-inactive .quotation-row-price {

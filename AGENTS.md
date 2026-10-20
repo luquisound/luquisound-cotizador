@@ -68,10 +68,12 @@ inventory management, invoicing, and a general backend remain outside this stage
   approved direct-concept presets. Apply the harness preset only on new-draft
   creation, preserving existing, reclassified, imported and recovered amounts,
   currencies and pending states. Keep adapter quantity independent and price editable.
-  The primary harness control is an explicit checkbox beside its editable amount.
-  An empty quotation shows a virtual unchecked ARS 70,000 suggestion without
-  creating a row or charging it. Checking includes the harness; unchecking
-  excludes it from totals and PNG while retaining its saved price and fields.
+  The primary harness amount opens "Editar precio", which contains its explicit
+  inclusion checkbox; keep that checkbox off the main template. An empty quotation
+  shows a virtual ARS 70,000 suggestion without creating a row or charging it.
+  Saving applies price and selection together; Cancel discards both draft changes.
+  Checking includes the harness; unchecking excludes it from totals and PNG while
+  retaining its saved price and fields. Keep the price action available while inactive.
   Persist explicit selection in `harnessSelection.enabled`. Older harness rows
   without that metadata remain active with their original values; never add,
   disable or reset them during reading or recovery.

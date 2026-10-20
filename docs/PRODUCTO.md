@@ -119,7 +119,7 @@ The four direct installation concepts use these stable IDs and names:
 | `labor` | Mano de obra de instalacion | Mano de obra |
 
 An unused installation concept can open a temporary draft with that name and quantity
-one. The primary harness control uses the explicit checkbox below. Cables and
+one. The primary harness amount opens "Editar precio" as described below. Cables and
 labour start with a pending price in the quotation's default
 currency. A new harness draft starts with the approved ARS 70,000 unit price,
 including in a quotation whose default currency is USD; amount and quantity
@@ -133,9 +133,12 @@ selection. "Mas opciones" retains harness quantity, detail, currency, explicit i
 state and removal of an existing row. No detail, supplier data or included state
 is supplied automatically.
 
-The primary harness control shows an explicit checkbox next to its editable
-price. An empty quotation uses a virtual unchecked ARS 70,000 suggestion: it
-creates no stored row, total or PNG content merely by being displayed. Explicit
+The primary harness amount opens "Editar precio", which contains the editable
+price and explicit inclusion checkbox. The main template has no harness checkbox,
+and the price action remains available while inactive. An empty quotation uses a
+virtual ARS 70,000 suggestion with an unchecked modal draft: it creates no stored
+row, total or PNG content merely by being displayed or opened. Save applies price
+and selection atomically; Cancel discards both draft changes. Explicit
 selection is stored as `harnessSelection.enabled`. A checked harness participates
 normally; an unchecked harness retains its price and fields for later reuse but
 does not participate in totals or image output. Existing harnesses without that
