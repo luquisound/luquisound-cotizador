@@ -128,14 +128,18 @@ New adapter rows require an explicit choice between two user-approved variants:
 | 6.5 inches | ARS 25,000 |
 | 8 inches | ARS 35,000 |
 
-Adapter size and quantity appear in the main form. Quantity remains independent;
-there is no forced pair or total-price preset. Explicit size selection copies
-the corresponding unit amount and ARS currency together while preserving
-quantity. The user can edit that amount. Reopening a row never reapplies a
-preset or replaces a saved amount/currency. The selected variant is retained in
+New adapter rows show size and quantity in the main form. Quantity remains
+independent; there is no forced pair or total-price preset. Explicit size selection copies
+the corresponding unit amount, ARS currency, concept and variant identity
+together while preserving quantity. The user can edit that amount. Reopening a
+row never reapplies a preset or replaces a saved amount/currency. The selected variant is retained in
 the approved concept wording. Legacy generic adapter rows may keep an unspecified
 size and their original name; never infer a variant from price or quantity.
-Other direct installation concepts start without a commercial price.
+Existing rows show their measure and offer "Guardar y agregar otra medida";
+this saves current edits and opens a new temporary row without replacing the
+existing one. Correcting the current variant's size is a separate field in
+"Mas opciones". The new direct form has one size selector, with no variant-reuse
+selector. Other direct installation concepts start without a commercial price.
 
 The direct price input remains enabled for included rows. Entering zero keeps
 included, clearing it means pending and a positive amount becomes priced. Saving
@@ -190,9 +194,10 @@ entered. Merely opening or cancelling its editor still creates nothing.
 Selecting an existing adapter variant for a new addition copies its identity
 and editable commercial snapshot, while the entered quantity is the amount to
 add. Explicit direct size selection supplies the stable approved preset identity
-and a unit presentation, preserving the editable amount rules above. Direct
-variant reuse is restricted to direct rows without catalogue provenance; other
-variants remain available in the full editor. A catalogue selection copies the product ID as a quotation-local reference;
+and a unit presentation, preserving the editable amount rules above. Variant
+reuse remains available in the full editor; the direct form identifies its
+approved variant through the size selector. A catalogue selection copies the
+product ID as a quotation-local reference;
 the size and presentation must still be declared explicitly. Future catalogue
 updates never change these quotation values. Manual variants receive their own
 identity; matching words alone do not identify the same product.

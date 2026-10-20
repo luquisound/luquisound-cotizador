@@ -442,14 +442,15 @@ export default function QuotationApp() {
     setRowEditing({ kind: 'new', row: { ...row, ...(audioCategory ? { audioCategory } : {}), ...(directConcept ? { concept: directConcept } : {}) } })
   }
 
-  function saveRow(row: QuotationRow) {
+  function saveRow(row: QuotationRow, addVariant = false) {
     if (!rowEditing) return
     if (rowEditing.kind === 'new' && isEmptyRow(row)) { closeRowEditor(); return }
     const current = quotationRef.current
     const result = saveQuotationRow(current, row, rowEditing.kind)
     if (!result.ok) { window.alert(result.error); return }
     if (updateQuotation({ ...current, rows: result.rows })) {
-      closeRowEditor(result.rowId, row.audioCategory)
+      if (addVariant && rowEditing.kind === 'existing' && row.audioCategory === 'adapters') addRow('extras', 'adapters')
+      else closeRowEditor(result.rowId, row.audioCategory)
       if (result.merged) setMessage('Se sumó la cantidad a la variante de aros existente.')
     }
   }

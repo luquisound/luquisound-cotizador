@@ -161,9 +161,12 @@ and any prepared image unchanged; unused concepts never enter the PNG.
 
 New "Aros adaptadores 3D" rows require an explicit size choice: 6.5 inches uses
 the user-approved ARS 25,000 unit price; 8 inches uses ARS 35,000 per unit.
-Size and quantity appear in the main form; quantity is not forced to a pair and
-the unit price remains editable. Choosing a size copies its price and ARS currency
-together, preserving quantity. Reopening preserves saved amounts and overrides.
+New rows show size and quantity in the main form; quantity is not forced to a
+pair and the unit price remains editable. Choosing a size copies its price and
+ARS currency together with the variant identity, preserving quantity. Reopening preserves saved
+amounts and overrides. Existing rows show their current measure and offer
+"Guardar y agregar otra medida" to save edits before opening a separate addition.
+Correcting the current row's size is available in "Mas opciones".
 Legacy generic adapter rows can keep an unspecified size; their size is never
 inferred from price. The other direct concepts start with a blank pending price.
 
