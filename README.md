@@ -170,7 +170,7 @@ Equipment keeps optional amplifier/DSP, additional amplifier, subwoofer and
 speaker groups, including several independent rows in one group. Installation
 offers four optional direct concepts: "Cables y accesorios", "Ficha bypass
 estereo", "Aros adaptadores 3D" and "Mano de obra de instalacion". The primary
-harness amount opens the price and selection modal described below. Opening another
+harness control opens the price and selection modal described below. Opening another
 unused concept prefills its name in a temporary draft and focuses its unit
 price. It supplies no included state. Cancel leaves the quotation
 and any prepared image unchanged; unused concepts never enter the PNG.
@@ -190,13 +190,17 @@ and quantity remain editable. Existing and recovered harnesses, reclassification
 and imported prices retain their values, currencies and pending states. Cables
 and labour start with a blank pending service price.
 
-The primary harness amount opens "Editar precio", with its editable price and
+The primary harness control opens "Editar precio", with its editable price and
 explicit inclusion checkbox together in that modal. The main template has no
-harness checkbox. A blank quotation shows a virtual ARS 70,000 suggestion without
-creating or charging a row; its modal starts unchecked. Save applies the price
+harness checkbox. An absent or unchecked harness appears as the same full-width
+"+ Ficha bypass estereo" action with a dashed separator as the other empty concepts,
+without an amount, detail or status subtitle. If no row exists, opening it creates
+only a temporary modal draft, unchecked at ARS 70,000. Saved rows retain their
+price and fields; the price remains editable inside the modal.
+Only a selected harness displays its actual amount in the template. Save applies the price
 and selection together, while Cancel discards both. Checking includes the harness;
 unchecking excludes it from totals and the PNG while retaining its saved price
-and other fields. The price action remains available while the harness is inactive.
+and other fields. The modal action remains available while the harness is inactive.
 Older harness rows without explicit checkbox metadata remain active with their
 original amounts. The checkbox does not mark a harness as included without charge.
 

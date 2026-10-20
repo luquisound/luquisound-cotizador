@@ -4,7 +4,6 @@ import {
   calculateRow,
   formatMoney,
   isEmptyRow,
-  parseMoney,
   parseQuantity,
 } from './calculation.ts'
 import type { CalculatedRow } from './calculation.ts'
@@ -15,9 +14,7 @@ import { exchangeRateDescription } from './exchange-quote'
 import { QUOTATION_GRAPHIC } from './graphic.ts'
 import { adapterVariantAmount, adapterVariantDescription, buildQuotationPresentation } from './presentation.ts'
 import type { AdapterPresentationBlock, QuotationPresentationItem } from './presentation.ts'
-import {
-  HARNESS_PRESET_CONCEPT, HARNESS_PRESET_CURRENCY, HARNESS_PRESET_UNIT_PRICE, isHarnessPresetRow,
-} from './harness-preset.ts'
+import { HARNESS_PRESET_CONCEPT, isHarnessPresetRow } from './harness-preset.ts'
 import './preview.css'
 import './exchange-ui.css'
 
@@ -85,32 +82,39 @@ function PreviewHarnessPreset({
   onEditPrice: () => void
   onEditRow: (rowId: string) => void
 }) {
-  const selected = row?.harnessSelection?.enabled ?? row !== undefined
-  const concept = row?.concept.trim() || HARNESS_PRESET_CONCEPT
-  const price = parseMoney(row?.unitPrice ?? HARNESS_PRESET_UNIT_PRICE)
-  const savedPrice = (row === undefined || row.priceState !== 'pending') && price.ok
-    ? formatMoney(price.cents, row?.currency ?? HARNESS_PRESET_CURRENCY) : 'Pendiente'
-  const calculated = selected && row ? calculateRow(row) : undefined
-  const amount = calculated
-    ? calculated.lineTotalCents === null || calculated.errors.length ? 'Pendiente'
-      : row?.priceState === 'included' ? 'Incluido' : formatMoney(calculated.lineTotalCents, row!.currency)
-    : savedPrice
-  const quantity = row === undefined ? undefined : parseQuantity(row.quantity)
-  const quantityLabel = row && (!quantity?.ok || quantity.thousandths !== 1000)
+  if (!row || row.harnessSelection?.enabled === false) {
+    return (
+      <button
+        type="button"
+        className="quotation-empty-row"
+        data-audio-category="harness"
+        data-row-price-id={row?.id}
+        onClick={onEditPrice}
+        aria-label={`Agregar ${HARNESS_PRESET_CONCEPT}`}
+      >
+        <span aria-hidden="true">+</span> {HARNESS_PRESET_CONCEPT}
+      </button>
+    )
+  }
+  const concept = row.concept.trim() || HARNESS_PRESET_CONCEPT
+  const calculated = calculateRow(row)
+  const amount = calculated.lineTotalCents === null || calculated.errors.length ? 'Pendiente'
+    : row.priceState === 'included' ? 'Incluido' : formatMoney(calculated.lineTotalCents, row.currency)
+  const quantity = parseQuantity(row.quantity)
+  const quantityLabel = !quantity.ok || quantity.thousandths !== 1000
     ? `Cantidad: ${row.quantity.trim() || 'pendiente'}` : ''
   return (
-    <div className={`quotation-row quotation-harness-preset${selected ? '' : ' quotation-harness-inactive'}`}>
+    <div className="quotation-row quotation-harness-preset">
       <div className="quotation-harness-description">
         <button type="button" className="quotation-harness-open" onClick={onEditPrice} aria-label={`Editar precio e inclusión de ${concept}`}>
           <span className="quotation-row-concept">{concept}</span>
         </button>
-        {row?.detail.trim() && <span className="quotation-row-detail">{row.detail.trim()}</span>}
+        {row.detail.trim() && <span className="quotation-row-detail">{row.detail.trim()}</span>}
         {quantityLabel && <span className="quotation-row-quantity">{quantityLabel}</span>}
-        {!selected && <span className="quotation-row-quantity">Sin seleccionar</span>}
-        {selected && row?.priceState === 'included' && <span className="quotation-row-quantity">Incluido sin cargo</span>}
-        {row && <button type="button" className="quotation-harness-edit" data-row-id={row.id} onClick={() => onEditRow(row.id)} aria-label={`Editar datos de ${concept}`}>Editar datos</button>}
+        {row.priceState === 'included' && <span className="quotation-row-quantity">Incluido sin cargo</span>}
+        <button type="button" className="quotation-harness-edit" data-row-id={row.id} onClick={() => onEditRow(row.id)} aria-label={`Editar datos de ${concept}`}>Editar datos</button>
       </div>
-      <button type="button" className={`quotation-row-price${amount === 'Pendiente' ? ' quotation-price-pending' : ''}`} data-row-price-id={row?.id} onClick={onEditPrice} aria-label={`Editar precio unitario de ${concept}. ${selected ? 'Importe de la fila' : 'Precio guardado'}: ${amount}`} title="Editar el precio y la selección de la ficha">
+      <button type="button" className={`quotation-row-price${amount === 'Pendiente' ? ' quotation-price-pending' : ''}`} data-row-price-id={row.id} onClick={onEditPrice} aria-label={`Editar precio unitario de ${concept}. Importe de la fila: ${amount}`} title="Editar el precio y la selección de la ficha">
         {amount}
       </button>
     </div>

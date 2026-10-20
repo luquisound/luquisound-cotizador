@@ -242,10 +242,6 @@
   touch-action: manipulation;
 }
 
-.quotation-harness-inactive .quotation-row-price {
-  color: var(--quotation-muted);
-}
-
 .quotation-harness-edit {
   align-self: flex-start;
   min-height: 48px;
