@@ -53,8 +53,15 @@ footer is 11 7358-1958 and @luquisound.ok. Fixed quotations remain in Figma with
 their existing dark headers; this app change does not modify those assets.
 
 Each row has separate edit buttons: its description opens the full row editor;
-its amount opens "Editar precio" with one unit-price or service-price field, fixed row currency,
-and Save/Cancel actions. The template amount remains quantity times unit price.
+its amount opens "Editar precio" with one unit-price or service-price field, an
+ARS/USD selector, and Save/Cancel actions. An explicit currency change converts the
+draft amount using the quotation's saved rate and the conversion rules below,
+including the persisted reference that prevents repeated-switch rounding drift.
+Blank stays blank and native zero needs no rate; nonzero amounts require a valid
+rate. A failed conversion keeps the draft amount and currency intact with an error;
+the user can still save those retained values. Save applies price, currency and any
+bypass selection together. Cancel or Escape discards all modal changes.
+The template amount remains quantity times unit price.
 Other row fields and provenance stay unchanged; fixed services use quantity one
 and the service amount described below. Manual price inputs accept up to 15
 characters, including separators. The Argentine money grammar, two-decimal and

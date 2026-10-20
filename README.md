@@ -116,8 +116,13 @@ in Figma retain their dark headers. Exchange-rate details stay beside the totals
 Previously stored notes are retained in recovery and PNG output.
 
 Each row has separate edit buttons: its description opens the full row editor;
-its amount opens "Editar precio" with one unit-price or service-price field, fixed row currency,
-and Save/Cancel actions. The template amount remains quantity times unit price.
+its amount opens "Editar precio" with one unit-price or service-price field, an
+ARS/USD selector, and Save/Cancel actions. Currency changes convert the draft amount
+using the quotation's saved rate and retain the exact conversion reference for
+repeated switches at the same rate. Blank stays blank and native zero needs no rate; other amounts
+require a valid rate. Failed conversion leaves the draft amount and currency intact
+and shows an error. Save applies price, currency and any bypass selection together;
+Cancel or Escape discards all modal changes. The template amount remains quantity times unit price.
 Other row fields and provenance stay unchanged; cables and labour use quantity
 one and a service amount as described below. Manual price inputs allow 15
 characters, including separators, while retaining the money-format and safe-cent

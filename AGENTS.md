@@ -127,6 +127,13 @@ inventory management, invoicing, and a general backend remain outside this stage
   accessible names, visible keyboard focus, and sufficient contrast.
   Add controls use their full row width and a minimum 48-pixel touch target
   without overlapping adjacent editing controls.
+- The shared "Editar precio" modal offers an ARS/USD selector using the open
+  quotation's saved rate and existing exact conversion helper. At the same saved rate,
+  retain its conversion reference across currency and bypass-selection changes; a manual price edit
+  resets the base. Blank stays blank and native zero needs no rate. Failed conversion
+  leaves price and currency intact with contextual feedback. Save commits price,
+  currency and selection together; Cancel or Escape discards the modal draft.
+  Price edits and currency changes must never select or deselect the bypass.
 - Support safe-area insets where needed and avoid horizontal overflow. Verify
   responsive changes at mobile and desktop widths.
 - Lucas's target device is an iPhone; initial hands-on testing uses Android.
