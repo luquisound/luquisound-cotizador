@@ -17,15 +17,20 @@
   },
   "packageManager": "npm@10.9.8",
   "dependencies": {
+    "@vercel/blob": "2.8.2",
     "@vercel/functions": "3.10.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "sax": "1.6.1",
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.20.5",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@types/sax": "1.2.7",
+    "@types/yauzl": "3.4.0",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",

@@ -446,6 +446,17 @@ public exception for the API. Importing or linking a Vercel
 project can trigger a deployment; perform those steps only after authorization.
 Review automatic deployment behavior before pushing changes.
 
+The daily Instaler observer runs separately and is disabled by default in code.
+A private standalone Apps Script uses the workshop account to read the Drive
+XLSX and post it to the protected Vercel receiver. The receiver reuses the XLSX
+reader, comparator and private Blob evidence; it cannot publish the catalogue.
+Google owns the only daily schedule; no Vercel cron or public Google web app is
+needed. The configured production environment records private observations only;
+the active catalogue remains unchanged. The
+[observation runbook](docs/INSTALER-OBSERVATION.md) records the verified deployment,
+first manual reading, configured daily trigger and remaining acceptance work.
+Scheduled operation and supplier freshness still need independent evidence.
+
 ## Handoff to Dot and Codex
 
 Read `AGENTS.md`, this README, `docs/PRODUCTO.md`, and the local project context
