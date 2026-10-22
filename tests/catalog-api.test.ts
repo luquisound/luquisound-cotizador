@@ -5,6 +5,8 @@ import type { CatalogServerConfig } from '../api/catalog.ts'
 import { parseCatalogImport } from '../src/features/quotation/catalog.ts'
 import type { CatalogImportDocument, CatalogImportItem } from '../src/features/quotation/catalog.ts'
 import { loadSharedCatalog, mergeSharedCatalog, SHARED_CATALOG_MAX_BYTES } from '../src/features/quotation/shared-catalog.ts'
+import { INSTALER_CATALOG_LAST_VALID_PATH } from '../src/server/instaler-catalog-store.ts'
+import { canSelectCatalogItem } from '../src/features/quotation/catalog-stock.ts'
 
 const CONFIG: CatalogServerConfig = {
   url: 'https://synthetic-store.private.blob.vercel-storage.com/catalog/latest.json',
@@ -329,4 +331,219 @@ test('invalid UTF-8, failed body streams and fetch exceptions are redacted', asy
     assertPrivate(response)
     assert.doesNotMatch(await response.text(), /synthetic_server_token|private\.blob|private error|private timeout|private body/)
   }
+})
+
+test('opted-in recovery validates the last valid catalogue after each active source failure', async () => {
+  const invalidActive: (typeof fetch)[] = [
+    async () => new Response('private upstream error', { status: 404 }),
+    async () => new Response('private upstream error', { status: 500 }),
+    async () => new Response('{', { headers: { 'Content-Type': 'application/json' } }),
+    async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } }),
+    fetchDocument(document([item(), item()])),
+    async () => new Response(new Uint8Array([0xff]), { headers: { 'Content-Type': 'application/json' } }),
+    async () => new Response('{}', {
+      headers: { 'Content-Type': 'application/json', 'Content-Length': String(SHARED_CATALOG_MAX_BYTES + 1) },
+    }),
+    async () => { throw new Error(`private failure ${CONFIG.token} ${CONFIG.url}`) },
+  ]
+  const backupUrl = new URL(`/${INSTALER_CATALOG_LAST_VALID_PATH}?cache=0`, CONFIG.url).href
+  for (const failActive of invalidActive) {
+    const urls: string[] = []
+    const fetcher: typeof fetch = async (input, options) => {
+      urls.push(String(input))
+      assert.equal(options?.method, 'GET')
+      assert.equal(new Headers(options?.headers).get('authorization'), `Bearer ${CONFIG.token}`)
+      assert.equal(new Headers(options?.headers).get('accept'), 'application/json')
+      assert.equal(new Headers(options?.headers).get('cookie'), null)
+      assert.equal(options?.cache, 'no-store')
+      assert.equal(options?.redirect, 'error')
+      assert.ok(options?.signal instanceof AbortSignal)
+      return urls.length === 1 ? failActive(input, options) : fetchDocument()(input, options)
+    }
+    const response = await serveCatalog(request(), { ...CONFIG, recoverLastValid: true }, fetcher)
+    assert.equal(response.status, 200)
+    assertPrivate(response)
+    assert.deepEqual(await response.json(), document())
+    assert.deepEqual(urls, [`${CONFIG.url}?cache=0`, backupUrl])
+    assert.equal(response.headers.get('x-luquisound-catalog-recovery'), 'last-valid')
+    assert.doesNotMatch(JSON.stringify([...response.headers]), /instaler-catalog|private\.blob|synthetic_server_token/)
+  }
+})
+
+test('recovery makes no extra request for valid active catalogues or when it is disabled', async () => {
+  let calls = 0
+  const valid: typeof fetch = async (...args) => {
+    calls += 1
+    return fetchDocument()(...args)
+  }
+  const activeResponse = await serveCatalog(request(), { ...CONFIG, recoverLastValid: true }, valid)
+  assert.equal(activeResponse.status, 200)
+  assert.equal(activeResponse.headers.get('x-luquisound-catalog-recovery'), null)
+  assert.equal(calls, 1)
+  for (const config of [CONFIG, { ...CONFIG, recoverLastValid: false }]) {
+    calls = 0
+    const response = await serveCatalog(request(), config, async () => {
+      calls += 1
+      return new Response('private failure', { status: 500 })
+    })
+    assert.equal(response.status, 502)
+    assert.equal(calls, 1)
+  }
+})
+
+test('invalid recovery configuration, backup collisions and unsupported methods never contact Blob', async () => {
+  for (const config of [
+    { ...CONFIG, token: 'bad\nheader', recoverLastValid: true },
+    { ...CONFIG, url: 'https://attacker.example/catalog.json', recoverLastValid: true },
+    { ...CONFIG, url: new URL(`/${INSTALER_CATALOG_LAST_VALID_PATH}`, CONFIG.url).href, recoverLastValid: true },
+    { ...CONFIG, url: new URL('/instaler-catalog/%6cast-valid.json', CONFIG.url).href, recoverLastValid: true },
+  ]) {
+    const response = await serveCatalog(request(), config, async () => assert.fail('Invalid recovery must not fetch.'))
+    assert.equal(response.status, 503)
+    assertPrivate(response)
+  }
+  const response = await serveCatalog(request('POST'), { ...CONFIG, recoverLastValid: true }, async () => assert.fail('POST must not fetch.'))
+  assert.equal(response.status, 405)
+})
+
+test('an invalid or unavailable backup never bypasses MIME, UTF-8, schema, identity or byte checks', async () => {
+  const invalidBackup: (typeof fetch)[] = [
+    async () => { throw new Error('private backup failure') },
+    async () => new Response('private backup failure', { status: 404 }),
+    async () => new Response(JSON.stringify(document()), { headers: { 'Content-Type': 'text/html' } }),
+    async () => new Response('{', { headers: { 'Content-Type': 'application/json' } }),
+    fetchDocument({ ...document(), version: 2 }),
+    fetchDocument(document([item({ supplier: '' })])),
+    fetchDocument(document([item(), item({ supplier: ' synthetic supplier ', sku: ' test-001 ' })])),
+    async () => new Response(new Uint8Array([0xff]), { headers: { 'Content-Type': 'application/json' } }),
+    async () => new Response('{}', {
+      headers: { 'Content-Type': 'application/json', 'Content-Length': String(SHARED_CATALOG_MAX_BYTES + 1) },
+    }),
+    async () => new Response('x'.repeat(SHARED_CATALOG_MAX_BYTES + 1), {
+      headers: { 'Content-Type': 'application/json' },
+    }),
+    async () => {
+      const upstream = new Response(JSON.stringify(document()), { headers: { 'Content-Type': 'application/json' } })
+      Object.defineProperty(upstream, 'redirected', { value: true })
+      return upstream
+    },
+  ]
+  for (const failBackup of invalidBackup) {
+    let calls = 0
+    const response = await serveCatalog(request(), { ...CONFIG, recoverLastValid: true }, async (...args) => {
+      calls += 1
+      return calls === 1 ? new Response('private active failure', { status: 500 }) : failBackup(...args)
+    })
+    assert.equal(response.status, 502)
+    assert.equal(calls, 2)
+    assertPrivate(response)
+    assert.doesNotMatch(await response.text(), /private active|private backup|last-valid|instaler-catalog|synthetic_server_token|TEST-001/)
+  }
+})
+
+test('a valid backup at exactly four MiB is sanitized before delivery', async () => {
+  const value = JSON.stringify({ ...document(), privateUnknown: 'discard' })
+  const padded = value + ' '.repeat(SHARED_CATALOG_MAX_BYTES - new TextEncoder().encode(value).byteLength)
+  let calls = 0
+  const response = await serveCatalog(request(), { ...CONFIG, recoverLastValid: true }, async () => {
+    calls += 1
+    return calls === 1 ? new Response('unavailable', { status: 500 }) : new Response(padded, {
+      headers: { 'Content-Type': 'application/json' },
+    })
+  })
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), document())
+})
+
+test('body timeout falls back with a fresh timeout and never hangs on the active stream', async (context) => {
+  const controller = new AbortController()
+  let timeouts = 0
+  context.mock.method(AbortSignal, 'timeout', () => ++timeouts === 1 ? controller.signal : new AbortController().signal)
+  let calls = 0
+  let cancelled = false
+  const pending = serveCatalog(request(), { ...CONFIG, recoverLastValid: true }, async () => {
+    calls += 1
+    if (calls > 1) return fetchDocument()(new Request('https://synthetic.example'))
+    return new Response(new ReadableStream<Uint8Array>({ cancel() { cancelled = true } }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+  })
+  controller.abort()
+  const response = await pending
+  assert.equal(response.status, 200)
+  assert.equal(calls, 2)
+  assert.equal(timeouts, 2)
+  assert.equal(cancelled, true)
+})
+
+test('the default handler enables recovery only in publish mode', async (context) => {
+  const previous = {
+    url: process.env.CATALOG_BLOB_URL, token: process.env.BLOB_READ_WRITE_TOKEN,
+    mode: process.env.INSTALER_CATALOG_MODE,
+  }
+  let calls = 0
+  context.mock.method(globalThis, 'fetch', async () => {
+    calls += 1
+    return calls % 2 === 1 ? new Response('unavailable', { status: 500 })
+      : new Response(JSON.stringify(document()), { headers: { 'Content-Type': 'application/json' } })
+  })
+  try {
+    process.env.CATALOG_BLOB_URL = CONFIG.url
+    process.env.BLOB_READ_WRITE_TOKEN = CONFIG.token
+    for (const mode of ['observe', 'publish', 'invalid']) {
+      process.env.INSTALER_CATALOG_MODE = mode
+      calls = 0
+      const response = await catalogApi.fetch(request())
+      assert.equal(response.status, mode === 'publish' ? 200 : 502)
+      assert.equal(calls, mode === 'publish' ? 2 : 1)
+    }
+  } finally {
+    for (const [key, value] of [
+      ['CATALOG_BLOB_URL', previous.url], ['BLOB_READ_WRITE_TOKEN', previous.token], ['INSTALER_CATALOG_MODE', previous.mode],
+    ] as const) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+})
+
+test('recovering stock three after a newer zero cannot reactivate protected products in a fresh browser', async () => {
+  const source = { document: 'synthetic-provider.xlsx', sheet: 'Precios', row: 2, date: null }
+  const stock = {
+    quantity: 3, checkedAt: '2026-10-22T12:00:00.000Z', validUntil: '2026-10-25T12:00:00.000Z', source,
+  }
+  const listPrice = {
+    amount: '123.45', currency: 'ARS' as const, basis: 'retail-list-before-discount' as const,
+    provisional: true, source,
+  }
+  const backup = document([
+    item({ supplier: 'Instaler', sku: 'LEGACY-001', stock, listPrice }),
+    item({ supplier: 'Other protected supplier', sku: 'CONTROLLED-001', availabilityPolicy: 'fresh-positive', stock, listPrice }),
+    item({ supplier: 'Independent supplier', sku: 'MANUAL-001' }),
+  ])
+  // The active catalogue is newer but unavailable; its last observation was stock zero.
+  let calls = 0
+  const response = await serveCatalog(request(), { ...CONFIG, recoverLastValid: true }, async () => {
+    calls += 1
+    return calls === 1 ? new Response('active catalogue unavailable', { status: 500 })
+      : new Response(JSON.stringify(backup), { headers: { 'Content-Type': 'application/json' } })
+  })
+  assert.equal(response.status, 200)
+  assertPrivate(response)
+  const recovered = await response.json() as CatalogImportDocument
+  const freshBrowser = mergeSharedCatalog([], recovered)
+  const now = Date.parse('2026-10-22T13:00:00.000Z')
+  assert.equal(canSelectCatalogItem(freshBrowser[0], now), false)
+  assert.equal(canSelectCatalogItem(freshBrowser[1], now), false)
+  assert.equal(canSelectCatalogItem(freshBrowser[2], now), true)
+  assert.equal(response.headers.get('x-luquisound-catalog-recovery'), 'last-valid')
+  assert.doesNotMatch(JSON.stringify([...response.headers]), /private\.blob|instaler-catalog|synthetic_server_token/)
+  for (const [index, original] of backup.items.entries()) {
+    const incoming = recovered.items[index]
+    assert.deepEqual({ ...incoming, selectionBlock: undefined }, { ...original, selectionBlock: undefined })
+    if (index < 2) assert.match(incoming.selectionBlock ?? '', /recuperado|recuperación/i)
+    else assert.equal(incoming.selectionBlock, undefined)
+  }
+  assert.equal(freshBrowser[0].stock?.quantity, 3)
+  assert.equal(freshBrowser[0].listPrice?.amount, '123.45')
 })

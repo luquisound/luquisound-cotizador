@@ -28,6 +28,8 @@ export interface CatalogSelectionStatus {
   age: CatalogStockAge
 }
 
+export const CATALOG_SOURCE_READING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
 export function getCatalogAvailabilityPolicy(
   item: Pick<CatalogItem, 'supplier' | 'availabilityPolicy'>,
 ): CatalogAvailabilityPolicy | undefined {
@@ -37,7 +39,7 @@ export function getCatalogAvailabilityPolicy(
   return supplier === 'instaler' ? 'fresh-positive' : undefined
 }
 
-function timestamp(value: unknown): value is string {
+export function isCatalogTimestamp(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false
   const parsed = new Date(value)
   return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value
@@ -51,12 +53,12 @@ export function parseCatalogStockFields(
   if (observation !== undefined && observation !== 'current' && observation !== 'historical') return null
   if (observation === 'historical') {
     // A historical observation may have no exact observation date or validity interval.
-    if (checkedAt !== null && !timestamp(checkedAt)) return null
-    if (validUntil !== null && !timestamp(validUntil)) return null
+    if (checkedAt !== null && !isCatalogTimestamp(checkedAt)) return null
+    if (validUntil !== null && !isCatalogTimestamp(validUntil)) return null
     if (validUntil !== null && (checkedAt === null || Date.parse(validUntil) <= Date.parse(checkedAt))) return null
     return { quantity, checkedAt, validUntil, observation }
   }
-  if (!timestamp(checkedAt) || !timestamp(validUntil) || Date.parse(validUntil) <= Date.parse(checkedAt)) return null
+  if (!isCatalogTimestamp(checkedAt) || !isCatalogTimestamp(validUntil) || Date.parse(validUntil) <= Date.parse(checkedAt)) return null
   return { quantity, checkedAt, validUntil, ...(observation === undefined ? {} : { observation }) }
 }
 
@@ -69,6 +71,13 @@ export function getCatalogStockObservation(
   const quantityState = fields.quantity === null ? 'unknown'
     : fields.quantity < 0 ? 'negative' : fields.quantity === 0 ? 'zero' : 'positive'
   if (!Number.isFinite(now)) return { quantityState, age: 'unknown' }
+  const readAt = snapshot.source?.readAt
+  if (readAt !== undefined) {
+    if (!isCatalogTimestamp(readAt)) return { quantityState, age: 'unknown' }
+    const readTime = Date.parse(readAt)
+    if (now < readTime) return { quantityState, age: 'future' }
+    if (now >= readTime + CATALOG_SOURCE_READING_MAX_AGE_MS) return { quantityState, age: 'stale' }
+  }
   if (fields.checkedAt !== null && now < Date.parse(fields.checkedAt)) return { quantityState, age: 'future' }
   if (fields.observation === 'historical') return { quantityState, age: 'historical' }
   if (fields.validUntil === null) return { quantityState, age: 'unknown' }

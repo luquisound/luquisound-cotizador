@@ -296,7 +296,10 @@ continues to extract only catalogue data.
 All local data belongs to the current browser and origin. It is not uploaded,
 synchronized between devices, or encrypted by the app. Clearing browser data,
 private browsing, device loss, or an origin change can make it unavailable.
-The private common catalogue is fetched on startup when configured.
+The private common catalogue loads on startup and once per daily cycle at 09:00
+Buenos Aires while visible and online. Return and reconnection check only whether
+that daily cycle is due. Failures preserve the last valid copy; there is no
+catalogue refresh or retry button.
 
 Catalogue management is available from "Opciones" > "Mi catalogo" and from a storage-error
 notice, with private JSON backup and import. Product selection stays in the row editor. Backups
@@ -448,11 +451,15 @@ Review automatic deployment behavior before pushing changes.
 
 The daily Instaler observer runs separately and is disabled by default in code.
 A private standalone Apps Script uses the workshop account to read the Drive
-XLSX and post it to the protected Vercel receiver. The receiver reuses the XLSX
-reader, comparator and private Blob evidence; it cannot publish the catalogue.
+XLSX and post it to the protected Vercel receiver. The observer reuses the XLSX
+reader, comparator and private Blob evidence. A separate, explicitly enabled
+publisher can consume its committed reading and conditionally update the private
+catalogue, preserving local manual prices and quotation values. Reviewed private
+correspondences, blocked absent products and a seven-day reading-age limit keep
+source availability separate from commercial freshness. See the
+[publication and recovery contract](docs/INSTALER-CATALOG-PUBLICATION.md).
 Google owns the only daily schedule; no Vercel cron or public Google web app is
-needed. The configured production environment records private observations only;
-the active catalogue remains unchanged. The
+needed. The original activation checkpoint records observations only. The
 [observation runbook](docs/INSTALER-OBSERVATION.md) records the verified deployment,
 first manual reading, configured daily trigger and remaining acceptance work.
 Scheduled operation and supplier freshness still need independent evidence.

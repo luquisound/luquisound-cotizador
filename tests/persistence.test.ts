@@ -6,6 +6,9 @@ import { loadWorkspace, parseWorkspace, saveWorkspace, serializeWorkspace, STORA
 import type { StorageAdapter } from '../src/features/quotation/persistence.ts'
 import type { BlueDollarQuote } from '../src/features/quotation/exchange-quote.ts'
 import { AUDIO_CATEGORIES } from '../src/features/quotation/audio-categories.ts'
+import {
+  loadCatalog, loadCurrentQuotation, parseCatalogBackup, saveCatalog, saveCurrentQuotation, serializeCatalogBackup,
+} from '../src/features/quotation/working-storage.ts'
 
 function createFixture(): Workspace {
   return {
@@ -374,6 +377,69 @@ test('catalogue metadata and independent historical price sources roundtrip exac
   const storage = createMemoryStorage()
   assert.equal(saveWorkspace(storage, workspace).ok, true)
   assert.deepEqual(loadWorkspace(storage).workspace, original)
+})
+
+test('reading timestamps survive catalogue storage, backups and current-quotation recovery without changing dates or prices', () => {
+  const workspace = createMetadataFixture()
+  const readAt = '2026-10-22T12:34:56.789Z'
+  const item = workspace.catalog[0]!
+  item.source = { ...item.source!, sheet: 'Example', readAt }
+  item.stock = {
+    quantity: 3, checkedAt: null, validUntil: null, observation: 'historical',
+    source: { document: 'synthetic-stock.xlsx', date: null, readAt },
+  }
+  item.listPrice = {
+    amount: '123.45', currency: 'ARS', basis: 'retail-list-before-discount', provisional: true,
+    source: { document: 'synthetic-list.xlsx', date: null, readAt },
+  }
+  item.referencePrices![0]!.source = { ...item.referencePrices![0]!.source!, readAt }
+  workspace.quotations[0]!.rows[0]!.provenance = {
+    catalogItemId: item.id, source: structuredClone(item.source), stock: structuredClone(item.stock),
+    listPrice: structuredClone(item.listPrice), originalUnitPrice: '10,50', originalCurrency: 'ARS',
+    priceBasis: 'manual', availabilityPolicy: 'historical-positive',
+  }
+  const snapshot = structuredClone(workspace)
+  assert.deepEqual(parseWorkspace(serializeWorkspace(workspace)), snapshot)
+  assert.deepEqual(parseCatalogBackup(serializeCatalogBackup(workspace.catalog)), snapshot.catalog)
+  const values = new Map([[STORAGE_KEY, 'legacy bytes preserved']])
+  const storage: StorageAdapter = {
+    getItem(key) { return values.get(key) ?? null },
+    setItem(key, value) { values.set(key, value) },
+  }
+  assert.equal(saveCatalog(storage, workspace.catalog).ok, true)
+  assert.deepEqual(loadCatalog(storage).catalog, snapshot.catalog)
+  assert.equal(saveCurrentQuotation(storage, workspace.quotations[0]!).ok, true)
+  assert.deepEqual(loadCurrentQuotation(storage).quotation, snapshot.quotations[0])
+  assert.equal(values.get(STORAGE_KEY), 'legacy bytes preserved')
+  assert.deepEqual(workspace, snapshot)
+})
+
+test('malformed reading timestamps cannot be discarded or overwrite valid stored catalogue metadata', () => {
+  const workspace = createMetadataFixture()
+  const item = workspace.catalog[0]!
+  const original = serializeCatalogBackup(workspace.catalog)
+  const values = new Map<string, string>()
+  const storage: StorageAdapter = {
+    getItem(key) { return values.get(key) ?? null },
+    setItem(key, value) { values.set(key, value) },
+  }
+  assert.equal(saveCatalog(storage, workspace.catalog).ok, true)
+  const stored = new Map(values)
+  for (const readAt of [null, 0, '', 'invalid', '2026-10-22', '2026-10-22T12:34:56Z',
+    '2026-02-30T12:34:56.789Z', '2026-10-22T09:34:56.789-03:00', ' 2026-10-22T12:34:56.789Z']) {
+    const source = { document: 'synthetic.xlsx', date: null, readAt }
+    for (const change of [
+      { source }, { stock: { ...stockFixture(), source } },
+      { referencePrices: [{ ...item.referencePrices![0], source }] },
+      { listPrice: { amount: '123.45', currency: 'ARS', basis: 'retail-list-before-discount', provisional: true, source } },
+    ]) {
+      const invalid = { ...workspace, catalog: [{ ...item, ...change }] }
+      rejectBackup(invalid)
+      assert.equal(saveCatalog(storage, invalid.catalog as CatalogItem[]).ok, false)
+      assert.deepEqual(values, stored)
+    }
+  }
+  assert.equal(serializeCatalogBackup(workspace.catalog), original)
 })
 
 test('stock snapshots preserve zero, unknown quantity, expired timestamps and independent sources exactly', () => {

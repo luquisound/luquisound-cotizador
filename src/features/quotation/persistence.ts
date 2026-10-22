@@ -3,7 +3,7 @@ import {
   CATALOG_REFERENCE_MAX_PRICES, parseCatalogAvailabilityPolicy, parseCatalogListPrice,
   parseCatalogSelectionBlock,
 } from './catalog.ts'
-import { parseCatalogStockFields } from './catalog-stock.ts'
+import { isCatalogTimestamp, parseCatalogStockFields } from './catalog-stock.ts'
 import { parseRowProvenance } from './row-provenance.ts'
 import { parseExchangeRate } from './exchange.ts'
 import { readStoredBlueDollarQuote } from './exchange-quote.ts'
@@ -65,9 +65,7 @@ function readIdentifier(value: unknown, identifiers?: Set<string>): string {
 
 function readTimestamp(value: unknown): string {
   const timestamp = readString(value, 24)
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(timestamp)) invalidBackup()
-  const date = new Date(timestamp)
-  if (!Number.isFinite(date.getTime()) || date.toISOString() !== timestamp) invalidBackup()
+  if (!isCatalogTimestamp(timestamp)) invalidBackup()
   return timestamp
 }
 
@@ -198,6 +196,7 @@ function readCatalogSource(value: unknown): CatalogSource {
     ...(source.kind === undefined ? {} : { kind: source.kind }),
     ...(version === undefined ? {} : { version }),
     ...(source.checksum === undefined ? {} : { checksum: source.checksum as string }),
+    ...(source.readAt === undefined ? {} : { readAt: readTimestamp(source.readAt) }),
   }
 }
 

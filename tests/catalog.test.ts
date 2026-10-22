@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES, CATALOG_REPLACEMENT_MAX_DOCUMENTS,
+  applyCatalogImport, buildCatalogImportPreview, CATALOG_IMPORT_MAX_BYTES, CATALOG_REFRESH_MAX_SUPPLIERS,
+  CATALOG_REPLACEMENT_MAX_DOCUMENTS,
   getCatalogCategories, getCatalogChoices, getCatalogDefaultCurrency, parseCatalogImport, queryCatalog,
 } from '../src/features/quotation/catalog.ts'
 import type {
@@ -87,6 +88,65 @@ test('source and reference dates retain month-only precision without inventing a
   const parsed = parse(document([incoming]))
   assert.equal(parsed.items[0].source?.date, '2026-03')
   assert.equal(parsed.items[0].referencePrices[0].date, '2026-02')
+})
+
+test('source reading timestamps remain separate from unknown supplier and stock observation dates', () => {
+  const source: CatalogSource = { document: 'synthetic.xlsx', date: null, readAt: '2026-10-22T12:34:56.789Z' }
+  const input = document([item({
+    source,
+    stock: { quantity: 3, checkedAt: null, validUntil: null, observation: 'historical', source },
+    listPrice: { amount: '123.45', currency: 'ARS', basis: 'retail-list-before-discount', provisional: true, source },
+    referencePrices: [{ amount: '123.45', currency: 'ARS', role: 'list', date: null, historical: true, source }],
+  })])
+  const parsed = parse(input)
+  const [entry] = entries(parsed.items)
+  for (const provenance of [entry.source, entry.stock?.source, entry.listPrice?.source, entry.referencePrices?.[0].source]) {
+    assert.deepEqual(provenance, source)
+    assert.notEqual(provenance, source)
+    assert.equal(provenance?.date, null)
+  }
+  assert.equal(entry.stock?.checkedAt, null)
+  assert.equal(entry.stock?.validUntil, null)
+  assert.equal(entry.stock?.observation, 'historical')
+  assert.equal(Object.hasOwn(entries()[0].source!, 'readAt'), false)
+})
+
+test('source reading timestamps reject malformed or noncanonical dates at every provenance boundary', () => {
+  for (const readAt of [null, 0, '', '2026-10-22', 'invalid', '2026-10-22T12:34:56Z',
+    '2026-10-22T09:34:56.789-03:00', '2026-02-30T12:34:56.789Z', ' 2026-10-22T12:34:56.789Z']) {
+    const source = { document: 'synthetic.xlsx', date: null, readAt }
+    for (const changes of [
+      { source }, { stock: { ...stock(3), source } },
+      { listPrice: { amount: '123.45', currency: 'ARS', basis: 'retail-list-before-discount', provisional: true, source } },
+      { referencePrices: [{ amount: '123.45', currency: 'ARS', role: 'list', date: null, historical: true, source }] },
+    ]) {
+      assert.throws(() => parse({ ...document(), items: [{ ...item(), ...changes }] }), /formato válido/)
+    }
+  }
+})
+
+test('a new reading timestamp alone updates provider metadata and reapplying that reading is idempotent', () => {
+  const source: CatalogSource = { document: 'synthetic.xlsx', date: null, readAt: '2026-10-22T12:34:56.789Z' }
+  const next = { ...source, readAt: '2026-10-23T12:34:56.789Z' }
+  const price = { amount: '123.45', currency: 'ARS' as const, basis: 'retail-list-before-discount' as const, provisional: true }
+  const variants: [Partial<CatalogImportItem>, Partial<CatalogImportItem>][] = [
+    [{ source }, { source: next }],
+    [{ stock: { ...stock(3), source } }, { stock: { ...stock(3), source: next } }],
+    [{ listPrice: { ...price, source } }, { listPrice: { ...price, source: next } }],
+  ]
+  for (const [previous, current] of variants) {
+    const existing = entries([item({ referencePrices: [], ...previous })])
+    existing[0].unitPrice = '0'
+    existing[0].currency = 'USD'
+    const incoming = document([item({ referencePrices: [], ...current })])
+    const preview = buildCatalogImportPreview(existing, incoming)
+    assert.equal(preview.summary.updates, 1)
+    const [updated] = applyCatalogImport(existing, preview, { allowUpdates: true })
+    assert.equal(updated.id, existing[0].id)
+    assert.equal(updated.unitPrice, '0')
+    assert.equal(updated.currency, 'USD')
+    assert.equal(buildCatalogImportPreview([updated], incoming).summary.updates, 0)
+  }
 })
 
 test('names-only catalogues default optional text and references without inventing provenance', () => {
@@ -463,6 +523,180 @@ test('replacement records require primary provenance and complete product keys b
   const snapshot = structuredClone(existing)
   assert.throws(() => buildCatalogImportPreview(existing, replacement([item({ sku: '' })])), /formato válido/)
   assert.deepEqual(existing, snapshot)
+})
+
+test('supplier refresh scopes are optional, bounded and unique after supplier-key normalization', () => {
+  assert.equal(parse(document()).refreshSuppliers, undefined)
+  assert.deepEqual(parse({ ...document(), refreshSuppliers: [' Synthetic   Supplier ', 'Other supplier'] }).refreshSuppliers,
+    ['Synthetic   Supplier', 'Other supplier'])
+  const maximum = Array.from({ length: CATALOG_REFRESH_MAX_SUPPLIERS }, (_, index) => `Synthetic supplier ${index}`)
+  assert.deepEqual(parse({ ...document(), refreshSuppliers: maximum }).refreshSuppliers, maximum)
+  for (const invalid of [null, 'Synthetic Supplier', [], [''], ['   '], [12], ['X'.repeat(201)],
+    ['Synthetic Supplier', ' SYNTHETIC   SUPPLIER '], [...maximum, 'One too many']]) {
+    assert.throws(() => parse({ ...document(), refreshSuppliers: invalid }), /formato válido/)
+  }
+})
+
+test('supplier refresh requires complete incoming keys only inside its explicit normalized scope', () => {
+  for (const sku of ['', '   ', undefined]) {
+    const incoming = { ...document([item({ supplier: ' SYNTHETIC   SUPPLIER ', sku })]), refreshSuppliers: ['Synthetic Supplier'] }
+    assert.throws(() => parse(incoming), /formato válido/)
+    assert.throws(() => buildCatalogImportPreview([], incoming), /formato válido/)
+  }
+  assert.doesNotThrow(() => parse({
+    ...document([item({ source: undefined }), item({ supplier: 'Other supplier', sku: '' })]),
+    refreshSuppliers: ['Synthetic Supplier'],
+  }))
+  assert.doesNotThrow(() => parse({ ...document([]), refreshSuppliers: ['Synthetic Supplier'] }))
+})
+
+test('Instaler reading metadata preserves canonical timestamps and checksums without claiming supplier freshness', () => {
+  const observation = {
+    readAt: '2026-10-22T12:34:56.789Z', checksum: 'a1'.repeat(32), supplierFreshnessEstablished: false as const,
+  }
+  const incoming: CatalogImportDocument = {
+    ...document([item({ stock: stock(3) })]), instalerObservation: observation,
+  }
+  const parsed = parse({ ...incoming, instalerObservation: { ...observation, arbitrary: 'discard' } })
+  assert.deepEqual(parsed.instalerObservation, observation)
+  assert.notEqual(parsed.instalerObservation, observation)
+  assert.deepEqual(parsed.items[0].stock, stock(3))
+  assert.equal(parsed.items[0].source?.date, '2024-02-29')
+  assert.equal(parse(document()).instalerObservation, undefined)
+  const existing = entries(incoming.items)
+  const preview = buildCatalogImportPreview(existing, parsed)
+  assert.equal(preview.summary.updates, 0)
+  assert.deepEqual(applyCatalogImport(existing, preview, { allowUpdates: true }), existing)
+})
+
+test('Instaler reading metadata rejects noncanonical timestamps, malformed hashes and freshness claims', () => {
+  const observation = {
+    readAt: '2026-10-22T12:34:56.789Z', checksum: 'a1'.repeat(32), supplierFreshnessEstablished: false,
+  }
+  const invalidReadAt: unknown[] = [undefined, null, 0, '', '2026-10-22', 'not a date',
+    '2026-10-22T12:34:56Z', '2026-10-22T09:34:56.789-03:00', '2026-02-30T12:34:56.789Z',
+    '2026-10-22T12:34:56.789Z ', ' 2026-10-22T12:34:56.789Z', '999999-10-22T12:34:56.789Z']
+  const invalidChecksums: unknown[] = [undefined, null, 12, '', 'A1'.repeat(32), 'g'.repeat(64),
+    'a'.repeat(63), 'a'.repeat(65), ` ${'a'.repeat(64)}`]
+  const invalid: unknown[] = [null, [], 'reading', {},
+    ...invalidReadAt.map((readAt) => ({ ...observation, readAt })),
+    ...invalidChecksums.map((checksum) => ({ ...observation, checksum })),
+    ...[undefined, null, true, 'false', 0].map((supplierFreshnessEstablished) => ({ ...observation, supplierFreshnessEstablished })),
+  ]
+  for (const instalerObservation of invalid) {
+    const incoming = { ...document(), instalerObservation }
+    assert.throws(() => parse(incoming), /formato válido/)
+    assert.throws(() => buildCatalogImportPreview([], incoming as CatalogImportDocument), /formato válido/)
+  }
+})
+
+test('supplier refresh clears omitted provider metadata while preserving manual prices, identity and detail', () => {
+  const metadata: Partial<CatalogImportItem> = {
+    stock: stock(3), listPrice: {
+      amount: '123.45', currency: 'ARS', basis: 'retail-list-before-discount', provisional: true,
+      source: { document: 'synthetic-list.xlsx', date: null },
+    }, availabilityPolicy: 'historical-positive', selectionBlock: 'Synthetic pending review',
+  }
+  const existing = entries(['A', 'B', 'C'].map((sku) => item({ ...metadata, sku })))
+  for (const [index, amount] of ['123,45', '0', ''].entries()) {
+    existing[index].unitPrice = amount
+    existing[index].currency = 'USD'
+    existing[index].detail = `Manual detail ${index}`
+  }
+  const snapshot = structuredClone(existing)
+  const incoming: CatalogImportDocument = {
+    ...document(existing.map((entry) => item({ sku: entry.sku, description: '', name: `Updated ${entry.sku}` }))),
+    refreshSuppliers: [' SYNTHETIC   SUPPLIER '],
+  }
+  const preview = buildCatalogImportPreview(existing, incoming)
+  assert.equal(preview.summary.updates, 3)
+  assert.equal(preview.summary.removals, 0)
+  const result = applyCatalogImport(existing, preview, { allowUpdates: true })
+  for (const [index, entry] of result.entries()) {
+    assert.equal(entry.id, snapshot[index].id)
+    assert.equal(entry.unitPrice, snapshot[index].unitPrice)
+    assert.equal(entry.currency, 'USD')
+    assert.equal(entry.detail, snapshot[index].detail)
+    assert.equal(entry.concept, `Updated ${entry.sku}`)
+    for (const field of ['stock', 'listPrice', 'availabilityPolicy', 'selectionBlock']) {
+      assert.equal(Object.hasOwn(entry, field), false)
+    }
+  }
+  assert.equal(buildCatalogImportPreview(result, incoming).summary.updates, 0)
+  assert.deepEqual(existing, snapshot)
+})
+
+test('supplier refresh replaces each supplied field without retaining omitted siblings or mutating evidence', () => {
+  const initial = item({
+    stock: stock(3), listPrice: {
+      amount: '123.45', currency: 'ARS', basis: 'retail-list-before-discount', provisional: true,
+      source: { document: 'synthetic-list.xlsx', date: null },
+    }, availabilityPolicy: 'historical-positive', selectionBlock: 'Synthetic pending review',
+  })
+  const existing = entries([initial])
+  const updates: Partial<CatalogImportItem>[] = [
+    { stock: stock(null) }, { stock: stock(0) },
+    { listPrice: { ...initial.listPrice!, amount: '0', currency: 'USD' } },
+    { availabilityPolicy: 'fresh-positive' }, { selectionBlock: 'Synthetic absent product' },
+  ]
+  for (const change of updates) {
+    const incoming: CatalogImportDocument = {
+      ...document([item(change)]), refreshSuppliers: ['Synthetic Supplier'],
+    }
+    const snapshot = structuredClone(incoming)
+    const preview = buildCatalogImportPreview(existing, incoming)
+    const [result] = applyCatalogImport(existing, preview, { allowUpdates: true })
+    for (const field of ['stock', 'listPrice', 'availabilityPolicy', 'selectionBlock'] as const) {
+      assert.deepEqual(result[field], change[field])
+      assert.equal(Object.hasOwn(result, field), Object.hasOwn(change, field))
+    }
+    if (result.stock) result.stock.source.row = 99
+    if (result.listPrice) result.listPrice.source.document = 'synthetic-mutated.xlsx'
+    assert.deepEqual(incoming, snapshot)
+  }
+  assert.deepEqual(existing[0].stock, initial.stock)
+  assert.deepEqual(existing[0].listPrice, initial.listPrice)
+})
+
+test('supplier refresh never removes missing products and leaves other suppliers on the additive path', () => {
+  const existing = entries([
+    item({ sku: 'PRESENT', stock: stock(3), selectionBlock: 'Previous block' }),
+    item({ sku: 'ABSENT', stock: stock(3) }),
+    item({ supplier: 'Other supplier', stock: stock(3), selectionBlock: 'Other block' }),
+  ])
+  const snapshot = structuredClone(existing)
+  const incoming: CatalogImportDocument = {
+    ...document([item({ sku: 'PRESENT' }), item({ supplier: 'Other supplier' })]),
+    refreshSuppliers: ['Synthetic Supplier'],
+  }
+  const preview = buildCatalogImportPreview(existing, incoming)
+  assert.equal(preview.replacesSources, false)
+  assert.deepEqual(preview.removals, [])
+  const result = applyCatalogImport(existing, preview, { allowUpdates: true })
+  assert.equal(result[0].stock, undefined)
+  assert.equal(result[0].selectionBlock, undefined)
+  assert.deepEqual(result.slice(1), snapshot.slice(1))
+  const empty = { ...document([]), refreshSuppliers: ['Synthetic Supplier'] }
+  assert.deepEqual(applyCatalogImport(existing, buildCatalogImportPreview(existing, empty), { allowUpdates: true }), snapshot)
+  assert.deepEqual(existing, snapshot)
+})
+
+test('supplier refresh does not alter explicit source replacement semantics when both scopes are present', () => {
+  const existing = entries([item({ sku: 'RETAINED', stock: stock(3) }), item({ sku: 'RETIRED' })])
+  existing[0].unitPrice = '0'
+  existing[0].currency = 'USD'
+  const incoming: CatalogImportDocument = {
+    ...replacement([item({ sku: 'RETAINED', description: '' })]), refreshSuppliers: ['Synthetic Supplier'],
+  }
+  const preview = buildCatalogImportPreview(existing, incoming)
+  assert.equal(preview.replacesSources, true)
+  assert.equal(preview.removals.length, 1)
+  const [result] = applyCatalogImport(existing, preview, { allowUpdates: true })
+  assert.equal(result.id, existing[0].id)
+  assert.equal(result.unitPrice, '0')
+  assert.equal(result.currency, 'USD')
+  assert.equal(result.detail, '')
+  assert.equal(Object.hasOwn(result, 'stock'), false)
 })
 
 test('replacement removes only absent keyed entries whose primary document exactly matches its explicit scope', () => {

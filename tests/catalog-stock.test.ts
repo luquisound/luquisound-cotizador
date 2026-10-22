@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { classifyCatalogStock, parseCatalogStockFields } from '../src/features/quotation/catalog-stock.ts'
+import {
+  CATALOG_SOURCE_READING_MAX_AGE_MS, classifyCatalogStock, getCatalogSelectionStatus,
+  getCatalogStockObservation, parseCatalogStockFields,
+} from '../src/features/quotation/catalog-stock.ts'
 import type { CatalogStockSnapshot } from '../src/features/quotation/catalog-stock.ts'
+import type { CatalogItem } from '../src/features/quotation/model.ts'
 
 const checkedAt = '2026-10-17T10:00:00.000Z'
 const validUntil = '2026-10-17T10:15:00.000Z'
@@ -91,4 +95,78 @@ test('classification does not mutate observations or manufacture a new freshness
   assert.deepEqual(stock, original)
   assert.equal(classifyCatalogStock({ ...stock, quantity: -1 }, now), 'negative')
   assert.equal(classifyCatalogStock({ ...stock, checkedAt: '' }, now), 'unknown')
+})
+
+test('an explicit reading expires historical stock at exactly seven days without changing supplier freshness', () => {
+  const stock: CatalogStockSnapshot = {
+    quantity: 3, checkedAt: null, validUntil: null, observation: 'historical',
+    source: { document: 'Synthetic private source', date: null, readAt: checkedAt },
+  }
+  const original = structuredClone(stock)
+  const readTime = Date.parse(checkedAt)
+  const product: CatalogItem = {
+    id: 'synthetic-product', concept: 'Synthetic product', detail: '', section: 'equipment',
+    currency: 'USD', unitPrice: '0', supplier: 'Synthetic supplier', availabilityPolicy: 'historical-positive', stock,
+  }
+  for (const age of [0, 6 * 24 * 60 * 60 * 1000, CATALOG_SOURCE_READING_MAX_AGE_MS - 1]) {
+    assert.deepEqual(getCatalogStockObservation(stock, readTime + age), { quantityState: 'positive', age: 'historical' })
+    const status = getCatalogSelectionStatus(product, readTime + age)
+    assert.equal(status.selectable, true)
+    assert.equal(status.provisional, true)
+    assert.equal(status.reason, 'historical-positive')
+  }
+  for (const age of [CATALOG_SOURCE_READING_MAX_AGE_MS, CATALOG_SOURCE_READING_MAX_AGE_MS + 1]) {
+    assert.deepEqual(getCatalogStockObservation(stock, readTime + age), { quantityState: 'positive', age: 'stale' })
+    assert.equal(classifyCatalogStock(stock, readTime + age), 'stale')
+    const status = getCatalogSelectionStatus(product, readTime + age)
+    assert.equal(status.selectable, false)
+    assert.equal(status.reason, 'stale-stock')
+  }
+  assert.deepEqual(stock, original)
+  assert.equal(product.unitPrice, '0')
+  assert.equal(product.currency, 'USD')
+})
+
+test('future and malformed reading timestamps cannot qualify historical stock', () => {
+  const historical: CatalogStockSnapshot = {
+    quantity: 3, checkedAt: null, validUntil: null, observation: 'historical', source: snapshot(3).source,
+  }
+  const future = { ...historical, source: { ...historical.source, readAt: new Date(now + 1).toISOString() } }
+  assert.deepEqual(getCatalogStockObservation(future, now), { quantityState: 'positive', age: 'future' })
+  assert.equal(classifyCatalogStock(future, now), 'unknown')
+  for (const readAt of [null, 0, '', 'invalid', '2026-10-17', '2026-10-17T10:00:00Z',
+    '2026-02-30T10:00:00.000Z', ' 2026-10-17T10:00:00.000Z']) {
+    const malformed = { ...historical, source: { ...historical.source, readAt } } as unknown as CatalogStockSnapshot
+    assert.deepEqual(getCatalogStockObservation(malformed, now), { quantityState: 'positive', age: 'unknown' })
+    assert.equal(classifyCatalogStock(malformed, now), 'unknown')
+  }
+})
+
+test('reading timestamps do not extend current stock validity or approve fresh-only historical products', () => {
+  const stock = { ...snapshot(3), source: { ...snapshot(3).source, readAt: checkedAt } }
+  assert.equal(getCatalogStockObservation(stock, Date.parse(validUntil)).age, 'stale')
+  const historical: CatalogItem = {
+    id: 'synthetic-product', concept: 'Synthetic product', detail: '', section: 'equipment',
+    currency: 'ARS', unitPrice: '1', availabilityPolicy: 'fresh-positive', stock: {
+      ...stock, checkedAt: null, validUntil: null, observation: 'historical',
+    },
+  }
+  assert.equal(getCatalogSelectionStatus(historical, now).selectable, false)
+  assert.equal(getCatalogStockObservation(historical.stock, now).age, 'historical')
+})
+
+test('legacy historical stock without a reading timestamp and independent manual products retain their policies', () => {
+  const stock: CatalogStockSnapshot = {
+    quantity: 3, checkedAt: null, validUntil: null, observation: 'historical', source: snapshot(3).source,
+  }
+  const muchLater = now + 30 * 24 * 60 * 60 * 1000
+  assert.deepEqual(getCatalogStockObservation(stock, muchLater), { quantityState: 'positive', age: 'historical' })
+  const manual: CatalogItem = {
+    id: 'synthetic-manual', concept: 'Synthetic manual product', detail: '', section: 'equipment',
+    currency: 'ARS', unitPrice: '0', stock: { ...stock, source: { ...stock.source, readAt: checkedAt } },
+  }
+  const status = getCatalogSelectionStatus(manual, muchLater)
+  assert.equal(status.age, 'stale')
+  assert.equal(status.selectable, true)
+  assert.equal(status.reason, 'manual')
 })

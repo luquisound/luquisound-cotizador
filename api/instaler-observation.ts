@@ -12,6 +12,8 @@ import {
 import {
   createInstalerObservationStore, type InstalerObservationStore,
 } from '../src/server/instaler-observation-store.ts'
+import { createInstalerCatalogStore, type InstalerCatalogStore } from '../src/server/instaler-catalog-store.ts'
+import { publishInstalerCatalog, InstalerPublicationError } from '../src/server/instaler-publication.ts'
 
 export interface ObservationServerConfig {
   environment?: string
@@ -21,6 +23,8 @@ export interface ObservationServerConfig {
   expectedEmail?: string
   fileId?: string
   catalogUrl?: string
+  publicationMode?: string
+  catalogToken?: string
 }
 
 interface ObservationDependencies {
@@ -28,6 +32,7 @@ interface ObservationDependencies {
   read?: (upload: InstalerObservationUpload) => Promise<ObservationSnapshot>
   now?: () => Date
   log?: (event: Record<string, unknown>) => void
+  publicationStore?: InstalerCatalogStore
 }
 
 function response(value: unknown, status = 200): Response {
@@ -53,7 +58,7 @@ async function readSnapshot(upload: InstalerObservationUpload): Promise<Observat
   }, source.metadata, source.readAt)
 }
 
-/** This endpoint can only record observations. It has no catalogue publication operation. */
+/** Observation stays read-only to the catalogue; a separately enabled publisher consumes its committed reading. */
 export async function serveInstalerObservation(
   request: Request, config: ObservationServerConfig, dependencies: ObservationDependencies = {},
 ): Promise<Response> {
@@ -72,8 +77,29 @@ export async function serveInstalerObservation(
     const now = dependencies.now ?? (() => new Date())
     const upload = await readInstalerObservationUpload(request, binding, now())
     const store = dependencies.store ?? createInstalerObservationStore(config.blobToken, config.catalogUrl)
-    const result = await runInstalerObservation(binding, store, () => (dependencies.read ?? readSnapshot)(upload), now)
+    let snapshot: ObservationSnapshot | undefined
+    const result = await runInstalerObservation(binding, store, async () => {
+      snapshot = await (dependencies.read ?? readSnapshot)(upload)
+      return snapshot
+    }, now)
     dependencies.log?.({ event: 'instaler-observation', ...result })
+    if (snapshot && (result.status === 'baseline' || result.status === 'changed' || result.status === 'unchanged')
+      && config.publicationMode && config.publicationMode !== 'disabled') {
+      try {
+        if (config.publicationMode !== 'publish' || !config.catalogToken || !config.catalogUrl) {
+          throw new Error('Invalid publication configuration')
+        }
+        const catalogStore = dependencies.publicationStore ?? createInstalerCatalogStore(config.catalogToken, config.catalogUrl)
+        const publication = await publishInstalerCatalog(snapshot, catalogStore, now())
+        dependencies.log?.({ event: 'instaler-catalog-publication', ...publication })
+        return response({ ...result, catalogPublication: publication })
+      } catch (error) {
+        const code = error instanceof InstalerPublicationError ? error.code : 'configuration'
+        dependencies.log?.({ event: 'instaler-catalog-publication', status: 'failed', error: code })
+        // The source attempt is already safely recorded. Do not retry Drive or mislabel it as a failed read.
+        return response({ ...result, catalogPublication: { status: 'failed', error: code } }, 503)
+      }
+    }
     return response(result, result.status === 'failed' ? 502 : 200)
   } catch (error) {
     if (error instanceof InstalerUploadError) {
@@ -95,6 +121,7 @@ export default {
       blobToken: process.env.INSTALER_OBSERVATION_BLOB_READ_WRITE_TOKEN,
       expectedEmail: process.env.INSTALER_GOOGLE_EXPECTED_EMAIL,
       fileId: process.env.INSTALER_DRIVE_FILE_ID, catalogUrl: process.env.CATALOG_BLOB_URL,
+      publicationMode: process.env.INSTALER_CATALOG_MODE, catalogToken: process.env.BLOB_READ_WRITE_TOKEN,
     }, { log: (event) => console.info(JSON.stringify(event)) })
   },
 }

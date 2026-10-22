@@ -92,6 +92,13 @@ takes precedence. Without either source, provenance remains unknown; existing
 historical references are never retroactively attributed to the current item.
 The UI must use the reference's own source when showing price provenance.
 
+Optional `source.readAt` records the source reading as a canonical UTC timestamp
+with milliseconds, for example `2026-10-22T12:34:56.789Z`. It remains separate from
+the supplier's commercial `date` and stock `checkedAt`; neither is inferred from
+the reading. Item, stock, list-price and reference sources use the same validated
+field. Catalogue storage, backups and quotation provenance preserve it. Legacy
+sources without it remain compatible.
+
 `referencePrices` defaults to an empty array. Each reference requires:
 
 - `amount`: `null` for a missing value, or a nonnegative decimal string using a
@@ -179,6 +186,12 @@ quantity, negative quantity, zero, stale or future observations are not eligible
 under a protected availability policy. A positive `historical` record is not a
 fresh observation even if it was imported today.
 
+When `stock.source.readAt` is present, protected stock becomes stale at exactly
+seven days after that reading, including historical stock. A future reading is
+ineligible; malformed runtime reading metadata has unknown age. Without this
+optional field, the existing observation rules still apply. This transport-age
+limit never establishes supplier freshness or extends a current stock interval.
+
 ## Selection policy and private row trace
 
 Optional `availabilityPolicy` is `fresh-positive` or `historical-positive`.
@@ -226,9 +239,11 @@ are rejected rather than coerced.
 | source.sheet | 128 characters |
 | source.version | 200 characters |
 | source.checksum | Exactly 64 lowercase hexadecimal characters |
+| source.readAt | Canonical UTC timestamp with milliseconds |
 | selectionBlock | 500 characters |
 | referencePrices | 50 per item, including retained history |
 | replaceSourceDocuments | 1-50 unique document names, up to 500 characters each |
+| refreshSuppliers | 1-50 supplier names unique after normalization, up to 200 characters each |
 
 These bounds align with catalogue limits. Before saving the resulting catalogue,
 the integration must also validate its Workspace v1 envelope with empty
@@ -281,6 +296,44 @@ The baseline snapshot rejects application if the catalogue changed after its
 preview opened. Application enforces the combined item and byte limits before
 returning a result. It does not mutate the input catalogue, previews, quotations,
 or browser storage. New IDs are generated locally, never accepted from the file.
+
+## Explicit supplier metadata refresh
+
+An optional top-level `refreshSuppliers` array declares which suppliers replace
+their provider-owned metadata on matching incoming entries:
+
+```json
+"refreshSuppliers": ["Synthetic Supplier"]
+```
+
+Names must be nonempty and unique after trimming, collapsing whitespace and
+ignoring case. Incoming entries in that scope require a complete supplier/SKU
+key. For those matches, `stock`, `listPrice`, `availabilityPolicy` and
+`selectionBlock` use the incoming values exactly; omission clears the old field.
+Local IDs, manual prices including zero, manual-price currencies and an existing
+detail when the incoming description is empty remain intact. Other suppliers
+retain additive rules. The scope never deletes identities absent from the input;
+the Instaler candidate explicitly retains blocked absent products. This option
+does not change the separate `replaceSourceDocuments` contract below.
+
+The optional top-level reading identity is independent of item data:
+
+```json
+"instalerObservation": {
+  "readAt": "2026-10-22T12:34:56.789Z",
+  "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "supplierFreshnessEstablished": false
+}
+```
+
+Its timestamp must be canonical UTC with milliseconds, its checksum exactly 64
+lowercase hexadecimal characters and its freshness flag exactly `false`.
+It does not change quotation prices, IDs or supplier observation dates. The
+publisher rejects older readings and conflicting checksums for the same reading
+time. The shared-catalogue reader rejects documents older than its local source
+readings. See
+[Instaler publication and recovery](INSTALER-CATALOG-PUBLICATION.md) for the
+private candidate, daily schedule, concurrency and last-valid recovery contract.
 
 ## Explicit source replacement
 

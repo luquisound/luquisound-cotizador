@@ -5,6 +5,7 @@ import {
   type CatalogImportDocument,
 } from './catalog.ts'
 import type { CatalogItem } from './model.ts'
+import { isCatalogTimestamp } from './catalog-stock.ts'
 
 export const SHARED_CATALOG_MAX_BYTES = 4 * 1024 * 1024
 
@@ -97,6 +98,17 @@ export async function loadSharedCatalog(
 
 export function mergeSharedCatalog(existing: CatalogItem[], document: CatalogImportDocument): CatalogItem[] {
   validateSharedCatalogDocument(document)
+  let latestReading = ''
+  for (const item of existing) {
+    if (item.supplier?.trim().replace(/\s+/g, ' ').toLowerCase() !== 'instaler') continue
+    for (const source of [item.source, item.stock?.source, item.listPrice?.source]) {
+      if (isCatalogTimestamp(source?.readAt) && source.readAt > latestReading) latestReading = source.readAt
+    }
+  }
+  // A recovery response or older source must not undo a newer block or absence.
+  if (latestReading && (!document.instalerObservation || document.instalerObservation.readAt < latestReading)) {
+    throw new Error('El catálogo recibido es anterior al guardado. Tus opciones actuales se conservan.')
+  }
   const preview = buildCatalogImportPreview(existing, document)
   if (preview.conflicts.length > 0) {
     throw new Error('Hay productos en conflicto. El catálogo guardado no se modificó.')

@@ -94,17 +94,18 @@ test('opening and duplicating keep amounts and rate provenance frozen with indep
 
 test('catalogue provenance and historical stock remain private deep snapshots through backup and opening', () => {
   const original = quotation()
+  const readAt = '2026-10-22T12:34:56.789Z'
   original.rows[0]!.provenance = {
     catalogItemId: 'synthetic-catalogue', supplier: 'Proveedor sintético', sku: 'SYN-1',
-    source: { document: 'Private synthetic list', date: '2026-01-01', kind: 'snapshot', version: 'synthetic-v1', checksum: 'a'.repeat(64), sheet: 'Products', row: 2 },
+    source: { document: 'Private synthetic list', date: '2026-01-01', kind: 'snapshot', version: 'synthetic-v1', checksum: 'a'.repeat(64), sheet: 'Products', row: 2, readAt },
     originalUnitPrice: '23,40', originalCurrency: 'USD', priceBasis: 'provisional-list',
     listPrice: {
       amount: '23.40', currency: 'USD', basis: 'retail-list-before-discount', provisional: true,
-      source: { document: 'Private synthetic list', date: '2026-01-01', sheet: 'Products', row: 2 },
+      source: { document: 'Private synthetic list', date: '2026-01-01', sheet: 'Products', row: 2, readAt },
     },
     stock: {
       quantity: 3, checkedAt: null, validUntil: null, observation: 'historical',
-      source: { document: 'Private synthetic stock', date: null, sheet: 'Products', row: 2 },
+      source: { document: 'Private synthetic stock', date: null, sheet: 'Products', row: 2, readAt },
     },
     availabilityPolicy: 'historical-positive',
   }
@@ -115,6 +116,9 @@ test('catalogue provenance and historical stock remain private deep snapshots th
   original.rows[0]!.provenance.source!.document = 'Changed source'
   original.rows[0]!.provenance.stock!.source.document = 'Changed stock source'
   const opened = openLibraryQuotation(restored.entries[0]!)
+  const duplicate = openLibraryQuotation(restored.entries[0]!, { duplicate: true })
+  assert.deepEqual(duplicate.rows[0]!.provenance, expected)
+  assert.deepEqual(opened.rows[0]!.provenance, expected)
   opened.rows[0]!.provenance!.listPrice!.amount = '999'
   assert.deepEqual(restored.entries[0]!.quotation.rows[0]!.provenance, expected)
   assert.deepEqual(library.entries[0]!.quotation.rows[0]!.provenance, expected)

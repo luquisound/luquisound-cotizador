@@ -30,6 +30,32 @@ function document(items: CatalogImportItem[] = [item()]): CatalogImportDocument 
   return { format: 'luquisound.catalog', version: 1, items }
 }
 
+test('an older or legacy recovery response cannot undo a newer Instaler stock block', () => {
+  const oldRead = '2026-10-21T11:30:00.000Z'
+  const newRead = '2026-10-22T11:30:00.000Z'
+  const generation = (readAt: string, quantity: number): CatalogImportDocument => ({
+    ...document([item({ supplier: 'Instaler', source: { document: 'synthetic.xlsx', date: null, readAt },
+      stock: { ...stock(quantity), observation: 'historical', checkedAt: null, validUntil: null,
+        source: { document: 'synthetic.xlsx', date: null, readAt } },
+      availabilityPolicy: 'historical-positive' })]),
+    refreshSuppliers: ['Instaler'],
+    instalerObservation: { readAt, checksum: 'a'.repeat(64), supplierFreshnessEstablished: false },
+  })
+  const current = mergeSharedCatalog([], generation(newRead, 0))
+  current[0].unitPrice = '0'
+  current[0].currency = 'USD'
+  const before = JSON.stringify(current)
+  assert.throws(() => mergeSharedCatalog(current, generation(oldRead, 3)), /anterior/)
+  const legacy = generation(oldRead, 3)
+  delete legacy.instalerObservation
+  assert.throws(() => mergeSharedCatalog(current, legacy), /anterior/)
+  assert.equal(JSON.stringify(current), before)
+  const refreshed = mergeSharedCatalog(current, generation('2026-10-23T11:30:00.000Z', 2))
+  assert.equal(refreshed[0].stock?.quantity, 2)
+  assert.equal(refreshed[0].unitPrice, '0')
+  assert.equal(refreshed[0].currency, 'USD')
+})
+
 function stock(quantity: number | null): CatalogStockSnapshot {
   return {
     quantity, checkedAt: '2026-10-17T15:00:00.000Z', validUntil: '2026-10-17T16:00:00.000Z',
@@ -238,6 +264,97 @@ test('automatic metadata updates preserve manual prices, explicit zero, currenci
   }
   assert.deepEqual(existing, original)
   assert.equal(mergeSharedCatalog(result, updated), result)
+})
+
+test('shared supplier refresh survives transport and storage without changing current work or manual fields', async () => {
+  const listPrice: CatalogImportItem['listPrice'] = {
+    amount: '123.45', currency: 'ARS', basis: 'retail-list-before-discount', provisional: true,
+    source: { document: 'synthetic-list.xlsx', date: null },
+  }
+  const existing = mergeSharedCatalog([], document([
+    item({ stock: stock(3), listPrice, availabilityPolicy: 'historical-positive', selectionBlock: 'Previous block' }),
+    item({ sku: 'ABSENT', stock: stock(3) }),
+    item({ supplier: 'Other supplier', stock: stock(3), selectionBlock: 'Other block' }),
+  ]))
+  existing[0].unitPrice = '0'
+  existing[0].currency = 'USD'
+  existing[0].detail = 'Manual customer detail'
+  const snapshot = structuredClone(existing)
+  const values = new Map<string, string>()
+  const writes: string[] = []
+  const storage: StorageAdapter = {
+    getItem(key) { return values.get(key) ?? null },
+    setItem(key, value) { values.set(key, value); writes.push(key) },
+  }
+  const quotation = createQuotation()
+  quotation.rows[0] = { ...quotation.rows[0], concept: 'Synthetic current product', unitPrice: '456,78', priceState: 'priced' }
+  assert.equal(saveCurrentQuotation(storage, quotation).ok, true)
+  const currentBytes = values.get(CURRENT_QUOTATION_STORAGE_KEY)
+  const incoming: CatalogImportDocument = {
+    ...document([item({ description: '' }), item({ supplier: 'Other supplier', description: '' })]),
+    refreshSuppliers: [' SYNTHETIC   SUPPLIER '],
+  }
+  const loaded = await load(jsonResponse(incoming))
+  assert.ok(loaded)
+  assert.deepEqual(loaded.refreshSuppliers, ['SYNTHETIC   SUPPLIER'])
+  const result = mergeSharedCatalog(existing, loaded)
+  assert.equal(result[0].id, snapshot[0].id)
+  assert.equal(result[0].unitPrice, '0')
+  assert.equal(result[0].currency, 'USD')
+  assert.equal(result[0].detail, 'Manual customer detail')
+  for (const field of ['stock', 'listPrice', 'availabilityPolicy', 'selectionBlock']) {
+    assert.equal(Object.hasOwn(result[0], field), false)
+  }
+  assert.deepEqual(result.slice(1), snapshot.slice(1))
+  assert.equal(saveCatalog(storage, result).ok, true)
+  assert.deepEqual(loadCatalog(storage).catalog, result)
+  assert.equal(values.get(CURRENT_QUOTATION_STORAGE_KEY), currentBytes)
+  assert.deepEqual(loadCurrentQuotation(storage).quotation, quotation)
+  assert.deepEqual(writes, [CURRENT_QUOTATION_STORAGE_KEY, CATALOG_STORAGE_KEY])
+  assert.equal(mergeSharedCatalog(result, loaded), result)
+  assert.deepEqual(existing, snapshot)
+})
+
+test('invalid shared supplier scopes fail transport and merge before touching the local catalogue', async () => {
+  const existing = mergeSharedCatalog([], document())
+  const snapshot = structuredClone(existing)
+  for (const refreshSuppliers of [[], ['Synthetic supplier', ' SYNTHETIC   SUPPLIER '], ['']]) {
+    const incoming = { ...document(), refreshSuppliers }
+    await assert.rejects(load(jsonResponse(incoming)), genericFailure)
+    assert.throws(() => mergeSharedCatalog(existing, incoming), /formato válido/)
+    assert.deepEqual(existing, snapshot)
+  }
+  const incomplete: CatalogImportDocument = {
+    ...document([item({ sku: '' })]), refreshSuppliers: ['Synthetic supplier'],
+  }
+  await assert.rejects(load(jsonResponse(incomplete)), genericFailure)
+  assert.throws(() => mergeSharedCatalog(existing, incomplete), /formato válido/)
+  assert.deepEqual(existing, snapshot)
+})
+
+test('shared reading metadata survives transport without refreshing stock dates or changing manual values', async () => {
+  const observation = {
+    readAt: '2026-10-22T12:34:56.789Z', checksum: 'b2'.repeat(32), supplierFreshnessEstablished: false as const,
+  }
+  const incoming: CatalogImportDocument = {
+    ...document([item({ stock: stock(3) })]), instalerObservation: observation,
+  }
+  const loaded = await load(jsonResponse(incoming))
+  assert.ok(loaded)
+  assert.deepEqual(loaded.instalerObservation, observation)
+  const existing = mergeSharedCatalog([], loaded)
+  existing[0].unitPrice = '0'
+  existing[0].currency = 'USD'
+  const snapshot = structuredClone(existing)
+  const later: CatalogImportDocument = {
+    ...incoming, instalerObservation: { ...observation, readAt: '2026-10-23T12:34:56.789Z', checksum: 'c3'.repeat(32) },
+  }
+  assert.equal(mergeSharedCatalog(existing, later), existing)
+  assert.deepEqual(existing, snapshot)
+  assert.deepEqual(existing[0].stock, stock(3))
+  await assert.rejects(load(jsonResponse({
+    ...incoming, instalerObservation: { ...observation, supplierFreshnessEstablished: true },
+  })), genericFailure)
 })
 
 test('central updates keep local custom products and do not delete items absent from the current central list', () => {

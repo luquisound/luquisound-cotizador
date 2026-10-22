@@ -11,10 +11,12 @@ Both sides default to disabled in code and `.env.example`. Deployments, account
 authorization, live secrets and trigger installation are separate operations.
 The implementation never modifies the Excel.
 
-The receiver only validates, compares and stores private evidence from `Precios`.
-There is no publisher or supported `publish` mode. `/api/catalog`, the active
-catalogue, personal prices and quotation amounts remain unchanged. Kits from
-other worksheets remain outside this stage.
+The observer validates, compares and stores private evidence from `Precios`.
+Its only supported mode remains `observe`. A separate publisher can now consume
+the committed reading when `INSTALER_CATALOG_MODE=publish` is explicitly enabled;
+see [catalogue publication](INSTALER-CATALOG-PUBLICATION.md). Personal prices and
+quotation amounts remain unchanged. Kits from other worksheets remain outside
+this stage. The checkpoint below predates that separate publication capability.
 
 ## Operational checkpoint: 2026-10-21
 
@@ -189,10 +191,11 @@ always remains `false`: a successful download, Drive modification time or checks
 does not establish formula refresh, every field's freshness or a commercial stock
 date. Actual changes received without an open workshop browser are needed evidence.
 
-Catalogue publication remains a later bounded change: review eligible SKU/name
-correspondences, absence/discontinued behavior, source-age policy and safe
-publication/rollback. Kits stay deferred; preserve manual and quotation amounts.
-The observer cannot publish by changing a configuration switch.
+Catalogue publication is implemented separately with private correspondences,
+explicit blocked absent entries, conditional writes, recovery and a seven-day
+reading-age limit. Its activation requires the reviewed private policy and an
+existing valid catalogue; see `INSTALER-CATALOG-PUBLICATION.md`. The observation
+mode itself still cannot be changed to `publish`. Kits remain deferred.
 
 ## Local verification
 

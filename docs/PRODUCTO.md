@@ -415,7 +415,9 @@ key `luquisound.current-quotation.v1`; the persistent catalogue and approved
 prices use `luquisound.catalog.v1`. Explicitly saved quotations use the separate
 `luquisound.quotation-library.v1` key. These stores are independent and belong to
 the current browser and origin. A read-only server endpoint supplies the private
-common catalogue on startup. There is no quotation upload, analytics, or
+common catalogue on startup and after the daily 08:00-09:00 Buenos Aires source
+window, with a 09:00 daily app cycle while visible and online. There is no refresh
+button or hourly catalogue polling. There is no quotation upload, analytics, or
 synchronization of locally approved prices.
 
 The header contains the brand and editable quotation details. Below the template
@@ -440,7 +442,7 @@ document scope: imported entries absent from that replacement are retired, and
 retained entries receive its authoritative metadata and references. Manual
 entries without source provenance and entries outside that scope are preserved.
 Source replacement never edits the current quotation. Invalid keys, conflicts,
-limits, and network failures leave local data unchanged and show a retry action. A paused or
+limits, and network failures leave local data unchanged until the next daily cycle. A paused or
 unreadable catalogue store is never overwritten by the common catalogue.
 See `SHARED-CATALOG.md` for activation.
 
@@ -592,6 +594,11 @@ management through "Mostrar no habilitados", with quantity, age, source date and
 a textual eligibility reason;
 independent manual concepts remain available. Historical records can have unknown
 observation dates and never become fresh at import time.
+An explicit source `readAt` records transport evidence separately from supplier
+freshness. Protected observations carrying this field become stale seven days
+after that reading, or remain invalid if its timestamp is future or malformed.
+Daily failures preserve the previous catalogue and all quotation amounts. No
+download invents a supplier commercial date or a fresh stock observation.
 
 The picker, bulk review and open quotation check availability again as time passes
 and before image preparation or delivery. The latest matching catalogue snapshot

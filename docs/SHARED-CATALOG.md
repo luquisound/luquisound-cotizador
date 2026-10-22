@@ -2,7 +2,9 @@
 
 ## Behavior
 
-The app requests `GET /api/catalog` from the same origin on startup. Every new
+The app requests `GET /api/catalog` from the same origin on startup and once per
+daily cycle at 09:00 Buenos Aires while visible and online. Return, focus and
+reconnection check that daily cycle; there is no refresh/retry button. Every new
 device receives the configured common product catalogue without a file picker.
 The endpoint is read-only. The app does not upload quotations or manual price
 edits, and those edits are not synchronized between devices.
@@ -16,7 +18,7 @@ and current quotation row values are preserved. Common metadata, reviewed list
 prices, stock observations, selection policies and historical references can be
 updated. By default, entries absent from the common file remain
 in the local catalogue. Conflicts or limits retain the previous local catalogue
-and show a retry action. Missing configuration retains manual file import and local use.
+until the next daily cycle. Missing configuration retains manual file import and local use.
 
 A reviewed private JSON can opt into `replaceSourceDocuments`, using the same
 [explicit source replacement contract](CATALOG-IMPORT.md#explicit-source-replacement)
@@ -35,6 +37,13 @@ preserve IDs, approved prices, and provenance. Backup import replaces the
 catalogue after confirmation; an old workspace backup contributes only its
 catalogue and never restores quotations.
 The legacy `luquisound.workspace.v1` storage key remains untouched.
+An explicit `refreshSuppliers` scope replaces source-owned stock, reviewed list
+price, policy and block fields, including omitted values, without deleting absent
+entries or touching manual amounts. The Instaler publisher supplies blocked
+records for absent products and private reviewed correspondences. Its reading
+metadata expires protected stock after seven days without a successful reading;
+it never asserts supplier freshness. See
+[publication and recovery](INSTALER-CATALOG-PUBLICATION.md).
 Startup fetch failures allow continued work with that copy. Loading the common
 catalogue never approves an ordinary historical reference. A reviewed source can
 explicitly provide a retail list price before supplier discount with provenance

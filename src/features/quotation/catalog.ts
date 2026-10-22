@@ -1,5 +1,5 @@
 import type { CatalogItem, Currency, RowSection } from './model.ts'
-import { parseCatalogStockFields, type CatalogAvailabilityPolicy, type CatalogStockSnapshot } from './catalog-stock.ts'
+import { isCatalogTimestamp, parseCatalogStockFields, type CatalogAvailabilityPolicy, type CatalogStockSnapshot } from './catalog-stock.ts'
 import { parseMoney } from './calculation.ts'
 
 export interface CatalogSource {
@@ -11,6 +11,7 @@ export interface CatalogSource {
   kind?: 'snapshot' | 'sheets'
   version?: string
   checksum?: string
+  readAt?: string
 }
 
 export interface CatalogListPrice {
@@ -68,6 +69,12 @@ export interface CatalogImportDocument {
   version: 1
   items: CatalogImportItem[]
   replaceSourceDocuments?: string[]
+  refreshSuppliers?: string[]
+  instalerObservation?: {
+    readAt: string
+    checksum: string
+    supplierFreshnessEstablished: false
+  }
 }
 
 export interface CatalogImportUpdate {
@@ -107,6 +114,7 @@ export const CATALOG_IMPORT_MAX_BYTES = 5 * 1024 * 1024
 export const CATALOG_IMPORT_MAX_ITEMS = 2000
 export const CATALOG_REFERENCE_MAX_PRICES = 50
 export const CATALOG_REPLACEMENT_MAX_DOCUMENTS = 50
+export const CATALOG_REFRESH_MAX_SUPPLIERS = 50
 
 const INVALID_IMPORT_MESSAGE = 'El catálogo no tiene un formato válido de Luquisound.'
 
@@ -152,6 +160,7 @@ export function parseCatalogSource(value: unknown): CatalogSource {
   const version = input.version === undefined ? undefined : text(input.version, 200)
   if (version !== undefined && !version) invalidImport()
   if (input.checksum !== undefined && (typeof input.checksum !== 'string' || !/^[a-f0-9]{64}$/.test(input.checksum))) invalidImport()
+  if (input.readAt !== undefined && !isCatalogTimestamp(input.readAt)) invalidImport()
   return {
     document,
     ...(input.page === undefined ? {} : { page: input.page as number }),
@@ -161,6 +170,7 @@ export function parseCatalogSource(value: unknown): CatalogSource {
     ...(input.kind === undefined ? {} : { kind: input.kind }),
     ...(version === undefined ? {} : { version }),
     ...(input.checksum === undefined ? {} : { checksum: input.checksum as string }),
+    ...(input.readAt === undefined ? {} : { readAt: input.readAt as string }),
   }
 }
 
@@ -256,6 +266,22 @@ function replacementDocuments(value: unknown): string[] {
   return documents
 }
 
+function refreshSuppliers(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > CATALOG_REFRESH_MAX_SUPPLIERS) invalidImport()
+  const suppliers = value.map((supplier) => text(supplier, 200))
+  const normalized = suppliers.map(normalizedKeyPart)
+  if (normalized.some((supplier) => !supplier) || new Set(normalized).size !== suppliers.length) invalidImport()
+  return suppliers
+}
+
+function instalerObservation(value: unknown): NonNullable<CatalogImportDocument['instalerObservation']> {
+  const input = record(value)
+  if (!isCatalogTimestamp(input.readAt)
+    || typeof input.checksum !== 'string' || !/^[a-f0-9]{64}$/.test(input.checksum)
+    || input.supplierFreshnessEstablished !== false) invalidImport()
+  return { readAt: input.readAt, checksum: input.checksum, supplierFreshnessEstablished: false }
+}
+
 export function parseCatalogImport(value: string): CatalogImportDocument {
   checkSize(value)
   let input: unknown
@@ -269,11 +295,21 @@ export function parseCatalogImport(value: string): CatalogImportDocument {
     !Array.isArray(document.items) || document.items.length > CATALOG_IMPORT_MAX_ITEMS) invalidImport()
   const replaceSourceDocuments = document.replaceSourceDocuments === undefined
     ? undefined : replacementDocuments(document.replaceSourceDocuments)
+  const refreshedSuppliers = document.refreshSuppliers === undefined
+    ? undefined : refreshSuppliers(document.refreshSuppliers)
+  const observation = document.instalerObservation === undefined
+    ? undefined : instalerObservation(document.instalerObservation)
   const items = document.items.map(importItem)
   if (replaceSourceDocuments && items.some((item) => !item.source || !itemKey(item))) invalidImport()
+  if (refreshedSuppliers) {
+    const scope = new Set(refreshedSuppliers.map(normalizedKeyPart))
+    if (items.some((item) => scope.has(normalizedKeyPart(item.supplier)) && !itemKey(item))) invalidImport()
+  }
   return {
     format: 'luquisound.catalog', version: 1, items,
     ...(replaceSourceDocuments === undefined ? {} : { replaceSourceDocuments }),
+    ...(refreshedSuppliers === undefined ? {} : { refreshSuppliers: refreshedSuppliers }),
+    ...(observation === undefined ? {} : { instalerObservation: observation }),
   }
 }
 
@@ -309,7 +345,7 @@ function referenceSignature(price: CatalogReferencePrice): string {
 
 function sourceSignature(value: CatalogSource | undefined): (string | number | null)[] | null {
   return value ? [value.document, value.page ?? null, value.sheet ?? null, value.row ?? null, value.date,
-    value.kind ?? null, value.version ?? null, value.checksum ?? null] : null
+    value.kind ?? null, value.version ?? null, value.checksum ?? null, value.readAt ?? null] : null
 }
 
 function cloneReference(price: CatalogReferencePrice): CatalogReferencePrice {
@@ -383,6 +419,7 @@ export function buildCatalogImportPreview(
   // Revalidate callers that construct an import document instead of parsing JSON.
   const validated = parseCatalogImport(JSON.stringify(document))
   const replacementSources = new Set(validated.replaceSourceDocuments ?? [])
+  const refreshedSuppliers = new Set((validated.refreshSuppliers ?? []).map(normalizedKeyPart))
   const replacesSources = validated.replaceSourceDocuments !== undefined
   const additions: CatalogEntry[] = []
   const updates: CatalogImportUpdate[] = []
@@ -466,6 +503,12 @@ export function buildCatalogImportPreview(
       ...(!incoming.presentation && before.presentation !== undefined ? { presentation: before.presentation } : {}),
       ...(!incoming.source && before.source ? { source: { ...before.source } } : {}),
       referencePrices,
+    }
+    if (refreshedSuppliers.has(normalizedKeyPart(incoming.supplier))) {
+      if (incoming.stock === undefined) delete after.stock
+      if (incoming.listPrice === undefined) delete after.listPrice
+      if (incoming.availabilityPolicy === undefined) delete after.availabilityPolicy
+      if (incoming.selectionBlock === undefined) delete after.selectionBlock
     }
     if (referencePrices.length > CATALOG_REFERENCE_MAX_PRICES) {
       conflicts.push({

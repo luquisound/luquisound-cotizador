@@ -302,7 +302,6 @@ interface CatalogEditorProps {
   saveStatus: string
   saveError: string | null
   sharedCatalogStatus: 'loading' | 'ready' | 'unavailable' | 'error'
-  onRetrySharedCatalog: () => void
   onExportBackup: () => void
   onImportBackup: (file: File, signal?: AbortSignal) => Promise<boolean>
   onEnableStorage?: () => void
@@ -311,7 +310,7 @@ interface CatalogEditorProps {
 }
 
 export function CatalogEditor({
-  catalog, exchangeRate, saveStatus, saveError, sharedCatalogStatus, onRetrySharedCatalog,
+  catalog, exchangeRate, saveStatus, saveError, sharedCatalogStatus,
   onExportBackup, onImportBackup, onEnableStorage, onSave, onClose,
 }: CatalogEditorProps) {
   const [draft, setDraft] = useState<CatalogItem>(emptyItem)
@@ -577,7 +576,6 @@ export function CatalogEditor({
             : sharedCatalogStatus === 'ready' ? 'Catálogo compartido disponible.'
               : sharedCatalogStatus === 'unavailable' ? 'Catálogo compartido no disponible. Podés usar tus opciones o escribir manualmente.'
                 : 'No se pudo actualizar el catálogo compartido. Tus opciones y precios se conservan.'}</p>
-          {(sharedCatalogStatus === 'error' || sharedCatalogStatus === 'unavailable') && <button type="button" className="button secondary" disabled={restoring} onClick={onRetrySharedCatalog}>Reintentar catálogo compartido</button>}
         </div>
         <p className="catalog-count" role="status">{saveStatus}</p>
         {saveError && <div>

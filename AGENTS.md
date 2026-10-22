@@ -15,8 +15,11 @@ quotation, a browser-local named quotation library, separate private catalogue
 and quotation backups, and deterministic PNG download or file sharing. Fixed
 budgets and templates remain in Figma. The local library supports explicit save,
 open and duplicate; it is not a backend or cross-device quotation history.
-Read-only common catalogue and DolarAPI blue-sale lookup are the
-authorized server-side features;
+Read-only common catalogue, DolarAPI blue-sale lookup, private daily Instaler
+observation and a separately enabled conditional catalogue publisher are the
+authorized server-side features. The publisher consumes existing validated
+observations and private correspondences; it adds no supplier access or schedule.
+See `docs/INSTALER-CATALOG-PUBLICATION.md` for its publication and recovery contract;
 quotation and manual-price synchronization, accounts, Supabase, AI, CRM,
 inventory management, invoicing, and a general backend remain outside this stage.
 

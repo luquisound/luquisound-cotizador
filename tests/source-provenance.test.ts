@@ -143,6 +143,40 @@ test('persistence and duplication retain frozen rate and complete private proven
   assert.equal(restored.quotations[0].rows[0].provenance!.stock!.source.document, source.document)
 })
 
+test('row provenance preserves the reading timestamp independently across parsing, recovery and duplication', () => {
+  const readAt = '2026-10-17T10:00:00.000Z'
+  const readSource = { ...source, readAt }
+  const item: CatalogItem = {
+    ...historical(), source: readSource, stock: { ...historical().stock!, source: readSource },
+    listPrice: { ...listPrice, source: readSource }, unitPrice: '0', currency: 'USD',
+  }
+  const row = rowFromCatalog(item, 'equipment', 'ARS', undefined, now)
+  const provenance = row.provenance!
+  assert.deepEqual(parseRowProvenance(provenance), provenance)
+  const workspace = createWorkspace()
+  workspace.catalog = [item]
+  workspace.quotations[0].rows = [row]
+  const restored = parseWorkspace(serializeWorkspace(workspace))
+  const copy = duplicateQuotation(restored.quotations[0])
+  for (const snapshot of [provenance, restored.quotations[0].rows[0].provenance!, copy.rows[0].provenance!]) {
+    assert.equal(snapshot.source?.readAt, readAt)
+    assert.equal(snapshot.stock?.source.readAt, readAt)
+    assert.equal(snapshot.listPrice?.source.readAt, readAt)
+    assert.equal(snapshot.source?.date, null)
+    assert.equal(snapshot.stock?.checkedAt, null)
+    assert.equal(snapshot.originalUnitPrice, '0')
+    assert.equal(snapshot.originalCurrency, 'USD')
+  }
+  copy.rows[0].provenance!.stock!.source.readAt = '2026-10-18T10:00:00.000Z'
+  assert.equal(restored.quotations[0].rows[0].provenance!.stock!.source.readAt, readAt)
+  for (const readAt of [null, '', 'invalid', '2026-10-17T10:00:00Z']) {
+    const source = { ...readSource, readAt }
+    for (const change of [
+      { source }, { stock: { ...provenance.stock, source } }, { listPrice: { ...provenance.listPrice, source } },
+    ]) assert.throws(() => parseRowProvenance({ ...provenance, ...change }))
+  }
+})
+
 test('source and policy metadata import exactly, update idempotently and clear on authoritative replacement', () => {
   const parsed = parseCatalogImport(JSON.stringify(document()))
   assert.deepEqual(parsed.items[0].listPrice, listPrice)

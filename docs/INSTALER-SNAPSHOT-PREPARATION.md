@@ -6,8 +6,9 @@ The offline boundary below remains available. A separate server observer now
 receives private Apps Script uploads and reuses its
 preparer/comparator with a Node XLSX reader; see
 [daily observation and activation review](INSTALER-OBSERVATION.md).
-That observer defaults to disabled, records private evidence only and adds no
-catalogue publisher. Its runbook separates live setup from pending acceptance.
+That observer defaults to disabled and records private evidence only. A separate
+[catalogue publisher](INSTALER-CATALOG-PUBLICATION.md) consumes validated evidence
+after explicit activation. Its runbook separates live setup from pending acceptance.
 
 The offline command now reads a supplied XLSX, prepares a partial snapshot review
 and compares it with a supplied local catalogue JSON. It writes a new private
@@ -144,21 +145,20 @@ separately authorized persistent access. Browser cookies or tokens must never be
 extracted for that purpose. This preparation grants no access and creates no
 credentials, conversions, source copies or permissions.
 
-The future publisher must first resolve full coverage, duplicate conflicts,
-missing data, discontinued products, component-level kit availability, source
-scope and observation policy. Preserve the previous reviewed snapshot on failed
-or partial reads. Keep explicit blocked entries for discontinued/absent known
-SKUs until absence semantics are reviewed: removing a product currently allows
-old quotation provenance to become the availability fallback. Do not silently
-retire products or refresh old validity on failure.
+The separate publisher resolves coverage within `Precios` using a reviewed private
+policy, preserves ambiguous records as blocked entries and keeps known absent
+SKUs instead of deleting them. Failed or partial reads preserve the previous valid
+catalogue. Removing a known identity can otherwise reactivate old quotation
+provenance. Kit/component availability remains outside this stage.
 
 After source review, the intended path is a workshop Apps Script Drive read,
 authenticated upload to Vercel, complete candidate validation/comparison, safe
 publication to private Blob, and the existing
 protected `/api/catalog` endpoint. Daily observation scheduling and conditional
 private evidence writes are implemented separately in `INSTALER-OBSERVATION.md`,
-which records current activation and remaining verification. Atomic catalogue
-publication and rollback remain unimplemented. Google owns the only schedule;
+which records the original activation and remaining verification. Conditional
+catalogue publication and rollback are implemented separately in
+`INSTALER-CATALOG-PUBLICATION.md`. Google owns the only schedule;
 no Vercel cron is configured. No commercial source data belongs in the public
 repository or client bundle.
 

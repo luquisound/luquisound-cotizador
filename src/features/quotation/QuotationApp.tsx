@@ -15,7 +15,8 @@ import { RowPriceEditor } from './RowPriceEditor'
 import { prepareFixedServiceQuotation } from './fixed-services'
 import { CatalogEditor } from './CatalogTools'
 import type { CatalogImportDocument } from './catalog'
-import { loadSharedCatalog, mergeSharedCatalog } from './shared-catalog'
+import { mergeSharedCatalog } from './shared-catalog'
+import { startCatalogRefresh, type CatalogRefreshStatus } from './catalog-refresh'
 import type { BlueDollarQuote } from './exchange-quote'
 import { startExchangeRateRefresh, type ExchangeRefreshState } from './exchange-refresh'
 import { parseExchangeRate } from './exchange'
@@ -68,8 +69,7 @@ export default function QuotationApp() {
   const [prepared, setPrepared] = useState<{ file: File; quotation: Quotation; provisional: boolean } | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [sharing, setSharing] = useState(false)
-  const [sharedCatalogStatus, setSharedCatalogStatus] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading')
-  const [sharedCatalogAttempt, setSharedCatalogAttempt] = useState(0)
+  const [sharedCatalogStatus, setSharedCatalogStatus] = useState<CatalogRefreshStatus>('loading')
   const [rateState, setRateState] = useState<(ExchangeRefreshState & { id: string }) | null>(null)
   const [rateRefreshRequest, setRateRefreshRequest] = useState<{ id: string; token: string } | null>(null)
   const catalogButton = useRef<HTMLButtonElement>(null)
@@ -120,11 +120,6 @@ export default function QuotationApp() {
       setRecoveryEnabled(false)
     }
     return result
-  }
-
-  function retrySharedCatalog() {
-    setSharedCatalogStatus('loading')
-    setSharedCatalogAttempt((attempt) => attempt + 1)
   }
 
   function openSecondaryDialog(next: 'catalog' | 'bulk' | 'library') {
@@ -299,38 +294,35 @@ export default function QuotationApp() {
     return true
   }
 
-  const applySharedCatalog = useEffectEvent((document: CatalogImportDocument) => {
+  const applySharedCatalog = useEffectEvent((document: CatalogImportDocument): boolean => {
     try {
       const current = catalogRef.current
       const next = mergeSharedCatalog(current, document)
-      if (next !== current && !updateCatalog(next)) {
-        setSharedCatalogStatus('error')
-        return
-      }
-      setSharedCatalogStatus('ready')
+      return next === current || updateCatalog(next)
     } catch {
-      setSharedCatalogStatus('error')
+      return false
     }
   })
 
   useEffect(() => {
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => {
-      controller.abort()
-      setSharedCatalogStatus('error')
-    }, 15000)
-    void loadSharedCatalog(controller.signal).then((document) => {
-      if (controller.signal.aborted) return
-      if (document === null) setSharedCatalogStatus('unavailable')
-      else applySharedCatalog(document)
-    }).catch(() => {
-      if (!controller.signal.aborted) setSharedCatalogStatus('error')
-    }).finally(() => window.clearTimeout(timeout))
-    return () => {
-      window.clearTimeout(timeout)
-      controller.abort()
+    const refresh = startCatalogRefresh({
+      isActive: () => document.visibilityState !== 'hidden' && navigator.onLine,
+      onCatalog: applySharedCatalog,
+      onStatus: setSharedCatalogStatus,
+    })
+    function checkCatalog() {
+      refresh.check()
     }
-  }, [sharedCatalogAttempt])
+    window.addEventListener('focus', checkCatalog)
+    window.addEventListener('online', checkCatalog)
+    document.addEventListener('visibilitychange', checkCatalog)
+    return () => {
+      refresh.stop()
+      window.removeEventListener('focus', checkCatalog)
+      window.removeEventListener('online', checkCatalog)
+      document.removeEventListener('visibilitychange', checkCatalog)
+    }
+  }, [])
 
   useEffect(() => {
     if (!catalogStorageEnabled) return
@@ -611,7 +603,7 @@ export default function QuotationApp() {
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
               {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
-              {sharedCatalogStatus === 'error' && <div className="notice error" role="status"><p>No se pudo actualizar el catálogo compartido. Podés seguir usando tus opciones.</p><button className="button secondary" type="button" onClick={retrySharedCatalog}>Reintentar catálogo compartido</button></div>}
+              {sharedCatalogStatus === 'error' && <p className="notice error" role="status">No se pudo actualizar el catálogo compartido. Tus opciones y precios se conservan. Se reintentará automáticamente.</p>}
             </>}
             exchangeDetails={<>
               <p className="exchange-panel" id="quotation-exchange-rate">
@@ -642,7 +634,7 @@ export default function QuotationApp() {
         <div className="export-actions">{preparedFile ? <><button className="button secondary" type="button" onClick={downloadPreparedImage}>Descargar PNG</button><button className="button primary" disabled={sharing} type="button" onClick={() => { void shareImage() }}>{sharing ? 'Abriendo…' : 'Compartir imagen'}</button></> : <button className="button primary" disabled={preparing || !canExport} type="button" onClick={() => { void prepareImage() }}>{preparing ? 'Preparando…' : 'Preparar imagen'}</button>}</div>
       </footer>
       {dialog === 'header' && <HeaderEditor quotation={quotation} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
-      {dialog === 'catalog' && <CatalogEditor catalog={catalog} exchangeRate={quotation.exchangeRate ?? ''} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onRetrySharedCatalog={retrySharedCatalog} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
+      {dialog === 'catalog' && <CatalogEditor catalog={catalog} exchangeRate={quotation.exchangeRate ?? ''} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
       {dialog === 'bulk' && <BulkEntryDialog catalog={catalog} canSelect={canSelectCatalogItem} defaultCurrency={quotation.currency} existingRowCount={quotation.rows.length} onApply={addBulkRows} onClose={closeBulk} />}
       {dialog === 'library' && <QuotationLibraryDialog quotation={quotation} library={savedQuotes.library} storageError={savedQuotes.error} savingPaused={savedQuotes.paused} onSaveCurrent={saveNamedQuotation} onOpen={(id) => openNamedQuotation(id)} onDuplicate={(id) => openNamedQuotation(id, true)} onExport={downloadLibraryBackup} onImport={savedQuotes.importLibrary} onResumeSaving={savedQuotes.resumeSaving} onClose={closeLibrary} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} directConcept={isDirectExtraRow(editingRow) ? editingRow.concept : undefined} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} onEditExisting={(rowId) => setRowEditing({ kind: 'existing', rowId })} />}

@@ -5,6 +5,7 @@ import { serveInstalerObservation, type ObservationServerConfig } from '../api/i
 import { decodeInstalerObservationSource } from '../src/server/instaler-upload.ts'
 import type { InstalerObservationStore } from '../src/server/instaler-observation-store.ts'
 import { parseObservationState, type ObservationSnapshot } from '../src/server/instaler-observation.ts'
+import type { InstalerCatalogStore } from '../src/server/instaler-catalog-store.ts'
 
 const secret = 'synthetic-ingest-secret-at-least-32-characters'
 const config: ObservationServerConfig = {
@@ -149,4 +150,65 @@ test('invalid uploaded bytes are classified and recorded without returning suppl
   assert.equal(body.error, 'source-invalid')
   assert.equal(body.publicationAllowed, false)
   assert.equal(memory.writes(), 2)
+})
+
+test('publication is separately enabled and consumes a committed observation without another source read', async () => {
+  const memory = memoryStore()
+  let active = JSON.stringify({ format: 'luquisound.catalog', version: 1, items: [] })
+  const archives: string[] = []
+  let publications = 0
+  const publicationStore: InstalerCatalogStore = {
+    async read() { assert.equal(memory.writes(), 2); return { text: active, etag: 'catalog-1' } },
+    async readPolicy() { return null },
+    async archive(text) { archives.push(text) },
+    async write(text, etag) {
+      assert.equal(etag, 'catalog-1')
+      assert.equal(archives.length, 1)
+      publications++
+      active = text
+      return 'catalog-2'
+    },
+  }
+  let reads = 0
+  const enabled = { ...config, publicationMode: 'publish', catalogToken: 'synthetic-catalog-token',
+    catalogUrl: 'https://synthetic.private.blob.vercel-storage.com/catalog.json' }
+  const result = await serveInstalerObservation(request(), enabled, {
+    store: memory.store, read: async () => { reads++; return value }, now, publicationStore,
+  })
+  assert.equal(result.status, 200)
+  const body = await result.json()
+  assert.equal(body.status, 'baseline')
+  assert.equal(body.publicationAllowed, false)
+  assert.equal(body.catalogPublication.status, 'published')
+  assert.equal(JSON.parse(active).items.length, 1)
+  assert.equal(reads, 1)
+  assert.equal(publications, 1)
+  const repeat = await serveInstalerObservation(request(), enabled, {
+    store: memory.store, now, publicationStore, read: async () => { assert.fail('No repeat source read') },
+  })
+  assert.equal((await repeat.json()).status, 'already-attempted')
+  assert.equal(publications, 1)
+})
+
+test('publication failure preserves the successful observation and notifies the existing sender with non-200', async () => {
+  const memory = memoryStore()
+  const events: unknown[] = []
+  const publicationStore: InstalerCatalogStore = {
+    async read() { throw new Error('private storage detail') },
+    async readPolicy() { assert.fail('No policy after failed active read') },
+    async archive() { assert.fail('No archive') }, async write() { assert.fail('No write') },
+  }
+  const result = await serveInstalerObservation(request(), {
+    ...config, publicationMode: 'publish', catalogToken: 'synthetic',
+    catalogUrl: 'https://synthetic.private.blob.vercel-storage.com/catalog.json',
+  }, { store: memory.store, now, read: async () => value, publicationStore, log: (event) => events.push(event) })
+  assert.equal(result.status, 503)
+  const body = await result.json()
+  assert.equal(body.status, 'baseline')
+  assert.equal(body.catalogPublication.status, 'failed')
+  assert.equal(body.catalogPublication.error, 'storage')
+  const observed = parseObservationState(memory.text()!, { fileId: config.fileId!, expectedEmail: config.expectedEmail! })
+  assert.deepEqual(observed.current, value)
+  assert.equal(observed.history.at(-1)?.status, 'baseline')
+  assert.ok(!JSON.stringify(events).includes('private storage detail'))
 })
