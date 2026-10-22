@@ -1,0 +1,9 @@
+# Machine-local context, attachments and credentials are not deployment inputs.
+docs/project-context.local.md
+.codex-remote-attachments
+.agent-tmp
+.vercel
+.env
+.env.*
+!.env.example
+!.env.*.example
