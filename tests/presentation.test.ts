@@ -113,11 +113,14 @@ test('guards group subtotals that exceed the safe integer range', () => {
   assert.deepEqual(block.amounts, ['Pendiente'])
 })
 
-test('formats large valid quantities without losing their final thousandth', () => {
-  const block = onlyGroup([adapter('large-quantity', {
-    quantity: '9007199254740,991', priceState: 'included',
-  })])
-  assert.equal(block.details[0], '9.007.199.254.740,991 unidades × 6,5″ · Incluido')
+test('formats valid quantity boundaries and fractions without losing their final thousandth', () => {
+  for (const [quantity, expected] of [
+    ['0,001', '0,001 unidades'], ['1', '1 unidad'], ['123456789,125', '123.456.789,125 unidades'],
+    ['9007199254740,991', '9.007.199.254.740,991 unidades'],
+  ]) {
+    const block = onlyGroup([adapter('quantity', { quantity, priceState: 'included' })])
+    assert.equal(block.details[0], `${expected} × 6,5″ · Incluido`)
+  }
 })
 
 test('preserves legacy adapter rows and ignores absent, invalid or misplaced metadata', () => {

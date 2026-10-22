@@ -66,9 +66,11 @@ original source trace. Stock quantities and source details never appear in
 customer images; provisional usage adds only an availability warning.
 
 No spreadsheet connector, source credentials, polling job or live-stock guarantee
-is enabled by those fields. A future server-side reader can
-produce the same reviewed private snapshot; see
-[private spreadsheet preparation](CATALOG-SOURCE-ROADMAP.md).
+is enabled by those fields alone. The Instaler integration uses the existing
+private Apps Script upload and a separately enabled conditional publisher to
+produce this reviewed catalogue. Other supplier integrations remain outside the
+current scope. See [publication and recovery](INSTALER-CATALOG-PUBLICATION.md)
+and the [source integration map](CATALOG-SOURCE-ROADMAP.md).
 
 Store the reviewed import JSON in a **private** Vercel Blob store. Never add it to
 the checkout, `public/`, the Vite bundle, fixtures, or build artifacts. The existing

@@ -50,7 +50,7 @@ function catalogPriceLabel(item: CatalogItem): string {
     const price = getCatalogSelectionPrice(item)
     if (price.priceBasis === 'pending') return 'Precio pendiente'
     const label = price.priceBasis === 'manual' ? 'Precio manual del cat\u00e1logo'
-      : price.priceBasis === 'provisional-list' ? 'Lista hist\u00f3rica provisional, antes del 20%'
+      : price.priceBasis === 'provisional-list' ? 'Lista hist\u00f3rica provisional, antes del descuento'
         : 'Lista aprobada, antes del descuento'
     return `${label}: ${price.currency} ${price.unitPrice}`
   } catch {
@@ -699,7 +699,7 @@ export function CatalogEditor({
           {priceLengthError && <p id={priceErrorId} className="field-errors" role="alert">{priceLengthError}</p>}
           <p className="field-help">Este precio se guarda en el catálogo para futuras selecciones. Coma para decimales; cero es válido. Cambiarlo no modifica filas ya cargadas. Las referencias sin aprobar requieren confirmación.</p>
           {draft.listPrice && <div className="notice pending">
-            <p>Lista {draft.listPrice.provisional ? 'histórica provisional' : 'aprobada'}: {draft.listPrice.currency} {draft.listPrice.amount.replace('.', ',')}, PVP antes del 20% de descuento. Si dejás vacío el precio manual, se usará esta lista y su moneda al elegir el producto.</p>
+            <p>Lista {draft.listPrice.provisional ? 'histórica provisional' : 'aprobada'}: {draft.listPrice.currency} {draft.listPrice.amount.replace('.', ',')}, PVP antes del descuento. Si dejás vacío el precio manual, se usará esta lista y su moneda al elegir el producto.</p>
             <p className="catalog-provenance">{sourceLabel(draft.listPrice.source)}</p>
           </div>}
           <CatalogAvailability item={draft} now={now} />

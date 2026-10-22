@@ -4,7 +4,7 @@ import { BODY_FONT, HEADING_FONT, loadQuotationFonts } from './typography.ts'
 import { exchangeRateDescription } from './exchange-quote.ts'
 import { QUOTATION_GRAPHIC } from './graphic.ts'
 import { inspectQuotationAvailability } from './quotation-availability.ts'
-import { buildQuotationPresentation } from './presentation.ts'
+import { buildQuotationPresentation, formatQuantityThousandths } from './presentation.ts'
 import type { QuotationPresentationItem } from './presentation.ts'
 
 const WIDTH = 1080
@@ -104,10 +104,7 @@ function drawLines(
 function quantityLabel(row: QuotationRow): string {
   const quantity = parseQuantity(row.quantity)
   if (!quantity.ok || quantity.thousandths === 1000) return ''
-  const amount = BigInt(quantity.thousandths)
-  const whole = new Intl.NumberFormat('es-AR').format(amount / 1000n)
-  const fraction = String(amount % 1000n).padStart(3, '0').replace(/0+$/g, '')
-  const label = `${whole}${fraction ? `,${fraction}` : ''}`
+  const label = formatQuantityThousandths(quantity.thousandths)
   if (row.priceState === 'included') return `${label} unidades · Sin cargo`
   const price = parseMoney(row.unitPrice)
   return price.ok ? `${label} × ${formatMoney(price.cents, row.currency)} c/u` : ''

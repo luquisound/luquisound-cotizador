@@ -19,17 +19,20 @@ export type QuotationPresentationItem = { kind: 'row'; item: CalculatedRow }
 const quantityFormatter = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 })
 const genericAdapterConcepts = new Set(['Aros adaptadores 3D', 'Aros / adaptadores 3D'])
 
+/** Format an already validated quantity without rounding its thousandths. */
+export function formatQuantityThousandths(thousandths: number): string {
+  const amount = BigInt(thousandths)
+  const fraction = String(amount % 1000n).padStart(3, '0').replace(/0+$/g, '')
+  return `${quantityFormatter.format(amount / 1000n)}${fraction ? `,${fraction}` : ''}`
+}
+
 export function adapterVariantDescription(item: CalculatedRow): string {
   const { row } = item
   const variant = readAdapterVariant(row.adapterVariant, row.section, row.audioCategory)
   if (!variant) throw new Error('Adapter details require an explicit valid variant.')
   const quantity = parseQuantity(row.quantity)
-  let quantityLabel = row.quantity.trim() || 'Cantidad pendiente'
-  if (quantity.ok) {
-    const amount = BigInt(quantity.thousandths)
-    const fraction = String(amount % 1000n).padStart(3, '0').replace(/0+$/g, '')
-    quantityLabel = `${quantityFormatter.format(amount / 1000n)}${fraction ? `,${fraction}` : ''}`
-  }
+  const quantityLabel = quantity.ok ? formatQuantityThousandths(quantity.thousandths)
+    : row.quantity.trim() || 'Cantidad pendiente'
   const singular = quantity.ok && quantity.thousandths === 1000
   const presentation = variant.presentation === 'unit' ? (singular ? 'unidad' : 'unidades')
     : variant.presentation === 'pair' ? (singular ? 'par' : 'pares')

@@ -115,13 +115,6 @@
   min-width: 0;
 }
 
-.quotation-title-plus {
-  flex-shrink: 0;
-  color: var(--quotation-yellow);
-  font-family: "Luquisound Barlow", Arial, sans-serif;
-  font-weight: 400;
-}
-
 .quotation-title-placeholder {
   color: var(--quotation-black);
 }

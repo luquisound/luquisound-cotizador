@@ -1,19 +1,20 @@
 # Instaler snapshot preparation
 
-## Implemented local boundary
+## Offline CLI and automated route
 
-The offline boundary below remains available. A separate server observer now
-receives private Apps Script uploads and reuses its
-preparer/comparator with a Node XLSX reader; see
+This guide describes the implemented offline command and its partial review
+contract. The separate automated route receives private Apps Script uploads and
+reuses the pure preparer/comparator with a Node XLSX reader; see
 [daily observation and activation review](INSTALER-OBSERVATION.md).
-That observer defaults to disabled and records private evidence only. A separate
+The observer records private evidence and has only an `observe` mode. A separate
 [catalogue publisher](INSTALER-CATALOG-PUBLICATION.md) consumes validated evidence
-after explicit activation. Its runbook separates live setup from pending acceptance.
+after explicit activation. Those runbooks own service setup, daily scheduling,
+publication and recovery; disabled defaults do not describe current live settings.
 
-The offline command now reads a supplied XLSX, prepares a partial snapshot review
+The offline command reads a supplied XLSX, prepares a partial snapshot review
 and compares it with a supplied local catalogue JSON. It writes a new private
 review report only. It never changes the XLSX, catalogue, browser data or remote
-storage. Nothing calls it from the application or an API route. It needs Node.js
+storage. The application and API routes do not invoke this CLI. It needs Node.js
 22 and Python 3.10+ with the standard library; no extra packages are installed.
 
 From the repository root, with an existing private directory outside Git:
@@ -42,12 +43,12 @@ use a browser session, request access, authenticate, schedule work or publish da
 
 The input contains a private source document label, optional reviewed version and
 SHA-256 checksum, a positive `headerRow`, `headers`, and ordered `rows`. Each row
-has its original positive `row` number and a `values` array. A reviewer or future
+has its original positive `row` number and a `values` array. A reviewer or
 extractor can mark `incompleteKit: true`; omission does not establish kit completeness.
 Input values must be unformatted numbers or dot-decimal strings, never display
 strings with currency symbols, thousands separators or locale-dependent commas.
-An eventual XLSX reader should preserve raw numeric lexemes where possible so
-precision loss can be detected before conversion.
+The XLSX readers preserve raw numeric lexemes so precision loss can be detected
+before conversion.
 
 The canonical headers normalize to SKU, DESCRIPCION, PRECIO, STOCK and CATEGORIA.
 The reviewed supplier layout instead has Instaler in B and PRECIO, STOCK, PRODUCTO
@@ -97,10 +98,11 @@ cannot silently contribute an invented product.
 The supplier's B column is the only general product text column in this layout;
 it is not a separate trustworthy name/description pair. The preparer always emits
 `description: ""`. It never copies technical specifications into that field.
-Source updates using the existing additive merge preserve manually entered details,
-approved prices, currencies and IDs. The comparison excludes descriptions from
-proposed differences. Authoritative replacement remains outside this flow because
-its omission semantics can clear manually retained fields.
+The comparison excludes descriptions from proposed differences. The publisher's
+explicit supplier refresh preserves manually entered details when the incoming
+description is empty, together with local approved prices, currencies and IDs.
+This is distinct from authoritative source replacement, whose omission semantics
+can clear manually retained fields. See [the import contract](CATALOG-IMPORT.md).
 
 Text containing a pipe separator, an Input/Output specification sequence, or more
 than the catalogue's 500-character name limit is held in `nameReviews`, with its
@@ -111,10 +113,11 @@ separately and never turned into products.
 
 These are review triggers, not a semantic abbreviation algorithm. Taking only the
 first pipe-delimited segment can collapse different models, so no such cut is
-applied. Before activation choose either explicit per-SKU approved names or a
-reviewed supplier-specific mapping that preserves distinguishing model/variant
-tokens. Source evidence stays complete. Longer approved names should wrap in
-selection, editing, preview and PNG output rather than shrink or silently truncate.
+applied. Publication uses private per-SKU approved names matched against exact
+source text, preserving distinguishing model/variant tokens. That policy is
+separate from the offline report. Source evidence stays complete. Longer approved
+names should wrap in selection, editing, preview and PNG output rather than shrink
+or silently truncate.
 
 ## Review, freshness and publication
 
@@ -140,10 +143,10 @@ A Drive modification label without complete date/history does not establish a
 daily supplier update contract. Cached formula values are snapshot evidence.
 
 Being able to view an XLSX in Google's editor does not establish a native Sheets
-API contract. A server-side recurring read would need a supported data route and
-separately authorized persistent access. Browser cookies or tokens must never be
-extracted for that purpose. This preparation grants no access and creates no
-credentials, conversions, source copies or permissions.
+API contract. The automated route uses the separately authorized workshop Apps
+Script and Drive download instead. Browser cookies or tokens must never be
+extracted for that purpose. Running the offline preparation grants no access and
+creates no credentials, conversions, source copies or permissions.
 
 The separate publisher resolves coverage within `Precios` using a reviewed private
 policy, preserves ambiguous records as blocked entries and keeps known absent
@@ -151,16 +154,22 @@ SKUs instead of deleting them. Failed or partial reads preserve the previous val
 catalogue. Removing a known identity can otherwise reactivate old quotation
 provenance. Kit/component availability remains outside this stage.
 
-After source review, the intended path is a workshop Apps Script Drive read,
+The implemented automated path is a workshop Apps Script Drive read,
 authenticated upload to Vercel, complete candidate validation/comparison, safe
 publication to private Blob, and the existing
 protected `/api/catalog` endpoint. Daily observation scheduling and conditional
-private evidence writes are implemented separately in `INSTALER-OBSERVATION.md`,
+private evidence writes are documented in
+[INSTALER-OBSERVATION.md](INSTALER-OBSERVATION.md),
 which records the original activation and remaining verification. Conditional
-catalogue publication and rollback are implemented separately in
-`INSTALER-CATALOG-PUBLICATION.md`. Google owns the only schedule;
-no Vercel cron is configured. No commercial source data belongs in the public
-repository or client bundle.
+catalogue publication and rollback are documented in
+[INSTALER-CATALOG-PUBLICATION.md](INSTALER-CATALOG-PUBLICATION.md). Google owns the
+only schedule; no Vercel cron is configured. No commercial source data belongs in
+the public repository or client bundle.
+
+The planned October 23, 2026 at 09:30 Buenos Aires review of the natural daily
+cycle remains separate pending acceptance. Neither an offline report nor passing
+local tests establish that execution or supplier freshness. Do not force a new
+source read, open the workbook online or clear daily guards for this review.
 
 ## Compatibility and verification
 

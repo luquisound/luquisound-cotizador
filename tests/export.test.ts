@@ -608,6 +608,23 @@ test('exports adapter variants under one heading with separate native currency a
   assert.deepEqual(quotation, snapshot)
 })
 
+test('exports the same exact quantity text for ordinary rows and adapters while keeping their distinct labels', () => {
+  for (const [quantity, label] of [
+    ['0,001', '0,001'], ['1', '1'], ['123456789,125', '123.456.789,125'],
+    ['9007199254740,991', '9.007.199.254.740,991'],
+  ]) {
+    const quotation = exportableQuotation()
+    const sample = { ...quotation.rows[0], quantity, priceState: 'included' as const, unitPrice: '' }
+    quotation.rows = [sample, {
+      ...sample, id: 'adapter', section: 'extras', audioCategory: 'adapters', concept: 'Aros adaptadores 3D',
+      adapterVariant: { productKey: 'ring', size: '6,5', presentation: 'unit' },
+    }]
+    const text = renderWithRecordedCanvas(quotation).texts.map(({ text }) => text).join(' ')
+    assert.equal(text.includes(`${label} unidades · Sin cargo`), quantity !== '1')
+    assert.ok(text.includes(`${label} ${quantity === '1' ? 'unidad' : 'unidades'} × 6,5″ · Incluido`))
+  }
+})
+
 test('exports every long adapter description below the heading and above totals without clipping', () => {
   const quotation = exportableQuotation()
   const sample = quotation.rows[0]
