@@ -58,7 +58,7 @@ export function rowFromCatalog(
   const availabilityPolicy = getCatalogAvailabilityPolicy(item)
   return {
     ...createRow(section, price.currency), ...(audioCategory === undefined ? {} : { audioCategory }),
-    concept: item.concept, detail: item.detail, unitPrice: price.unitPrice,
+    concept: item.concept, detail: item.sku?.trim() ? '' : item.detail, unitPrice: price.unitPrice,
     priceState: price.unitPrice ? 'priced' : 'pending',
     provenance: {
       catalogItemId: item.id,

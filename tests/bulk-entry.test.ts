@@ -64,12 +64,44 @@ test('a unique exact selection copies the approved native price and keeps editab
   decisions[0].section = 'extras'
   const [row] = applyBulkEntry(preview, decisions, catalog, options)
   assert.equal(row.concept, catalog[0].concept)
-  assert.equal(row.detail, catalog[0].detail)
+  assert.equal(row.detail, '')
   assert.equal(row.quantity, '1,5')
   assert.equal(row.section, 'extras')
   assert.equal(row.currency, 'USD')
   assert.equal(row.unitPrice, '12,50')
   assert.equal(row.priceState, 'priced')
+})
+
+test('bulk code selections keep model, variant and presentation in the approved title without specifications', () => {
+  const selectedItem = item({
+    sku: ' SYN-A ', concept: 'Synthetic RX-65 6.5-inch | MK-II (pair)',
+    detail: 'Technical supplier specifications. '.repeat(40),
+  })
+  const catalog = [selectedItem]
+  const { preview, decisions } = prepare('syn-a', catalog)
+  const before = structuredClone({ catalog, preview, decisions })
+  const [row] = applyBulkEntry(preview, decisions, catalog, options)
+  assert.equal(row.concept, selectedItem.concept)
+  assert.equal(row.detail, '')
+  assert.equal(row.unitPrice, selectedItem.unitPrice)
+  assert.equal(row.currency, selectedItem.currency)
+  assert.equal(row.priceState, 'priced')
+  assert.equal(row.provenance?.sku, selectedItem.sku)
+  assert.equal(row.provenance?.originalUnitPrice, selectedItem.unitPrice)
+  assert.equal(row.provenance?.originalCurrency, selectedItem.currency)
+  assert.deepEqual({ catalog, preview, decisions }, before)
+})
+
+test('bulk selections by name keep independent catalogue details when the SKU is absent or blank', () => {
+  for (const sku of [undefined, '', ' \t ']) {
+    const catalog = [item({ sku, concept: 'Independent catalogue work', detail: 'Customer instructions' })]
+    const before = structuredClone(catalog)
+    const { preview, decisions } = prepare('Independent catalogue work', catalog)
+    const [row] = applyBulkEntry(preview, decisions, catalog, options)
+    assert.equal(row.concept, catalog[0].concept)
+    assert.equal(row.detail, catalog[0].detail)
+    assert.deepEqual(catalog, before)
+  }
 })
 
 test('explicit zero remains a priced selection and historical references never approve an amount', () => {

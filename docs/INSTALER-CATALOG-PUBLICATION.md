@@ -48,6 +48,19 @@ production catalogue. Tests contain synthetic examples only.
   must remain clear in the approved product name; structured adapter variants
   retain their separate existing contract.
 
+Reviewed names are commercial titles, not copies of the complete supplier
+specifications. Keep the exact model, sale-defining variant, size and presentation
+in each approved title. A copied technical paragraph alone does not require
+rejecting a source title approved under its exact SKU/text correspondence. Price,
+stock, duplicate and changed-source guards still apply independently.
+
+New selections with a nonblank SKU copy that complete title and start with an
+empty row detail, through the same individual/bulk selection boundary. The
+catalogue description remains available privately, and users can add quotation
+details explicitly. No reading, refresh, recovery or export shortens existing
+quotation text or clears saved/manual details. Presentation is kept in the title
+because generic catalogue unit/presentation metadata is not a separate PNG field.
+
 Only `Precios` is published. C is the ARS retail list price before supplier
 discount, with VAT already included. No discount, 20% surcharge, margin,
 additional VAT or supplier-dollar conversion applies. Decimal stock is retained;

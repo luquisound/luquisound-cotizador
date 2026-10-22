@@ -81,6 +81,15 @@ the row's identity, section and quotation category while copying the
 selected product's approved price, currency and private provenance together.
 Quantity is preserved for variable-quantity rows; cables and labour use one.
 
+For a product with a nonblank SKU, individual and bulk selection copy only the
+approved commercial title into the row and start with an empty detail. Model,
+variant, size and unit/pair/set presentation that identify the sale must remain
+in the approved title. Supplier specifications remain catalogue/private source
+information; they are not automatically customer text. Users may add a detail
+explicitly afterward. Entries without a SKU retain their maintained detail.
+This applies at selection only: reading, recovery, imports, refresh and opening
+saved quotations never shorten or clear their existing concept or detail.
+
 "Mas opciones" contains variable quantity, optional detail, quotation category, currency,
 included-without-charge state, private provenance and the existing-row removal
 action. Its closed summary reflects the active variable quantity, category, currency,

@@ -20,7 +20,7 @@ import {
   CATALOG_STORAGE_KEY, CURRENT_QUOTATION_STORAGE_KEY, loadCatalog, loadCurrentQuotation,
   saveCatalog, saveCurrentQuotation,
 } from '../src/features/quotation/working-storage.ts'
-import { buildInstalerCatalogCandidate } from '../src/server/instaler-catalog.ts'
+import { buildInstalerCatalogCandidate, type InstalerCatalogPolicy } from '../src/server/instaler-catalog.ts'
 import type { ObservationSnapshot, ObservationTable } from '../src/server/instaler-observation.ts'
 
 const READ_AT = '2026-10-22T12:00:00.000Z'
@@ -254,4 +254,75 @@ test('missing supplier fields replace old source values atomically while manual 
   assert.equal(inspectQuotationAvailability(quotation, catalog, NOW + DAY).issues.length, 2)
   assert.equal(quotation.rows[0].provenance?.stock?.quantity, 12.75)
   assert.equal(JSON.stringify(quotation), quotationBytes)
+})
+
+test('reviewed commercial titles resolve copied specifications for new selections without rewriting existing quotations', async () => {
+  const sourceText = 'Synthetic RX-65 MK-II 6.5-inch (pair) | Supplier input and output specifications'
+  const contradictoryText = 'Synthetic vehicle tweeter\n' + 'Copied four-inch center speaker specifications. '.repeat(15)
+  const input = snapshot([
+    { row: 2, values: ['SYN-A', sourceText, '123.45', '12.75', 'Speakers'] },
+    { row: 3, values: ['SYN-B', contradictoryText, '250.00', '3', 'Speakers'] },
+  ])
+  const oldPolicy: InstalerCatalogPolicy = {
+    format: 'luquisound.instaler-catalog-policy', version: 1,
+    names: [{ sku: 'SYN-A', sourceText, name: sourceText }],
+    exclusions: [], allowIdenticalDuplicates: false,
+  }
+  const previous = buildInstalerCatalogCandidate(input, empty(), oldPolicy)
+  assert.equal(previous.summary.unresolvedNames, 1)
+  const initialCatalog = mergeSharedCatalog([], previous.document)
+  product(initialCatalog, 'SYN-A').detail = 'Retained catalogue specifications'
+  const historicalRow = {
+    ...rowFromCatalog(product(initialCatalog, 'SYN-A'), 'equipment', 'ARS', 'speakers', NOW),
+    concept: sourceText, detail: 'Previously saved customer detail',
+  }
+  const quotation = { ...createQuotation(), rows: [historicalRow], exchangeRate: '1.400', exchangeRateMode: 'frozen' as const }
+  const quotationBytes = JSON.stringify(quotation)
+  const library = saveQuotationToLibrary(createQuotationLibrary(), quotation, 'Previously saved title')
+  const libraryBytes = serializeQuotationLibrary(library)
+  const adapter = storage()
+  assert.equal(saveCurrentQuotation(adapter, quotation, { expectedRaw: null }).ok, true)
+  assert.equal(saveQuotationLibrary(adapter, library, { expectedRaw: null }).ok, true)
+  const recoveryBytes = adapter.values.get(CURRENT_QUOTATION_STORAGE_KEY)
+  const writesBefore = adapter.writes.length
+
+  const title = 'Synthetic RX-65 MK-II 6.5-inch (pair)'
+  const nextPolicy: InstalerCatalogPolicy = { ...oldPolicy, names: [
+    { sku: 'SYN-A', sourceText, name: title },
+    { sku: 'SYN-B', sourceText: contradictoryText, name: 'Synthetic vehicle tweeter' },
+  ] }
+  const updated = buildInstalerCatalogCandidate(input, previous.document, nextPolicy)
+  assert.equal(updated.summary.unresolvedNames, 0)
+  assert.equal(updated.document.instalerObservation?.readAt, READ_AT)
+  const catalog = mergeSharedCatalog(initialCatalog, await transport(updated.document))
+  const selected = rowFromCatalog(product(catalog, 'SYN-A'), 'equipment', 'USD', 'speakers', NOW)
+  assert.equal(selected.concept, title)
+  assert.equal(selected.detail, '')
+  assert.equal(selected.unitPrice, historicalRow.unitPrice)
+  assert.equal(selected.currency, historicalRow.currency)
+  assert.deepEqual(selected.provenance?.stock, historicalRow.provenance?.stock)
+  assert.equal(product(catalog, 'SYN-A').detail, 'Retained catalogue specifications')
+  const resolved = rowFromCatalog(product(catalog, 'SYN-B'), 'equipment', 'ARS', undefined, NOW)
+  assert.equal(resolved.concept, 'Synthetic vehicle tweeter')
+  assert.equal(resolved.detail, '')
+  assert.equal(resolved.unitPrice, '250')
+  assert.equal(saveCatalog(adapter, catalog, { expectedRaw: null }).ok, true)
+
+  assert.deepEqual(adapter.writes.slice(writesBefore), [CATALOG_STORAGE_KEY])
+  assert.equal(adapter.values.get(CURRENT_QUOTATION_STORAGE_KEY), recoveryBytes)
+  assert.equal(adapter.values.get(LIBRARY_STORAGE_KEY), libraryBytes)
+  assert.equal(JSON.stringify(quotation), quotationBytes)
+  assert.deepEqual(loadCurrentQuotation(adapter).quotation, quotation)
+  const reopened = openLibraryQuotation(loadQuotationLibrary(adapter).library.entries[0])
+  assert.equal(reopened.rows[0].concept, sourceText)
+  assert.equal(reopened.rows[0].detail, historicalRow.detail)
+  assert.equal(reopened.rows[0].unitPrice, historicalRow.unitPrice)
+  assert.equal(serializeQuotationLibrary(library), libraryBytes)
+  assert.equal(getCatalogSelectionStatus(product(catalog, 'SYN-A'), NOW + 7 * DAY).reason, 'stale-stock')
+
+  const drift = structuredClone(input)
+  drift.table.rows[1].values[1] = contradictoryText + ' Changed source wording.'
+  const unreviewed = buildInstalerCatalogCandidate(drift, updated.document, nextPolicy)
+  assert.equal(unreviewed.summary.unresolvedNames, 1)
+  assert.ok(unreviewed.document.items.find((item) => item.sku === 'SYN-B')?.selectionBlock)
 })

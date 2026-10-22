@@ -54,6 +54,11 @@ inventory management, invoicing, and a general backend remain outside this stage
   "Agregar" or "Guardar". Combine SKU, brand
   and name search with independent manual entry; catalogue selection requires an explicit result
   choice, never typing, blur or save. Avoid an initial catalogue accordion.
+  Selecting a catalogue product with a nonblank SKU copies its approved commercial
+  title and starts with an empty detail. Keep model, variant and unit/pair/set
+  presentation in that title. Users may add a detail explicitly. Entries without
+  a SKU retain their maintained detail. Apply this only at selection; never prune
+  or migrate existing, imported, recovered or saved quotation text.
   Keep variable quantity, detail, quotation category, currency, included state, private
   provenance and removal in "Mas opciones", with active values summarized while
   closed. Opening or closing it must preserve the draft. Retain pending and

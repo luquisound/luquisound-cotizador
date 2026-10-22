@@ -219,6 +219,14 @@ An ineligible row is preserved but blocks final image delivery. Historical usage
 adds a generic availability-to-confirm line to the PNG, with no source details,
 SKU or stock quantity. See [source boundaries](CATALOG-SOURCE-ROADMAP.md).
 
+For a catalogue item with a nonblank SKU, new individual and bulk selections copy
+the complete approved title and start with an empty `detail`. The title must
+retain model, variant and commercial unit/pair/set presentation; selection never
+truncates it or guesses those fields. The catalogue's own description is retained.
+Entries without a SKU keep their maintained detail, and users can explicitly add
+a quotation detail after selecting a coded product. Existing, imported, recovered
+and saved quotation text is never migrated or filtered during rendering/export.
+
 ## Validation and limits
 
 `parseCatalogImport(text)` validates an unknown JSON value and returns only known

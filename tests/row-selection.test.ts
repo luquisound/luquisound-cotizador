@@ -53,7 +53,7 @@ test('selection keeps fixed service quantity at one while copying the native lis
   assert.equal(selected.section, 'extras')
   assert.equal(selected.audioCategory, 'cables')
   assert.equal(selected.concept, selectedItem.concept)
-  assert.equal(selected.detail, selectedItem.detail)
+  assert.equal(selected.detail, '')
   assert.equal(selected.currency, 'USD')
   assert.equal(selected.unitPrice, '12,50')
   assert.equal(selected.priceState, 'priced')
@@ -64,6 +64,37 @@ test('selection keeps fixed service quantity at one while copying the native lis
   })
   assert.equal(getRowPriceOverride(selected), false)
   assert.equal(draft.quantity, '2,500')
+})
+
+test('coded selections keep the complete approved title without copying supplier specifications', () => {
+  const draft = row({ section: 'equipment', audioCategory: 'speakers' })
+  for (const concept of ['Synthetic RX-65 6.5-inch MK-II (pair)', 'Synthetic RX-8 8-inch | Series II (set)']) {
+    const selectedItem = item({ sku: ' SYN-1 ', concept, detail: 'Input and output specifications. '.repeat(40) })
+    const before = structuredClone({ draft, selectedItem })
+    const selected = selectCatalogForRow(draft, selectedItem, 'ARS', now)
+    assert.equal(selected.concept, concept)
+    assert.equal(selected.detail, '')
+    assert.equal(selected.id, draft.id)
+    assert.equal(selected.quantity, draft.quantity)
+    assert.equal(selected.unitPrice, '12,50')
+    assert.equal(selected.currency, 'USD')
+    assert.equal(selected.priceState, 'priced')
+    assert.equal(selected.provenance?.sku, selectedItem.sku)
+    assert.deepEqual(selected.provenance?.stock, selectedItem.stock)
+    assert.deepEqual(selected.provenance?.listPrice, selectedItem.listPrice)
+    assert.deepEqual({ draft, selectedItem }, before)
+  }
+})
+
+test('catalogue entries without a nonblank SKU keep their explicitly maintained detail', () => {
+  for (const sku of [undefined, '', ' \t ']) {
+    const selectedItem = item({ sku, detail: 'Customer detail for an independent catalogue entry' })
+    const before = structuredClone(selectedItem)
+    const selected = selectCatalogForRow(row(), selectedItem, 'ARS', now)
+    assert.equal(selected.concept, selectedItem.concept)
+    assert.equal(selected.detail, selectedItem.detail)
+    assert.deepEqual(selectedItem, before)
+  }
 })
 
 test('catalogue selection preserves quantities for equipment, adapters, harnesses and unclassified concepts', () => {

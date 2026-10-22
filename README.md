@@ -144,6 +144,12 @@ The full editor still saves pending or invalid drafts for later completion;
 editing only a description preserves its price state. Cancel discards all modal
 changes. This presentation preserves pricing, source and availability rules.
 
+Selecting a product with a nonblank SKU copies its approved commercial title,
+including model, variant and presentation, with an empty detail. Individual and
+bulk selections use the same rule; users can add a detail explicitly afterward.
+Catalogue entries without a SKU retain their maintained detail. Existing,
+recovered, imported and saved quotations keep their original text and amounts.
+
 Speakers/component sets and subwoofers offer an explicit factory-equipment
 checkbox. It shows "Parlantes de fabrica" or "Subwoofer de fabrica" with a priced
 zero and retains the equipment quantity. Product, detail, price and included

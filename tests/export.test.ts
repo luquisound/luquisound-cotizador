@@ -7,6 +7,7 @@ import {
 import { exchangeRateDescription } from '../src/features/quotation/exchange-quote.ts'
 import type { CatalogItem, Quotation } from '../src/features/quotation/model.ts'
 import { QUOTATION_GRAPHIC } from '../src/features/quotation/graphic.ts'
+import { rowFromCatalog } from '../src/features/quotation/row-provenance.ts'
 
 const measure = (text: string): number => Array.from(text).length
 const file = new File(['synthetic image data'], 'luquisound-test.png', { type: 'image/png' })
@@ -221,6 +222,26 @@ function exportableQuotation(): Quotation {
     }],
   }
 }
+
+test('new coded selections export their complete commercial title while saved and explicit details remain visible', () => {
+  const item: CatalogItem = {
+    id: 'synthetic-title', section: 'equipment', sku: 'SYN-RX65',
+    concept: 'Synthetic RX-65 MK-II 6.5-inch (pair)', detail: 'SUPPLIER SPECIFICATIONS OMITTED',
+    unitPrice: '123,45', currency: 'ARS',
+  }
+  const selected = rowFromCatalog(item, 'equipment')
+  const oldRow = { ...selected, id: 'synthetic-saved', detail: 'Previously saved customer detail' }
+  const manualRow = { ...selected, id: 'synthetic-manual', detail: 'Explicit installation instructions' }
+  const quotation = { ...exportableQuotation(), rows: [selected, oldRow, manualRow] }
+  const before = structuredClone(quotation)
+  const rendered = renderWithRecordedCanvas(quotation)
+  const text = rendered.texts.map((entry) => entry.text).join(' ')
+  assert.ok(text.includes(item.concept))
+  assert.ok(!text.includes(item.detail))
+  assert.ok(text.includes(oldRow.detail))
+  assert.ok(text.includes(manualRow.detail))
+  assert.deepEqual(quotation, before)
+})
 
 test('renders a yellow custom header with dark text and keeps the contact footer dark', () => {
   const quotation = { ...exportableQuotation(), title: 'AUDIO A MEDIDA', subtitle: 'Vehiculo de prueba' }

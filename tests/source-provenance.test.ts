@@ -143,6 +143,29 @@ test('persistence and duplication retain frozen rate and complete private proven
   assert.equal(restored.quotations[0].rows[0].provenance!.stock!.source.document, source.document)
 })
 
+test('an explicit detail added after a coded selection survives recovery and duplication without changing its source', () => {
+  const item = { ...historical(), detail: 'Supplier technical specifications retained in the catalogue' }
+  const before = structuredClone(item)
+  const selected = rowFromCatalog(item, 'equipment', 'USD', 'speakers', now)
+  assert.equal(selected.detail, '')
+  const provenance = structuredClone(selected.provenance)
+  selected.detail = 'Explicit customer installation instructions\nKeep this detail exactly.'
+  const workspace = createWorkspace()
+  workspace.catalog = [item]
+  workspace.quotations[0].rows = [selected]
+  const restored = parseWorkspace(serializeWorkspace(workspace))
+  const duplicate = duplicateQuotation(restored.quotations[0])
+  for (const row of [selected, restored.quotations[0].rows[0], duplicate.rows[0]]) {
+    assert.equal(row.detail, selected.detail)
+    assert.equal(row.concept, item.concept)
+    assert.equal(row.unitPrice, '125,50')
+    assert.equal(row.currency, 'ARS')
+    assert.deepEqual(row.provenance, provenance)
+  }
+  assert.deepEqual(item, before)
+  assert.deepEqual(restored.catalog[0], before)
+})
+
 test('row provenance preserves the reading timestamp independently across parsing, recovery and duplication', () => {
   const readAt = '2026-10-17T10:00:00.000Z'
   const readSource = { ...source, readAt }
