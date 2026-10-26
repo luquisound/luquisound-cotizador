@@ -104,6 +104,33 @@ test('bulk selections by name keep independent catalogue details when the SKU is
   }
 })
 
+test('bulk Instaler code selection cleans the copied title without changing searchable source data', (context) => {
+  context.mock.method(Date, 'now', () => Date.parse('2026-10-17T10:05:00.000Z'))
+  const source = {
+    document: 'synthetic-catalog.xlsx', kind: 'snapshot' as const, date: null,
+    version: 'synthetic-v1', checksum: 'a'.repeat(64),
+  }
+  const selectedItem = item({
+    supplier: 'Instaler', concept: 'Synthetic RX-65 MK-II (pair) [SYN-A]',
+    stock: {
+      quantity: 3, checkedAt: '2026-10-17T10:00:00.000Z',
+      validUntil: '2026-10-17T10:15:00.000Z', source,
+    },
+  })
+  const catalog = [selectedItem]
+  const { preview, decisions } = prepare('syn-a', catalog)
+  const before = structuredClone({ catalog, preview, decisions })
+  decisions[0].quantity = '2'
+  const [row] = applyBulkEntry(preview, decisions, catalog, options)
+  assert.equal(row.concept, 'Synthetic RX-65 MK-II (pair)')
+  assert.equal(row.quantity, '2')
+  assert.equal(row.unitPrice, selectedItem.unitPrice)
+  assert.equal(row.currency, selectedItem.currency)
+  assert.equal(row.provenance?.sku, 'SYN-A')
+  assert.deepEqual(catalog, before.catalog)
+  assert.deepEqual(preview, before.preview)
+})
+
 test('explicit zero remains a priced selection and historical references never approve an amount', () => {
   const catalog = [item({ unitPrice: '0' }), item({
     id: 'synthetic-b', sku: 'SYN-B', concept: 'Synthetic cable', unitPrice: '', referencePrices: [

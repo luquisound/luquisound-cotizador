@@ -6,6 +6,7 @@ import {
   type CatalogListPrice, type CatalogSource,
 } from './catalog.ts'
 import { canSelectCatalogItem, getCatalogAvailabilityPolicy, type CatalogAvailabilityPolicy, type CatalogStockSnapshot } from './catalog-stock.ts'
+import { getCatalogQuotationTitle } from './catalog-title.ts'
 import { createRow, type CatalogItem, type Currency, type QuotationRow, type RowSection } from './model.ts'
 
 export type CatalogPriceBasis = 'manual' | 'list' | 'provisional-list' | 'pending'
@@ -58,7 +59,7 @@ export function rowFromCatalog(
   const availabilityPolicy = getCatalogAvailabilityPolicy(item)
   return {
     ...createRow(section, price.currency), ...(audioCategory === undefined ? {} : { audioCategory }),
-    concept: item.concept, detail: item.sku?.trim() ? '' : item.detail, unitPrice: price.unitPrice,
+    concept: getCatalogQuotationTitle(item), detail: item.sku?.trim() ? '' : item.detail, unitPrice: price.unitPrice,
     priceState: price.unitPrice ? 'priced' : 'pending',
     provenance: {
       catalogItemId: item.id,

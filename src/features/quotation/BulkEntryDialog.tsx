@@ -6,6 +6,7 @@ import {
 } from './bulk-entry.ts'
 import { resolveCatalogQuery, type CatalogSelectionPredicate } from './catalog-search.ts'
 import { CatalogAvailability } from './CatalogAvailability.tsx'
+import { getCatalogQuotationTitle } from './catalog-title.ts'
 import type { CatalogItem, Currency, QuotationRow, RowSection } from './model.ts'
 import { Dialog } from './QuotationDialog.tsx'
 import { getCatalogSelectionPrice } from './row-provenance.ts'
@@ -24,7 +25,7 @@ export interface BulkEntryDialogProps {
 const CANDIDATE_LIMIT = 20
 
 function candidateLabel(item: CatalogItem): string {
-  return [item.concept, item.sku, item.supplier].filter(Boolean).join(' · ')
+  return [getCatalogQuotationTitle(item), item.sku, item.supplier].filter(Boolean).join(' · ')
 }
 
 function resolutionLabel(line: BulkEntryLine): string {

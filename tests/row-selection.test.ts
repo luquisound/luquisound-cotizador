@@ -97,6 +97,26 @@ test('catalogue entries without a nonblank SKU keep their explicitly maintained 
   }
 })
 
+test('Instaler selection removes only the separate source code while preserving product and commercial fields', () => {
+  const draft = row({ section: 'equipment', audioCategory: 'speakers', concept: 'Existing title (SYN-A)' })
+  const selectedItem = item({
+    supplier: 'Instaler', sku: 'SYN-A', concept: 'Synthetic RX-65 MK-II 6.5-inch (pair)(SYN-A)',
+  })
+  const before = structuredClone({ draft, selectedItem })
+  const selected = selectCatalogForRow(draft, selectedItem, 'ARS', now)
+  assert.equal(selected.concept, 'Synthetic RX-65 MK-II 6.5-inch (pair)')
+  assert.equal(selected.detail, '')
+  assert.equal(selected.id, draft.id)
+  assert.equal(selected.quantity, draft.quantity)
+  assert.equal(selected.audioCategory, draft.audioCategory)
+  assert.equal(selected.unitPrice, '12,50')
+  assert.equal(selected.currency, 'USD')
+  assert.equal(selected.provenance?.sku, 'SYN-A')
+  assert.equal(selected.provenance?.supplier, 'Instaler')
+  assert.deepEqual(selected.provenance?.source, source)
+  assert.deepEqual({ draft, selectedItem }, before)
+})
+
 test('catalogue selection preserves quantities for equipment, adapters, harnesses and unclassified concepts', () => {
   for (const fields of [
     { section: 'equipment' as const, audioCategory: 'speakers' as const },

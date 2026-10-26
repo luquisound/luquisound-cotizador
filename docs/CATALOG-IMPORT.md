@@ -222,7 +222,14 @@ SKU or stock quantity. See [source boundaries](CATALOG-SOURCE-ROADMAP.md).
 For a catalogue item with a nonblank SKU, new individual and bulk selections copy
 the complete approved title and start with an empty `detail`. The title must
 retain model, variant and commercial unit/pair/set presentation; selection never
-truncates it or guesses those fields. The catalogue's own description is retained.
+truncates it or guesses those fields. For Instaler, the copied title omits complete
+standalone occurrences of the same source SKU and code-only parentheses/brackets.
+The comparison ignores case without removing accents or guessing code variants;
+longer model/code strings remain intact. An otherwise empty title keeps its source
+text. Original catalogue titles, SKU search and private provenance stay unchanged.
+Quotation search suggestions and bulk-review candidates display that same prepared
+title alongside the separate SKU; catalogue maintenance retains the original text.
+The catalogue's own description is retained.
 Entries without a SKU keep their maintained detail, and users can explicitly add
 a quotation detail after selecting a coded product. Existing, imported, recovered
 and saved quotation text is never migrated or filtered during rendering/export.

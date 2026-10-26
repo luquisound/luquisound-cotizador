@@ -10,6 +10,7 @@ import { Dialog } from './QuotationDialog.tsx'
 import { buildCatalogEdit, captureCatalogEditBaseline } from './catalog-edit.ts'
 import { queryCatalogRanked, resolveCatalogQuery } from './catalog-search.ts'
 import { canSelectCatalogItem } from './catalog-stock.ts'
+import { getCatalogQuotationTitle } from './catalog-title.ts'
 import { CatalogAvailability } from './CatalogAvailability.tsx'
 import { getCatalogSelectionPrice } from './row-provenance.ts'
 import { useCatalogClock } from './useCatalogClock.ts'
@@ -281,7 +282,7 @@ export function RowProductPicker({ catalog, section, value, onChange, onChoose, 
             const selectable = canSelectCatalogItem(item, now)
             return <li className="catalog-picker-card" key={item.id}>
               <button type="button" className="catalog-picker-choice" disabled={!selectable} onClick={() => choose(item)}>
-                <strong className="catalog-item-name">{item.concept}</strong>
+                <strong className="catalog-item-name">{getCatalogQuotationTitle(item)}</strong>
                 {(item.sku || item.brand || item.supplier) && <span className="catalog-item-meta">{[item.sku, item.brand, item.supplier].filter(Boolean).join(' \u00b7 ')}</span>}
                 <span className="catalog-item-price">{catalogPriceLabel(item)}</span>
                 <CatalogAvailability item={item} now={now} />
