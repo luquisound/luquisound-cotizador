@@ -114,6 +114,12 @@ confirmation and removes only the open row. Fields scroll independently from the
 heading and footer. Adapter "Guardar y agregar otra medida" remains available
 inside "Mas opciones".
 
+Dialogs follow the visible viewport when the software keyboard opens or closes,
+including browsers that keep their layout viewport unchanged. The full editor
+keeps its heading and actions above the keyboard while its fields scroll.
+Viewport changes preserve the current draft and focus; pinch zoom retains normal
+document sizing and panning.
+
 Variable-quantity rows in the full editor offer linked unit-price and total-price
 inputs in the row currency. Editing the unit price or quantity recalculates the
 total. Editing the total divides it by the positive quantity and rounds the unit
