@@ -90,9 +90,31 @@ explicitly afterward. Entries without a SKU retain their maintained detail.
 This applies at selection only: reading, recovery, imports, refresh and opening
 saved quotations never shorten or clear their existing concept or detail.
 
+The full row editor uses a bottom sheet on narrow screens and a centered dialog
+on desktop, with a distinct price panel, a currency badge and persistent Save/Cancel
+actions outside the scrolling fields. Existing rows also show "Eliminar item" in that footer, outside
+"Mas opciones"; deletion requires confirmation and removes only the open row.
+New drafts do not offer deletion.
+
+Variable-quantity rows in the full editor offer linked unit-price and total-price
+inputs in the row currency. Editing the unit price or quantity recalculates the
+total. Editing the total divides it by the positive quantity and rounds the unit
+price half up to cents using integer arithmetic. The entered total stays editable
+until blur; then the field shows the actual rounded line amount, with a visible
+adjustment note when it differs from the requested total. Only quantity and unit
+price are stored; preview and PNG keep the same existing line calculation.
+Blank total clears the unit price to pending. Invalid total edits require correction
+or clearing before saving and never replace the last valid unit price. Both manual
+money inputs retain the 15-character limit; generated text is never truncated.
+Quantity, size, currency, category, catalogue, included-state and factory-mode changes
+discard a temporary total draft and recalculate it from the active row. Total edits
+use the same manual-price path, preserving provenance and resetting the currency
+conversion reference. Factory and included locks apply to both price inputs;
+fixed services keep their single service amount.
+
 "Mas opciones" contains variable quantity, optional detail, quotation category, currency,
-included-without-charge state, private provenance and the existing-row removal
-action. Its closed summary reflects the active variable quantity, category, currency,
+included-without-charge state and private provenance.
+Its closed summary reflects the active variable quantity, category, currency,
 detail presence and included state. Opening or closing it does not reset values.
 The full editor retains pending and invalid drafts; editing only a description
 does not approve a pending amount or change an included state. Cancel leaves the
@@ -146,8 +168,8 @@ reclassification. Except new adapters,
 which first focus size selection, its modal focuses and selects the unit-price
 input without product search, catalogue or category
 selection. "Mas opciones" retains harness quantity, detail, currency, explicit included
-state and removal of an existing row. No detail, supplier data or included state
-is supplied automatically.
+state. Existing-row removal stays in the visible editor footer. No detail, supplier
+data or included state is supplied automatically.
 
 The primary harness control opens "Editar precio", which contains the editable
 price and explicit inclusion checkbox. The main template has no harness checkbox,
