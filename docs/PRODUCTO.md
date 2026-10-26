@@ -7,7 +7,7 @@ The quotation template is the primary interface: tap its title or a row to edit
 it using touch-friendly controls. Lucas's target device is an iPhone; Android is
 also part of hands-on acceptance.
 Fixed budgets and reusable templates remain in Figma. This app edits one current
-custom quotation and can explicitly save named snapshots in this browser.
+custom quotation with browser-local recovery of its current state.
 
 ## V1 scope
 
@@ -24,10 +24,10 @@ custom quotation and can explicitly save named snapshots in this browser.
 - Reviewed bulk addition from one code or name per line, with explicit resolution
   of ambiguous matches, repeated products, quantities and sections.
 - ARS and USD totals using a rate saved with the quotation. Automatic-mode
-  quotations refresh DolarAPI blue sale hourly; saved snapshots retain their rate.
-- Recovery of the current quotation, a separate persistent catalogue, and an
-  explicitly saved local quotation library with open and duplicate actions.
-  Catalogue and quotation-library JSON backup/import are separate workflows.
+  quotations refresh DolarAPI blue sale hourly; compatible frozen recovery data
+  retains its saved rate until an explicit update.
+- Recovery of the current quotation and a separate persistent catalogue with
+  private catalogue JSON backup/import.
 - PNG image with only the graphic quotation, plus browser file sharing or download.
 
 Without the configured common catalogue service, a new browser starts empty.
@@ -104,7 +104,7 @@ The row editor's catalogue suggestions and bulk-review candidates use the same
 cleaned title, displaying the separate SKU for identification. Search still uses
 the original catalogue data; typing a code alone never selects or cleans a row.
 Only explicit selection copies the prepared title into a quotation. Reading,
-recovery, imports, refresh and opening saved quotations never shorten or clear
+recovery, compatible imports and refresh never shorten or clear
 their existing concept or detail.
 
 The full row editor uses a bottom sheet on narrow screens and a centered dialog
@@ -246,10 +246,10 @@ quantity remains included at zero, retaining its previous amount in the origin
 when it cannot be represented as a valid service price. Review-only drafts remain
 meaningful recoverable content and block image delivery.
 
-Persistence readers and backup/library import preserve raw historical rows and
+Persistence readers and compatible backups preserve raw historical rows and
 validated origin metadata without converting them. The current editable copy is
-prepared after recovery and on opening or duplicating a library entry; saved
-entries and source backups remain intact. New or edited service rows must have
+prepared after current-quotation recovery; archived bytes and source backups
+remain intact. New or edited service rows must have
 quantity exactly `1` when applied. Existing duplicate rows remain independent.
 
 New adapter rows require an explicit choice between two user-approved variants:
@@ -330,7 +330,7 @@ Private `factoryEquipment` version-1 metadata stores the eligible category and
 the original concept, detail, unit price, price state and currency. The row keeps
 any prior conversion anchor unchanged while factory mode is active. It preserves
 the raw text, quantity, row identity and existing catalogue provenance. Recovery,
-backups and library copies validate and retain that metadata; no factory mode is
+compatible backups validate and retain that metadata; no factory mode is
 inferred from a legacy name or zero price. The active state is validated against
 its canonical description, zero amount, priced state and valid ARS or USD currency;
 the active currency need not equal the stored original currency. Supplier
@@ -429,7 +429,7 @@ explicit zero, and included states retain their distinct meanings.
 - Validated private `currencyConversionOrigin` metadata retains a conversion base
   on a quotation row. Switching back with the same numerical rate and an
   untouched amount uses that base to prevent accumulated cent rounding. Recovery,
-  backups, opening and duplication preserve the anchor with the row. Manual
+  compatible backups preserve the anchor with the row. Manual
   price edits, adapter-size choices and explicit catalogue selection reset it;
   quantity changes do not convert the unit amount. A factory row may change its
   active zero currency without using or replacing its retained paid-price anchor.
@@ -451,11 +451,10 @@ explicit zero, and included states retain their distinct meanings.
   one hour old or absent. Save the value and source timestamp together. This
   includes recovering the current quotation after reload. Poll while visible and
   online and check again on return or reconnection, independently of persistence
-  errors or saving pauses. Saving a named quotation freezes its current rate;
-  opening or duplicating a saved snapshot also stays frozen, including after
-  recovery on reload. "Actualizar dolar guardado" requires confirmation and
-  resumes automatic lookup for the open copy, without modifying its saved entry
-  or row prices. Recovered
+  errors or saving pauses. Compatible current recovery data carrying a frozen
+  rate stays frozen after reload. "Actualizar dolar guardado" requires
+  confirmation and resumes automatic lookup for the current copy without
+  modifying its row prices. Recovered
   manual rates remain valid without invented provenance until
   a successful automatic lookup replaces them. See `EXCHANGE-RATE.md`.
 - Convert each currency subtotal once, rounding half up to cents:
@@ -479,9 +478,10 @@ explicit zero, and included states retain their distinct meanings.
 
 The editor has one current quotation. Its recovery snapshot uses localStorage
 key `luquisound.current-quotation.v1`; the persistent catalogue and approved
-prices use `luquisound.catalog.v1`. Explicitly saved quotations use the separate
-`luquisound.quotation-library.v1` key. These stores are independent and belong to
-the current browser and origin. A read-only server endpoint supplies the private
+prices use `luquisound.catalog.v1`. These stores are independent and belong to
+the current browser and origin. Previously stored
+`luquisound.quotation-library.v1` bytes are left untouched by the current app.
+A read-only server endpoint supplies the private
 common catalogue on startup and after the daily 08:00-09:00 Buenos Aires source
 window, with a 09:00 daily app cycle while visible and online. There is no refresh
 button or hourly catalogue polling. There is no quotation upload, analytics, or
@@ -489,15 +489,13 @@ synchronization of locally approved prices.
 
 The header contains the brand and editable quotation details. Below the template
 and contact footer, always-visible buttons open "Pegar codigos o nombres",
-"Mi catalogo", "Presupuestos guardados" and "Nuevo presupuesto", including when
-the quotation is empty. Each action opens its existing secondary workflow;
-history and save controls remain inside their workflow.
+"Mi catalogo" and "Nuevo presupuesto", including when the quotation is empty.
+Each action opens its existing secondary workflow.
 "Nuevo presupuesto" replaces only the
 current quotation, confirming before content or an unreadable recovery record is
 replaced. It preserves the catalogue, approved prices and legacy workspace key.
-"Presupuestos guardados" lists named snapshots with their save dates, offers
-explicit save, open and duplicate actions, and manages its own private backup.
-There is no backend quotation history or automatic archive of every edit.
+There is no named quotation saving, opening, duplication, quotation-history
+import/export, backend quotation history or automatic archive of every edit.
 Downloading or sharing a PNG leaves the quotation open. Reusable templates and
 fixed budgets are managed in Figma.
 
@@ -517,7 +515,7 @@ An untouched blank proposal remains in memory. Default headings, currency, and
 placeholder rows and an automatically attached rate do not create recoverable
 content. Partial concepts with pending prices are meaningful, and recovery keeps
 the current quotation and row identities. Replacing the current quotation does
-not automatically archive it; explicitly saved library entries remain intact.
+not automatically archive it; previously stored library bytes remain intact.
 
 When `luquisound.catalog.v1` is absent, the app may seed its catalogue from a
 validated legacy `luquisound.workspace.v1`. It does not reopen old quotations.
@@ -550,8 +548,8 @@ this is optimistic protection rather than a transactional cross-tab database.
 Hourly automatic-mode exchange-rate updates remain active. Limits are 1000 rows
 in the current quotation and 2000
 catalogue entries. The legacy parser still validates up to 500 quotations in an
-old backup before extracting a catalogue. The separate library importer can
-extract old quotations after review, without importing that file's catalogue.
+old backup before extracting a catalogue. Quotations from that file are not
+restored in the current app.
 Canvas export is limited to 16 million pixels with an explicit error
 rather than truncation when exceeded.
 
@@ -565,41 +563,18 @@ does not change the current quotation's row prices or currencies. A catalogue
 refresh can still invalidate a protected product's availability and block image
 delivery until that row is reviewed.
 
-## Saved quotation library
+## Quotation history boundary
 
-Use the "Presupuestos guardados" button below the contact footer to access the
-library. Saving is an explicit action with a trimmed name and save date. A duplicate name
-requires confirmation before replacing its entry. The library allows up to 100
-entries in a 5 MiB envelope; limits reject the action instead of deleting older
-records. A new archive requires a row with concept, detail, price or an explicit
-included state. Partial concepts are allowed; title, subtitle, notes, rate,
-quantity or category alone are insufficient. A preserved fixed-service draft
-requiring price review remains meaningful archive content. Existing compatible records remain
-preserved when read or imported.
+The former browser-local named quotation library is not mounted in the current
+app. Its save, open, duplicate, delete, backup and import workflows are not
+available. Existing `luquisound.quotation-library.v1` bytes are not read,
+rewritten or deleted by normal app use; removing the UI does not migrate or erase
+previously stored quotations. Current-quotation recovery, compatible frozen-rate
+metadata and private catalogue backups remain independent.
 
-Snapshots deep-copy rows, prices, currencies, source trace and the rate. Opening
-and duplicating create separate quote and row identities; subsequent edits do
-not alter the saved entry. The duplicate receives a copy title and fresh creation
-date. Opening either action confirms before replacing current content. Freezing
-the rate does not reserve stock or bypass availability checks.
-
-The library writes only after explicit save, import or resume actions. Each write
-compares the expected stored bytes with the latest localStorage value. A concurrent
-tab change pauses saving without discarding the visible version. A failed save is
-not reported as persisted: its pending version stays in memory for a private
-backup. A failed import preserves the preceding visible and stored library.
-Unreadable initial bytes remain intact and can be downloaded exactly as a
-recovery file; this download is not a validated normal backup. Explicit resume
-confirms that the visible library will replace the stored version.
-
-The library backup uses its own `luquisound.quotation-library` version-1 envelope
-and includes only saved quotations, not the catalogue. A normal backup can include
-pending in-memory saves. Import validates and previews names and dates before
-confirmation, then replaces only the library. A compatible legacy Workspace v1
-file supplies only its quotations through this workflow; meaningful records above
-the 100-entry limit are rejected rather than truncated. No path changes or clears
-the legacy storage key. Backups contain private prices and row provenance, require
-private storage, and are not synchronization between devices.
+A quotation connection to Sheets or Drive is future work and is not implemented.
+No quotation is uploaded or synchronized through those services. The existing
+supplier-observation use of Drive does not provide quotation history.
 
 The repository remains public even when deployment access is restricted. Never
 commit supplier lists, discounts, internal costs, customers, real quotations, or
@@ -718,8 +693,8 @@ reports an error instead of exporting missing branding or fallback typography.
 Run typecheck, lint, calculation/persistence/export tests, and build. Check mobile
 and desktop layouts, long text, many rows, pending/zero/included states, decimal
 input, invalid values, current-quotation recovery, catalogue backups, legacy
-catalogue extraction, library save/open/duplicate and frozen rates, concurrent-tab
-conflicts, corrupt storage, failed saves, reviewed bulk matching, stock expiry,
+catalogue extraction, untouched legacy-library bytes and frozen recovery rates,
+concurrent-tab conflicts, corrupt storage, failed saves, reviewed bulk matching, stock expiry,
 manual row trace, and share cancellation.
 Browser emulation is useful evidence but does not replace physical Android and
 iPhone checks for PNG saving, Web Share, WhatsApp, and deployment access.

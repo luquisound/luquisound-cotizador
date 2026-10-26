@@ -11,10 +11,11 @@ or committed; listed paths do not expand authorization.
 The current V1 includes an editable graphic quotation template, manual rows,
 an optional personal catalogue, a private common catalogue loaded through a
 read-only endpoint, reviewed bulk entry, calculations, recovery of one current
-quotation, a browser-local named quotation library, separate private catalogue
-and quotation backups, and deterministic PNG download or file sharing. Fixed
-budgets and templates remain in Figma. The local library supports explicit save,
-open and duplicate; it is not a backend or cross-device quotation history.
+quotation, private catalogue backups, and deterministic PNG download or file
+sharing. Fixed budgets and templates remain in Figma. Named quotation saving,
+opening, duplication and history import/export are not part of the current UI.
+Previously stored quotation-library bytes remain untouched. A quotation
+connection to Sheets or Drive is future work and is not implemented.
 Read-only common catalogue, DolarAPI blue-sale lookup, private daily Instaler
 observation and a separately enabled conditional catalogue publisher are the
 authorized server-side features. The publisher consumes existing validated
@@ -46,9 +47,9 @@ inventory management, invoicing, and a general backend remain outside this stage
   whitespace, a global historical-source banner or a general pending-data
   disclaimer. Retain contextual validation and image-delivery guards. Keep private
   source metadata and stock rules in their existing internal workflows. Place bulk
-  entry, saved quotations, catalogue management and New in always-visible buttons
+  entry, catalogue management and New in always-visible buttons
   below the template and contact footer, including when the quotation is empty.
-  Keep history and save controls inside those secondary workflows.
+  Do not mount the former saved-quotation library or its controls.
 - Keep the full modal for equipment and custom rows focused on "Producto", unit
   price (service price for cables and labour) with its ARS or USD label, and
   "Agregar" or "Guardar". Combine SKU, brand
@@ -121,8 +122,8 @@ inventory management, invoicing, and a general backend remain outside this stage
   line amounts and raw quantity, price, state and currency in `fixedServiceOrigin`.
   Invalid or pending conversions remain pending for explicit review; never repair
   them by silently assigning a valid price. Keep included services distinct from
-  priced zero. Readers and backups preserve archived data without conversion;
-  opening or duplicating a saved quotation prepares its editable copy only.
+  priced zero. Readers and compatible backups preserve archived data without
+  conversion; current-quotation recovery prepares its editable copy only.
 - Equipment classified as `speakers` (including component sets) or `subwoofer`
   offers an explicit factory-equipment checkbox. It uses the corresponding factory
   description and a priced zero, preserving quantity and private provenance.
@@ -201,26 +202,23 @@ inventory management, invoicing, and a general backend remain outside this stage
   An automatic-mode quotation uses DolarAPI blue sale,
   refreshing hourly while active and after reload if due,
   independently of local-storage failures or saving pauses. Preserve source/date
-  metadata and recovered values until an automatic lookup succeeds. Explicitly
-  saving, opening or duplicating a library entry freezes its amounts, currencies
-  and rate. Only the confirmed current-dollar action resumes automatic lookup;
-  it never changes the saved library entry. Discounts
-  and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
+  metadata and recovered values until an automatic lookup succeeds. Preserve
+  compatible frozen metadata when recovering the current quotation; only the
+  confirmed current-dollar action resumes automatic lookup for that copy.
+  Discounts and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
   calculation contract and remaining decisions.
 - Preserve the approved graphic composition and official brand assets. Private
   source quotations and commercial data must never enter the public repository
   or client bundle, including when deployment access is restricted.
 - Keep the current quotation recovery and persistent catalogue separate. New
   replaces only the current quotation after confirmation when it has meaningful
-  content or an unreadable recovery record. The named quotation library has its
-  own storage key and backup envelope; save only on explicit actions, compare
-  stored bytes before writes, and preserve unreadable bytes and pending in-memory
-  changes on failure. Title, rate or notes alone do not create a new archive.
+  content or an unreadable recovery record. Compare stored bytes before writes,
+  and preserve unreadable bytes and pending in-memory changes on failure.
+  The former named quotation library is not mounted; do not read, rewrite or
+  delete its `luquisound.quotation-library.v1` bytes as part of normal app use.
   Catalogue backups preserve approved prices, IDs, and provenance;
   their importer restores only the catalogue from an old workspace backup after
   confirmation.
-  The separate quotation-library importer extracts only quotations after preview
-  and confirmation, preserving the open quotation and catalogue.
   Never rewrite or delete the legacy `luquisound.workspace.v1` storage key.
 - Respect availability policies at selection, bulk application and image delivery.
   Protected products require valid prices and positive eligible stock; historical

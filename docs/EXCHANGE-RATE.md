@@ -24,16 +24,14 @@ one hour ago, or when it has no automatic reference. This includes recovering
 the current quotation after reload. A fresh recovered reference is reused
 until its fetch-hour boundary. Missing legacy `exchangeRateMode` means automatic.
 
-The local library is accessed through "Opciones" > "Presupuestos guardados";
-history and save controls are secondary rather than visible on entry.
-Explicitly saving a named quotation stores a frozen snapshot and also freezes the
-current copy. Opening, duplicating or importing saved library quotations preserves
-their row amounts, currencies, rate and source metadata with
-`exchangeRateMode: "frozen"`. A frozen recovered current quotation stays frozen
-after reload. There is no automatic lookup for those snapshots, even when their
-saved reference is old. "Actualizar dolar guardado" asks before switching the
-open copy to automatic mode and requesting the shared current reference. It does
-not change the saved library entry; saving a replacement requires its own action.
+The current UI has no named quotation library, save/open/duplicate actions or
+quotation-history importer. Compatible current recovery data can still carry
+`exchangeRateMode: "frozen"`, row amounts, currencies, rate and source metadata
+from an earlier version. A frozen recovered current quotation stays frozen
+after reload. There is no automatic lookup for that copy, even when its saved
+reference is old. "Actualizar dolar guardado" asks before switching the current
+copy to automatic mode and requesting the shared current reference. Previously
+stored quotation-library bytes remain untouched.
 No update changes row prices, currencies, or quantities.
 An in-flight response applies to the latest quotation state and cannot replace
 a newly started quotation or overwrite local edits. Header edits preserve an
@@ -55,9 +53,8 @@ Automatically attaching a rate alone does not save an otherwise blank proposal.
 The current recovery snapshot retains compatible rate metadata. Manual rates
 remain labelled as manual without an invented source/date until a successful
 automatic lookup replaces them. Catalogue-backup import extracts only catalogue
-data from a legacy workspace; the separate saved-quotation importer can extract
-its quotations after preview and confirmation, with frozen rates. Neither importer
-rewrites or deletes the legacy storage key. The editor obtains replacement rates
+data from a legacy workspace; it does not restore quotations, rewrite or delete
+the legacy storage key. The editor obtains replacement rates
 through DolarAPI rather than manual overrides.
 
 ## Validation and availability

@@ -24,8 +24,6 @@ import { BulkEntryDialog } from './BulkEntryDialog'
 import { canSelectCatalogItem } from './catalog-stock'
 import { inspectQuotationAvailability } from './quotation-availability'
 import { useCatalogClock } from './useCatalogClock'
-import { QuotationLibraryDialog } from './QuotationLibraryDialog'
-import { useQuotationLibrary } from './useQuotationLibrary'
 import { createHarnessPresetRow, isHarnessPresetRow } from './harness-preset'
 
 function initialData() {
@@ -58,7 +56,7 @@ export default function QuotationApp() {
   const [catalogError, setCatalogError] = useState(initial.catalog.error)
   const [recoveryError, setRecoveryError] = useState(initial.current.error)
   const [savedCatalog, setSavedCatalog] = useState<CatalogItem[] | null>(initial.catalog.stored ? initial.catalog.catalog : null)
-  const [dialog, setDialog] = useState<'header' | 'catalog' | 'bulk' | 'library' | null>(null)
+  const [dialog, setDialog] = useState<'header' | 'catalog' | 'bulk' | null>(null)
   const [rowEditing, setRowEditing] = useState<RowEditingState | null>(null)
   const [priceEditing, setPriceEditing] = useState<RowEditingState | null>(null)
   const [message, setMessage] = useState('')
@@ -69,7 +67,6 @@ export default function QuotationApp() {
   const [rateState, setRateState] = useState<(ExchangeRefreshState & { id: string }) | null>(null)
   const [rateRefreshRequest, setRateRefreshRequest] = useState<{ id: string; token: string } | null>(null)
   const catalogButton = useRef<HTMLButtonElement>(null)
-  const libraryButton = useRef<HTMLButtonElement>(null)
   const bulkButton = useRef<HTMLButtonElement>(null)
   const newQuotationButton = useRef<HTMLButtonElement>(null)
   const rowEditorTrigger = useRef<HTMLElement | null>(null)
@@ -80,7 +77,6 @@ export default function QuotationApp() {
   const availability = inspectQuotationAvailability(quotation, catalog, availabilityNow)
   const canExport = calculation.canExport && availability.issues.length === 0
   const preparedFile = prepared?.quotation === quotation && canExport && prepared.provisional === availability.hasProvisional ? prepared.file : null
-  const savedQuotes = useQuotationLibrary()
   const editingRow = rowEditing?.kind === 'new'
     ? rowEditing.row
     : quotation.rows.find((row) => row.id === rowEditing?.rowId)
@@ -130,7 +126,7 @@ export default function QuotationApp() {
 
   function startNewQuotation() {
     if ((hasQuotationContent(quotationRef.current) || recoveryError) && !window.confirm(
-      '¿Comenzar un presupuesto nuevo? Se reemplazará el presupuesto en curso de este navegador. Descargá o guardá el actual antes de continuar. Tu catálogo y sus precios se conservan.',
+      '¿Comenzar un presupuesto nuevo? Se reemplazará el presupuesto en curso de este navegador. Descargá la imagen del actual antes de continuar. Tu catálogo y sus precios se conservan.',
     )) {
       window.requestAnimationFrame(() => newQuotationButton.current?.focus())
       return
@@ -145,11 +141,6 @@ export default function QuotationApp() {
       setRecoveryError('No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.')
     }
     window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.quotation-heading-edit')?.focus())
-  }
-
-  function closeLibrary() {
-    setDialog(null)
-    window.requestAnimationFrame(() => libraryButton.current?.focus())
   }
 
   function closeBulk() {
@@ -172,40 +163,9 @@ export default function QuotationApp() {
     return updateQuotation(next)
   }
 
-  function saveNamedQuotation(name: string, replaceEntryId?: string): boolean {
-    const current = quotationRef.current
-    const saved = savedQuotes.saveCurrent(current, name, replaceEntryId)
-    if (saved) {
-      updateQuotation({ ...current, exchangeRateMode: 'frozen' })
-      setMessage('Presupuesto guardado. Sus importes y el dólar se conservaron sin actualización automática.')
-    }
-    return saved
-  }
-
-  function openNamedQuotation(entryId: string, duplicate = false) {
-    if (recoveryError && !window.confirm('Se reemplazarán los datos de recuperación de este navegador por el presupuesto elegido. El catálogo y el historial se conservan. ¿Continuar?')) return
-    const next = savedQuotes.openEntry(entryId, duplicate)
-    if (!next || !updateQuotation(next)) return
-    recoveryWriteAllowed.current = true
-    setRecoveryEnabled(true)
-    try { setRecoveryError(persistCurrent(next, true).error) }
-    catch { setRecoveryError('No se podrá recuperar este presupuesto al recargar. Podés conservarlo en el historial o descargarlo.') }
-    closeLibrary()
-  }
-
-  function downloadLibraryBackup() {
-    try {
-      const backup = savedQuotes.createBackup()
-      downloadQuotationFile(backup.file)
-      setMessage(backup.message)
-    } catch {
-      setMessage('No se pudo crear el respaldo del historial. Los presupuestos se conservan.')
-    }
-  }
-
   function refreshSavedDollar() {
     const current = quotationRef.current
-    if (!window.confirm('¿Consultar el dólar actual? Se conservarán los precios de cada concepto y podrán cambiar los totales convertidos. El presupuesto guardado en el historial no se modifica.')) return
+    if (!window.confirm('¿Consultar el dólar actual? Se conservarán los precios de cada concepto y podrán cambiar los totales convertidos.')) return
     if (updateQuotation({ ...current, exchangeRateMode: 'automatic' })) {
       setRateRefreshRequest({ id: current.id, token: crypto.randomUUID() })
     }
@@ -582,7 +542,7 @@ export default function QuotationApp() {
               <p className="exchange-panel" id="quotation-exchange-rate">
                 <span>Dólar del presupuesto</span><span className="exchange-summary-value">{displayedRate.ok ? displayedRate.rateLabel : rateLoading ? 'Consultando…' : 'Pendiente'}</span>
               </p>
-              {quotation.exchangeRateMode === 'frozen' && <div className="exchange-frozen"><p className="field-help">Dólar conservado del presupuesto guardado. No se actualiza al abrirlo.</p><button className="button secondary" type="button" onClick={refreshSavedDollar}>Actualizar dólar guardado</button></div>}
+              {quotation.exchangeRateMode === 'frozen' && <div className="exchange-frozen"><p className="field-help">Dólar guardado en este presupuesto. Se mantiene hasta que lo actualices.</p><button className="button secondary" type="button" onClick={refreshSavedDollar}>Actualizar dólar guardado</button></div>}
               {rateLoading && <p className="field-help" role="status">Consultando cotización…</p>}
               {quotation.exchangeRateQuote && availabilityNow - Date.parse(quotation.exchangeRateQuote.updatedAt) > 24 * 60 * 60 * 1000 && <p className="exchange-warning">Cotización anterior: revisá la fecha antes de compartir.</p>}
               {rateError && <p className="exchange-warning" role="alert">{rateError}</p>}
@@ -592,7 +552,6 @@ export default function QuotationApp() {
         <nav className="workspace-options" aria-label="Opciones del presupuesto">
           <button ref={bulkButton} className="button secondary" type="button" onClick={() => setDialog('bulk')}>Pegar códigos o nombres</button>
           <button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Mi catálogo</button>
-          <button ref={libraryButton} className="button secondary" type="button" onClick={() => setDialog('library')}>Presupuestos guardados</button>
           <button ref={newQuotationButton} className="button secondary" type="button" onClick={startNewQuotation}>Nuevo presupuesto</button>
         </nav>
         <p className="current-quotation-note">El presupuesto en curso se recupera al recargar.</p>
@@ -604,7 +563,6 @@ export default function QuotationApp() {
       {dialog === 'header' && <HeaderEditor quotation={quotation} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
       {dialog === 'catalog' && <CatalogEditor catalog={catalog} exchangeRate={quotation.exchangeRate ?? ''} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
       {dialog === 'bulk' && <BulkEntryDialog catalog={catalog} canSelect={canSelectCatalogItem} defaultCurrency={quotation.currency} existingRowCount={quotation.rows.length} onApply={addBulkRows} onClose={closeBulk} />}
-      {dialog === 'library' && <QuotationLibraryDialog quotation={quotation} library={savedQuotes.library} storageError={savedQuotes.error} savingPaused={savedQuotes.paused} onSaveCurrent={saveNamedQuotation} onOpen={(id) => openNamedQuotation(id)} onDuplicate={(id) => openNamedQuotation(id, true)} onExport={downloadLibraryBackup} onImport={savedQuotes.importLibrary} onResumeSaving={savedQuotes.resumeSaving} onClose={closeLibrary} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} directConcept={isDirectExtraRow(editingRow) ? editingRow.concept : undefined} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} onEditExisting={(rowId) => setRowEditing({ kind: 'existing', rowId })} />}
       {priceEditingRow && <RowPriceEditor key={priceEditingRow.id} row={priceEditingRow} quotation={quotation} onClose={closePriceEditor} onSave={savePrice} />}
     </div>

@@ -3,11 +3,11 @@
 Mobile-first graphic quotation editor for Luquisound, built with Vite, React,
 strict TypeScript and Tailwind CSS. V1 includes editable manual concepts, a private
 common catalogue, optional personal products, ARS/USD calculations, recovery of one
-current quotation, a named local quotation library and deterministic PNG sharing.
+current quotation, private catalogue backups and deterministic PNG sharing.
 Fixed budgets and reusable templates remain in Figma.
 
-The app opens on the quotation. Catalogue management, reviewed bulk entry, saved
-quotations and New have always-visible buttons below the template and contact
+The app opens on the quotation. Catalogue management, reviewed bulk entry and
+New have always-visible buttons below the template and contact
 footer, including when the quotation is empty. Product behavior,
 pricing rules and graphic requirements belong in [PRODUCTO.md](docs/PRODUCTO.md).
 
@@ -115,7 +115,7 @@ The app loads the configured catalogue on entry and once per daily cycle at
 09:00 Buenos Aires while visible and online. Returning or reconnecting checks
 whether that cycle is due. There is no catalogue refresh/retry button. Failed
 reads preserve the last valid data. Catalogue refresh preserves manual prices,
-selected quotation amounts and saved quotations. Protected stock becomes stale
+selected quotation amounts. Protected stock becomes stale
 after seven days without a newer recorded reading; a download does not establish
 that the supplier's formulas or stock refreshed.
 
@@ -127,11 +127,14 @@ source code or a historical checkpoint.
 
 ## Data and deployment boundaries
 
-Current recovery, the personal catalogue and the named quotation library use
-separate browser-local stores. Their private backups are separate workflows.
-They do not provide cross-device history, accounts or synchronized manual prices.
-Browser data can be lost with a device, origin or storage reset; keep private
-backups. The legacy workspace key is never rewritten or deleted.
+Current recovery and the personal catalogue use separate browser-local stores.
+The catalogue retains its private backup workflow. Named quotation saving,
+opening, duplication and quotation-history import/export are not available in
+the current UI. Previously stored quotation-library bytes and the legacy
+workspace key remain untouched. Browser data can be lost with a device, origin
+or storage reset. There is no cross-device quotation history or synchronized
+manual pricing. A quotation connection to Sheets or Drive is future work and
+is not implemented.
 
 Supplier prices, observations, private policy, customer quotations and secrets
 must never enter source, fixtures, logs or the browser bundle. The common catalogue

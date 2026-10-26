@@ -185,7 +185,7 @@ ul.field-errors { padding-left: 30px; }
   .workspace-options .button { scroll-margin-block-end: calc(100px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (min-width: 64rem) {
-  .workspace-options { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .workspace-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
   .export-bar { flex-direction: column; align-items: stretch; gap: 8px; padding-inline: 16px; }
