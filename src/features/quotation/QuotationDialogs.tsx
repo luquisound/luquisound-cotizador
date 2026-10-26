@@ -13,6 +13,7 @@ import { isFactoryEligibleRow, isFactoryRow, setRowFactoryMode } from './factory
 import { isFixedServiceRow, prepareFixedServiceRow, resolveFixedServicePrice } from './fixed-services'
 import { isInactiveHarnessRow } from './harness-preset'
 import { getLinkedPriceTotal, getUnitPriceFromTotal } from './linked-price'
+import { getCurrencyLabel } from './currency-display.ts'
 import { getPriceInputLengthError } from './price-input'
 import { changeRowCurrency, clearRowCurrencyConversion } from './row-currency'
 import { getRowAvailabilityItem } from './quotation-availability'
@@ -115,7 +116,7 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
   const category = getAudioCategories(draft.section).find((entry) => entry.id === draft.audioCategory)
   const optionsSummary = [
     fixedService ? '' : `Cant. ${draft.quantity.trim() || 'pendiente'}`, directConcept ? '' : category?.label ?? 'Otro',
-    draft.detail.trim() ? 'Con detalle' : '', draft.currency,
+    draft.detail.trim() ? 'Con detalle' : '', getCurrencyLabel(draft.currency),
     draft.priceState === 'included' ? 'Incluido sin cargo' : '',
   ].filter(Boolean).join(' · ')
   // The child dialog opens before this effect; focus without scrolling the page.
@@ -337,9 +338,9 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
     <label>Cantidad<input inputMode="decimal" value={draft.quantity} maxLength={30} aria-invalid={!quantity.ok} aria-describedby={!quantity.ok ? quantityErrorId : undefined} onChange={(event) => changeQuantity(event.target.value)} /></label>
     {!quantity.ok && <p id={quantityErrorId} className="field-errors">{quantity.reason} Se conserva como borrador.</p>}
   </>
-  const sizeField = <label>{isNew ? 'Tamaño' : 'Corregir tamaño de esta variante'}<select ref={sizeInput} value={adapterSize} aria-invalid={Boolean(selectionError && !adapterSize)} aria-describedby={selectionError && !adapterSize ? selectionErrorId : undefined} onChange={(event) => changeAdapterSize(event.target.value)}><option value="" disabled>{isNew ? 'Elegir tamaño' : 'Sin especificar (presupuesto anterior)'}</option>{ADAPTER_VARIANTS.map((variant) => <option key={variant.id} value={variant.id}>{variant.label} · ARS {variant.unitPrice} / unidad</option>)}</select></label>
+  const sizeField = <label>{isNew ? 'Tamaño' : 'Corregir tamaño de esta variante'}<select ref={sizeInput} value={adapterSize} aria-invalid={Boolean(selectionError && !adapterSize)} aria-describedby={selectionError && !adapterSize ? selectionErrorId : undefined} onChange={(event) => changeAdapterSize(event.target.value)}><option value="" disabled>{isNew ? 'Elegir tamaño' : 'Sin especificar (presupuesto anterior)'}</option>{ADAPTER_VARIANTS.map((variant) => <option key={variant.id} value={variant.id}>{variant.label} · {getCurrencyLabel(variant.currency)} {variant.unitPrice} / unidad</option>)}</select></label>
   return (
-    <Dialog className="row-editor-dialog" title={directConcept ? `${isNew ? 'Agregar' : 'Editar'} ${directConcept}` : row.section === 'equipment' ? `${isNew ? 'Agregar' : 'Editar'} equipamiento` : `${isNew ? 'Agregar' : 'Editar'} instalación o accesorio`} onClose={onClose}>
+    <Dialog className="row-editor-dialog" title={adapterMode ? `${isNew ? 'Agregar' : 'Editar'} aros adaptadores` : directConcept ? `${isNew ? 'Agregar' : 'Editar'} ${directConcept}` : row.section === 'equipment' ? `${isNew ? 'Agregar' : 'Editar'} equipamiento` : `${isNew ? 'Agregar' : 'Editar'} instalación o accesorio`} onClose={onClose}>
       <form className="form-stack row-editor-form" onSubmit={submit}>
         <div className="form-stack row-editor-content">
           {!directConcept && <fieldset className="row-product-lock" disabled={factory}><RowProductPicker catalog={catalog} section={row.section} value={draft.concept} inputRef={productInput} onChange={(concept) => { setDraft({ ...draft, concept }); setSelectionError('') }} onChoose={chooseCatalog} /></fieldset>}
@@ -352,14 +353,13 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
             {quantityField}
             {!isNew && !row.adapterVariant && adapterSize && !readAdapterVariant(draft.adapterVariant, draft.section, draft.audioCategory) && <button type="button" className="button secondary" onClick={groupLegacyAdapter}>Agrupar por esta medida</button>}
           </>}
-          {!isNew && draft.audioCategory === 'adapters' && <button type="button" className="button secondary adapter-add-variant" onClick={() => saveDraft(true)}>Guardar y agregar otra medida</button>}
           <div className="row-price-field">
-            <div className="row-price-controls">
-              <label className="row-price-input-label"><span className="row-price-label-text">{fixedService ? 'Precio' : 'Precio unitario'}<span className="row-currency-badge">{draft.currency}</span></span><input ref={priceInput} className="compact-price-input" inputMode="decimal" value={visiblePrice} disabled={factory || (draft.priceState === 'included' && !directConcept)} placeholder="Sin precio" aria-invalid={showPriceError} aria-describedby={`${priceHelpId}${showPriceError ? ` ${priceErrorId}` : ''}`} onBlur={() => setPriceTouched(true)} onFocus={(event) => { if (directConcept) event.currentTarget.select() }} onInput={(event) => { if (directConcept && event.currentTarget.value === priceBuffer) changePrice(event.currentTarget.value) }} onChange={(event) => changePrice(event.target.value)} /></label>
-              {!fixedService && <label className="row-price-input-label"><span className="row-price-label-text">Precio total<span className="row-currency-badge">{draft.currency}</span></span><input ref={totalInput} className="compact-price-input row-total-input" inputMode="decimal" value={visibleTotal} disabled={!quantity.ok || factory || (draft.priceState === 'included' && !directConcept)} placeholder="Sin precio" aria-invalid={Boolean(totalError)} aria-describedby={`${priceHelpId}${totalError ? ` ${totalErrorId}` : ''}${totalRoundingNote ? ` ${totalRoundingId}` : ''}`} onChange={(event) => changeTotal(event.target.value)} onBlur={() => { if (!totalError) setTotalDraft(null) }} /></label>}
+            <div className={`row-price-controls${fixedService ? ' row-price-single' : ''}`}>
+              <label className="row-price-input-label"><span className="row-price-label-text">{fixedService ? 'Precio' : 'Precio unitario'}<span className="row-currency-badge">{getCurrencyLabel(draft.currency)}</span></span><input ref={priceInput} className="compact-price-input" inputMode="decimal" value={visiblePrice} disabled={factory || (draft.priceState === 'included' && !directConcept)} placeholder="Sin precio" aria-invalid={showPriceError} aria-describedby={`${priceHelpId}${showPriceError ? ` ${priceErrorId}` : ''}`} onBlur={() => setPriceTouched(true)} onFocus={(event) => { if (directConcept) event.currentTarget.select() }} onInput={(event) => { if (directConcept && event.currentTarget.value === priceBuffer) changePrice(event.currentTarget.value) }} onChange={(event) => changePrice(event.target.value)} /></label>
+              {!fixedService && <label className="row-price-input-label"><span className="row-price-label-text">Precio total<span className="row-currency-badge">{getCurrencyLabel(draft.currency)}</span></span><input ref={totalInput} className="compact-price-input row-total-input" inputMode="decimal" value={visibleTotal} disabled={!quantity.ok || factory || (draft.priceState === 'included' && !directConcept)} placeholder="Sin precio" aria-invalid={Boolean(totalError)} aria-describedby={`${priceHelpId}${totalError ? ` ${totalErrorId}` : ''}${totalRoundingNote ? ` ${totalRoundingId}` : ''}`} onChange={(event) => changeTotal(event.target.value)} onBlur={() => { if (!totalError) setTotalDraft(null) }} /></label>}
               {isFactoryEligibleRow(draft) && <label className="row-factory-toggle"><input type="checkbox" checked={factory} onChange={(event) => changeFactory(event.target.checked)} /><span>De fábrica</span></label>}
             </div>
-            <p id={priceHelpId} className="field-help row-price-status">{factory ? 'De fábrica: sin cargo.' : isInactiveHarnessRow(draft) ? 'Sin seleccionar: el precio se conserva sin sumarse al presupuesto.' : draft.priceState === 'included' ? directConcept ? 'Incluido sin cargo.' : 'Incluido sin cargo. Podés cambiarlo en Más opciones.' : !quantity.ok ? 'Ingresá una cantidad válida para editar el total.' : draft.priceState === 'pending' ? draft.unitPrice.trim() ? 'Precio pendiente de confirmar. Editá el importe para asignarlo.' : 'Sin precio: queda pendiente.' : fixedService ? 'Precio total del concepto.' : `Unitario y total vinculados a la cantidad (${draft.quantity}).`}</p>
+            <p id={priceHelpId} className="field-help row-price-status">{factory ? 'De fábrica: sin cargo.' : isInactiveHarnessRow(draft) ? 'Sin seleccionar: el precio se conserva sin sumarse al presupuesto.' : draft.priceState === 'included' ? directConcept ? 'Incluido sin cargo.' : 'Incluido sin cargo. Podés cambiarlo en Más opciones.' : !quantity.ok ? 'Ingresá una cantidad válida para editar el total.' : draft.priceState === 'pending' ? draft.unitPrice.trim() ? 'Precio pendiente de confirmar. Editá el importe para asignarlo.' : 'Sin precio: queda pendiente.' : fixedService ? 'Precio total del concepto.' : `Cantidad: ${draft.quantity}. Podés editar cualquiera de los dos precios.`}</p>
             {totalError && <p id={totalErrorId} className="field-errors" role="alert">{totalError}</p>}
             {totalRoundingNote && <p id={totalRoundingId} className="field-help">{totalRoundingNote}</p>}
             {showPriceError && <p id={priceErrorId} className="field-errors" role="status">{priceError}{priceLengthError ? '' : ' Se conserva como borrador.'}</p>}
@@ -374,9 +374,10 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
               {!adapterMode && !fixedService && quantityField}
               <label>Detalle <span>(opcional)</span><textarea rows={2} value={draft.detail} disabled={factory} maxLength={2000} onChange={(event) => setDraft({ ...draft, detail: event.target.value })} /></label>
               {!directConcept && <label>Categoría del presupuesto<select value={draft.audioCategory ?? ''} onChange={(event) => changeAudioCategory(event.target.value)}>{getAudioCategories(draft.section).map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}<option value="">Otro</option></select></label>}
-              <label>Moneda del ítem<select value={draft.currency} aria-invalid={Boolean(currencyError)} aria-describedby={currencyError ? currencyErrorId : undefined} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">ARS · Pesos argentinos</option><option value="USD">USD · Dólares estadounidenses</option></select></label>
+              <label>Moneda del ítem<select value={draft.currency} aria-invalid={Boolean(currencyError)} aria-describedby={currencyError ? currencyErrorId : undefined} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">$ · Pesos argentinos</option><option value="USD">usd · Dólares estadounidenses</option></select></label>
               {currencyError && <p id={currencyErrorId} className="field-errors" role="alert">{currencyError}</p>}
               <label className="row-included-toggle"><input type="checkbox" checked={draft.priceState === 'included'} disabled={factory} onChange={(event) => changeIncluded(event.target.checked)} /><span>Incluido sin cargo</span></label>
+              {!isNew && draft.audioCategory === 'adapters' && <button type="button" className="button secondary adapter-add-variant" onClick={() => saveDraft(true)}>Guardar y agregar otra medida</button>}
               {provenance && <details className="catalog-metadata">
                 <summary>Origen y precio de esta fila <span>(privado)</span></summary>
                 <div className="form-stack">
@@ -384,7 +385,7 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
                   <p className="catalog-provenance">Fuente: {source?.document ?? 'no informada'} · Versión: {source?.version ?? 'no informada'} · Fecha comercial: {source?.date ?? 'no informada'}</p>
                   <p className="catalog-provenance">SHA-256: {source?.checksum ?? 'no informado'}</p>
                   {source?.sheet && <p className="catalog-provenance">Hoja: {source.sheet}{source.row === undefined ? '' : ` · Fila ${source.row}`}</p>}
-                  <p className="field-help">Precio al seleccionar: {provenance.originalUnitPrice.trim() ? `${provenance.originalCurrency} ${provenance.originalUnitPrice}` : `pendiente (${provenance.originalCurrency})`}. {getRowPriceOverride(draft) ? 'El precio se editó en este presupuesto.' : 'Se conserva el precio seleccionado.'}</p>
+                  <p className="field-help">Precio al seleccionar: {provenance.originalUnitPrice.trim() ? `${getCurrencyLabel(provenance.originalCurrency)} ${provenance.originalUnitPrice}` : `pendiente (${getCurrencyLabel(provenance.originalCurrency)})`}. {getRowPriceOverride(draft) ? 'El precio se editó en este presupuesto.' : 'Se conserva el precio seleccionado.'}</p>
                   {(provenance.priceBasis === 'provisional-list' || provenance.listPrice?.provisional) && <p className="notice pending">Lista histórica provisional, antes del descuento. Confirmá disponibilidad antes de enviar.</p>}
                   {availabilityItem && <CatalogAvailability item={availabilityItem} now={now} />}
                   <p className="field-help">Los cambios son sólo de este presupuesto. El origen se conserva y no aparece en la imagen.</p>
@@ -394,9 +395,9 @@ export function RowEditor({ row, quotation, catalog, onSave, onRemove, onClose, 
           </details>
         </div>
         <div className="dialog-actions row-editor-actions">
+          {!isNew && <button type="button" className="button danger row-remove" onClick={() => { if (window.confirm('¿Eliminar este concepto del presupuesto?')) onRemove() }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>Eliminar</button>}
           <button type="button" className="button secondary" onClick={onClose}>Cancelar</button>
           <button type="submit" className="button primary" disabled={Boolean(occupiedCategory || totalError || getPriceInputLengthError(visiblePrice))}>{isNew ? 'Agregar' : 'Guardar'}</button>
-          {!isNew && <button type="button" className="button danger row-remove" onClick={() => { if (window.confirm('¿Eliminar este concepto del presupuesto?')) onRemove() }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>Eliminar ítem</button>}
         </div>
       </form>
     </Dialog>

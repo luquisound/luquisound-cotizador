@@ -31,14 +31,14 @@ test('mixed totals convert each foreign subtotal once and preserve half-up bound
 
 test('mixed conversion checks final addition and exact safe limits in both currencies', () => {
   assert.deepEqual(convertMixedTotals(Number.MAX_SAFE_INTEGER - 1, 1, '1'), {
-    ok: true, arsCents: Number.MAX_SAFE_INTEGER, usdCents: Number.MAX_SAFE_INTEGER, rateLabel: '1 USD = 1 ARS',
+    ok: true, arsCents: Number.MAX_SAFE_INTEGER, usdCents: Number.MAX_SAFE_INTEGER, rateLabel: '1 usd = 1 $',
   })
   for (const [ars, usd] of [[Number.MAX_SAFE_INTEGER, 1], [1, Number.MAX_SAFE_INTEGER]]) {
     assert.equal(convertMixedTotals(ars, usd, '1').ok, false)
   }
   assert.deepEqual(convertMixedTotals(0, 1, '9.007.199.254.740.991,000000'), {
     ok: true, arsCents: Number.MAX_SAFE_INTEGER, usdCents: 1,
-    rateLabel: '1 USD = 9.007.199.254.740.991,000000 ARS',
+    rateLabel: '1 usd = 9.007.199.254.740.991,000000 $',
   })
   for (const amount of [-1, 0.1, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
     assert.equal(convertMixedTotals(amount, 0, '1').ok, false)
@@ -57,7 +57,7 @@ test('manual exchange rates parse Argentine grouping and preserve entered precis
     ['9.007.199.254.740.991,000000', 9007199254740991000000n, 1000000n, '9.007.199.254.740.991,000000'],
   ] as const) {
     assert.deepEqual(parseExchangeRate(input), {
-      ok: true, numerator, denominator, normalized, rateLabel: `1 USD = ${normalized} ARS`,
+      ok: true, numerator, denominator, normalized, rateLabel: `1 usd = ${normalized} $`,
     }, input)
   }
 })
@@ -79,19 +79,19 @@ test('rates require a positive finite amount with unambiguous separators and at 
 
 test('ARS base divides by the manual rate and leaves original cents unchanged', () => {
   assert.deepEqual(convertTotals(123456, 'ARS', '1.234,56'), {
-    ok: true, arsCents: 123456, usdCents: 100, rateLabel: '1 USD = 1.234,56 ARS',
+    ok: true, arsCents: 123456, usdCents: 100, rateLabel: '1 usd = 1.234,56 $',
   })
   assert.deepEqual(convertTotals(123456789, 'ARS', '1234,56'), {
-    ok: true, arsCents: 123456789, usdCents: 100001, rateLabel: '1 USD = 1.234,56 ARS',
+    ok: true, arsCents: 123456789, usdCents: 100001, rateLabel: '1 usd = 1.234,56 $',
   })
 })
 
 test('USD base multiplies by the manual rate and leaves original cents unchanged', () => {
   assert.deepEqual(convertTotals(100, 'USD', '1.234,56'), {
-    ok: true, arsCents: 123456, usdCents: 100, rateLabel: '1 USD = 1.234,56 ARS',
+    ok: true, arsCents: 123456, usdCents: 100, rateLabel: '1 usd = 1.234,56 $',
   })
   assert.deepEqual(convertTotals(123, 'USD', '1234,56'), {
-    ok: true, arsCents: 151851, usdCents: 123, rateLabel: '1 USD = 1.234,56 ARS',
+    ok: true, arsCents: 151851, usdCents: 123, rateLabel: '1 usd = 1.234,56 $',
   })
 })
 
@@ -118,15 +118,15 @@ test('equivalents round half up once at the final cent in both directions', () =
 test('exact integer math preserves the last safe cent and avoids floating-point intermediates', () => {
   assert.deepEqual(convertTotals(Number.MAX_SAFE_INTEGER, 'ARS', '1'), {
     ok: true, arsCents: Number.MAX_SAFE_INTEGER, usdCents: Number.MAX_SAFE_INTEGER,
-    rateLabel: '1 USD = 1 ARS',
+    rateLabel: '1 usd = 1 $',
   })
   assert.deepEqual(convertTotals(Number.MAX_SAFE_INTEGER, 'USD', '0,5'), {
     ok: true, arsCents: 4503599627370496, usdCents: Number.MAX_SAFE_INTEGER,
-    rateLabel: '1 USD = 0,5 ARS',
+    rateLabel: '1 usd = 0,5 $',
   })
   assert.deepEqual(convertTotals(Number.MAX_SAFE_INTEGER, 'ARS', '2'), {
     ok: true, arsCents: Number.MAX_SAFE_INTEGER, usdCents: 4503599627370496,
-    rateLabel: '1 USD = 2 ARS',
+    rateLabel: '1 usd = 2 $',
   })
 })
 
@@ -149,7 +149,7 @@ test('invalid or pending rates block conversion even for a zero base total', () 
       assert.deepEqual(convertTotals(0, currency, rate), parseExchangeRate(rate), `${currency}: ${rate}`)
     }
     assert.deepEqual(convertTotals(0, currency, '1.234,5600'), {
-      ok: true, arsCents: 0, usdCents: 0, rateLabel: '1 USD = 1.234,5600 ARS',
+      ok: true, arsCents: 0, usdCents: 0, rateLabel: '1 usd = 1.234,5600 $',
     })
   }
 })
@@ -176,6 +176,6 @@ test('conversion preserves caller inputs and produces independent repeatable res
   const second = convertTotals(source.totalCents, source.baseCurrency, source.rateInput)
   assert.deepEqual(source, snapshot)
   assert.deepEqual(second, {
-    ok: true, arsCents: 987654, usdCents: 800, rateLabel: '1 USD = 1.234,567890 ARS',
+    ok: true, arsCents: 987654, usdCents: 800, rateLabel: '1 usd = 1.234,567890 $',
   })
 })

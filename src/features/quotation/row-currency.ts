@@ -1,4 +1,4 @@
-import { formatMoney, parseMoney } from './calculation.ts'
+import { formatMoneyAmount, parseMoney } from './calculation.ts'
 import { convertTotals, parseExchangeRate } from './exchange.ts'
 import { isFactoryRow } from './factory-mode.ts'
 import { PRICE_INPUT_MAX_LENGTH } from './price-input.ts'
@@ -69,10 +69,10 @@ function matchingOrigin(state: PriceCurrencyState): CurrencyConversionOrigin | u
   }
 }
 
-function convertedPrice(amount: number, currency: Currency, original?: string): string {
+function convertedPrice(amount: number, original?: string): string {
   if (original !== undefined && original.length <= PRICE_INPUT_MAX_LENGTH) return original
   if (amount === 0) return '0'
-  const grouped = formatMoney(amount, currency).slice(currency.length + 1)
+  const grouped = formatMoneyAmount(amount)
   if (grouped.length <= PRICE_INPUT_MAX_LENGTH) return grouped
   const cents = BigInt(amount)
   const ungrouped = `${cents / 100n},${String(cents % 100n).padStart(2, '0')}`
@@ -83,7 +83,7 @@ function convertedPrice(amount: number, currency: Currency, original?: string): 
 export function changePriceCurrency(
   state: PriceCurrencyState, target: Currency, rateInput?: string,
 ): PriceCurrencyState {
-  if (!isCurrency(state.currency) || !isCurrency(target)) throw new Error('Seleccion\u00e1 una moneda v\u00e1lida: ARS o USD.')
+  if (!isCurrency(state.currency) || !isCurrency(target)) throw new Error('Seleccion\u00e1 una moneda v\u00e1lida: $ o usd.')
   if (target === state.currency) return state
   if (!state.unitPrice.trim()) return { currency: target, unitPrice: state.unitPrice }
   const price = parseMoney(state.unitPrice)
@@ -103,7 +103,7 @@ export function changePriceCurrency(
   const base = parseMoney(sourceUnitPrice)
   if (!base.ok) throw new Error(base.reason)
   const cents = equivalentCents(base.cents, sourceCurrency, target, exchangeRate)
-  const unitPrice = convertedPrice(cents, target, target === sourceCurrency ? sourceUnitPrice : undefined)
+  const unitPrice = convertedPrice(cents, target === sourceCurrency ? sourceUnitPrice : undefined)
   return {
     currency: target, unitPrice,
     conversionOrigin: {
@@ -120,7 +120,7 @@ export function clearRowCurrencyConversion(row: QuotationRow): QuotationRow {
 }
 
 export function changeRowCurrency(row: QuotationRow, target: Currency, rateInput?: string): QuotationRow {
-  if (!isCurrency(target)) throw new Error('Seleccion\u00e1 una moneda v\u00e1lida: ARS o USD.')
+  if (!isCurrency(target)) throw new Error('Seleccion\u00e1 una moneda v\u00e1lida: $ o usd.')
   if (target === row.currency) return row
   if (isFactoryRow(row)) return { ...row, currency: target }
   const origin = row.currencyConversionOrigin?.priceState === row.priceState ? row.currencyConversionOrigin : undefined

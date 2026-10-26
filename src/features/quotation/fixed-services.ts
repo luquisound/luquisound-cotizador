@@ -1,4 +1,4 @@
-import { calculateRow, formatMoney, parseMoney, parseQuantity } from './calculation.ts'
+import { calculateRow, formatMoneyAmount, parseMoney, parseQuantity } from './calculation.ts'
 import type { FixedServiceOrigin, Quotation, QuotationRow } from './model.ts'
 
 export function isFixedServiceRow(row: Pick<QuotationRow, 'section' | 'audioCategory'>): boolean {
@@ -56,7 +56,7 @@ export function prepareFixedServiceRow(row: QuotationRow): QuotationRow {
       ? { ...row, quantity: '1', unitPrice: '', fixedServiceOrigin: originalFields(row, false) }
       : pendingService(row)
   }
-  const amount = formatMoney(calculated.lineTotalCents, row.currency).slice(row.currency.length + 1)
+  const amount = formatMoneyAmount(calculated.lineTotalCents)
   return {
     ...row, quantity: '1', unitPrice: amount, fixedServiceOrigin: originalFields(row, false),
   }

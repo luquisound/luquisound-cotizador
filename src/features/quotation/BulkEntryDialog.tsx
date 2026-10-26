@@ -7,6 +7,7 @@ import {
 import { resolveCatalogQuery, type CatalogSelectionPredicate } from './catalog-search.ts'
 import { CatalogAvailability } from './CatalogAvailability.tsx'
 import { getCatalogQuotationTitle } from './catalog-title.ts'
+import { getCurrencyLabel } from './currency-display.ts'
 import type { CatalogItem, Currency, QuotationRow, RowSection } from './model.ts'
 import { Dialog } from './QuotationDialog.tsx'
 import { getCatalogSelectionPrice } from './row-provenance.ts'
@@ -41,7 +42,7 @@ function priceLabel(item: CatalogItem, defaultCurrency: Currency): string {
     if (price.priceBasis === 'pending') return 'Precio pendiente: completalo en el presupuesto.'
     const source = price.priceBasis === 'provisional-list' ? 'Lista histórica provisional'
       : price.priceBasis === 'list' ? 'Precio de lista' : 'Precio del catálogo'
-    return `${source}: ${price.currency} ${price.unitPrice}. El importe sigue editable en el presupuesto.`
+    return `${source}: ${getCurrencyLabel(price.currency)} ${price.unitPrice}. El importe sigue editable en el presupuesto.`
   } catch {
     return 'El precio del producto requiere revisión antes de agregarlo.'
   }

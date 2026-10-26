@@ -41,8 +41,8 @@ test('groups explicit adapter variants with quantities, sale presentations and n
   const snapshot = structuredClone(rows)
   const block = onlyGroup(rows)
   assert.equal(block.title, 'Aros adaptadores 3D')
-  assert.deepEqual(block.details, ['2 pares × 6,5″ · ARS 200,00', '3 juegos × 8″ · ARS 300,00'])
-  assert.deepEqual(block.amounts, ['ARS 500,00'])
+  assert.deepEqual(block.details, ['2 pares × 6,5″ · $ 200,00', '3 juegos × 8″ · $ 300,00'])
+  assert.deepEqual(block.amounts, ['$ 500,00'])
   assert.deepEqual(block.items.map(({ row }) => row.id), ['small', 'large'])
   assert.equal(block.pending, false)
   assert.deepEqual(rows, snapshot)
@@ -54,14 +54,14 @@ test('preserves single quantities, custom descriptions and manual details in the
     adapterVariant: { productKey: 'custom', size: '6.50', presentation: 'pair' },
   })])
   assert.deepEqual(block.details, [
-    '1 par × 6,5″ · Aro de prueba reforzado · Terminación especial\nDetalle final · ARS 100,00',
+    '1 par × 6,5″ · Aro de prueba reforzado · Terminación especial\nDetalle final · $ 100,00',
   ])
 })
 
 test('exposes separate adapter descriptions and amounts for individual editing controls', () => {
   const block = onlyGroup([adapter('editable', { quantity: '2' })])
   assert.equal(adapterVariantDescription(block.items[0]), '2 unidades × 6,5″')
-  assert.equal(adapterVariantAmount(block.items[0]), 'ARS 200,00')
+  assert.equal(adapterVariantAmount(block.items[0]), '$ 200,00')
   assert.equal(block.details[0], `${adapterVariantDescription(block.items[0])} · ${adapterVariantAmount(block.items[0])}`)
 })
 
@@ -71,7 +71,7 @@ test('sums rounded source rows instead of recalculating a combined quantity', ()
     adapter('fraction-b', { quantity: '0,5', unitPrice: '0,01' }),
   ])
   assert.deepEqual(block.items.map(({ lineTotalCents }) => lineTotalCents), [1, 1])
-  assert.deepEqual(block.amounts, ['ARS 0,02'])
+  assert.deepEqual(block.amounts, ['$ 0,02'])
 })
 
 test('keeps ARS and USD subtotals separate and included variants explicit', () => {
@@ -80,7 +80,7 @@ test('keeps ARS and USD subtotals separate and included variants explicit', () =
     adapter('usd', { currency: 'USD', unitPrice: '5' }),
     adapter('included', { currency: 'USD', priceState: 'included', unitPrice: '' }),
   ])
-  assert.deepEqual(block.amounts, ['ARS 200,00', 'USD 5,00'])
+  assert.deepEqual(block.amounts, ['$ 200,00', 'usd 5,00'])
   assert.equal(block.details[2], '1 unidad × 6,5″ · Incluido')
 })
 
@@ -89,8 +89,8 @@ test('distinguishes included groups from explicitly zero-priced groups', () => {
   const zero = onlyGroup([
     adapter('zero', { unitPrice: '0' }), adapter('included', { priceState: 'included' }),
   ])
-  assert.deepEqual(zero.amounts, ['ARS 0,00'])
-  assert.match(zero.details[0], /ARS 0,00$/)
+  assert.deepEqual(zero.amounts, ['$ 0,00'])
+  assert.match(zero.details[0], /\$ 0,00$/)
   assert.match(zero.details[1], /Incluido$/)
 })
 
@@ -100,7 +100,7 @@ test('marks incomplete adapter groups pending without presenting a partial subto
   ])
   assert.equal(block.pending, true)
   assert.deepEqual(block.amounts, ['Pendiente'])
-  assert.match(block.details[0], /ARS 100,00$/)
+  assert.match(block.details[0], /\$ 100,00$/)
   assert.match(block.details[1], /Pendiente$/)
 })
 

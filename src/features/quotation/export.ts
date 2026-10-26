@@ -1,4 +1,5 @@
-import { calculateQuotation, formatMoney, parseMoney, parseQuantity } from './calculation.ts'
+import { calculateQuotation, formatMoney, formatMoneyAmount, parseMoney, parseQuantity } from './calculation.ts'
+import { getCurrencyLabel } from './currency-display.ts'
 import type { CatalogItem, Quotation, QuotationRow, RowSection } from './model.ts'
 import { BODY_FONT, HEADING_FONT, loadQuotationFonts } from './typography.ts'
 import { exchangeRateDescription } from './exchange-quote.ts'
@@ -243,7 +244,7 @@ export function renderQuotationCanvas(
   const totalRows = (['ARS', 'USD'] as const).map((currency) => {
     const cents = calculation.totals[currency]
     if (cents === null) throw new Error('Completá los campos pendientes antes de preparar la imagen.')
-    const amount = formatMoney(cents, currency).slice(currency.length + 1)
+    const amount = formatMoneyAmount(cents)
     const lines = measureLines(context, amount, CONTENT_WIDTH - 152)
     return { currency, lines, height: Math.max(100, lines.length * 90 + 20) }
   })
@@ -337,7 +338,7 @@ export function renderQuotationCanvas(
   for (const row of totalRows) {
     context.fillStyle = '#626262'
     setFont(context, 30, BODY_FONT)
-    context.fillText(row.currency, MARGIN, totalRowY + (row.height - 36) / 2)
+    context.fillText(getCurrencyLabel(row.currency), MARGIN, totalRowY + (row.height - 36) / 2)
     context.fillStyle = BLACK
     context.textAlign = 'right'
     setFont(context, 80)

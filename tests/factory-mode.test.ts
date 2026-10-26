@@ -225,7 +225,7 @@ test('PNG drawing uses only factory names and zero amounts, retaining original p
   }
   assert.ok(texts.includes('Parlantes de f\u00e1brica'))
   assert.ok(texts.includes('Subwoofer de f\u00e1brica'))
-  assert.ok(texts.filter((text) => text === 'USD 0,00').length >= 2)
+  assert.ok(texts.filter((text) => text === 'usd 0,00').length >= 2)
   const output = texts.join('\n')
   for (const privateText of ['Synthetic component set', 'Original product detail', 'Manual installation detail', 'Synthetic source', 'SYN-1', '12,34']) {
     assert.equal(output.includes(privateText), false)

@@ -1,4 +1,5 @@
 import type { AdapterPresentation, QuotationRow } from './model'
+import { getCurrencyLabel } from './currency-display'
 
 export interface AdapterVariantDraft {
   productKey: string
@@ -29,7 +30,7 @@ export function AdapterVariantFields({ value, existingRows, selectedRowId, showV
             <option value="">Nueva variante</option>
             {existingRows.map((row) => row.adapterVariant && (
               <option value={row.id} key={row.id}>
-                {row.concept} · {row.adapterVariant.size}″ · {presentations[row.adapterVariant.presentation]} · {row.currency} {row.priceState === 'included' ? 'Incluido' : row.unitPrice || 'Pendiente'}
+                {row.concept} · {row.adapterVariant.size}″ · {presentations[row.adapterVariant.presentation]} · {getCurrencyLabel(row.currency)} {row.priceState === 'included' ? 'Incluido' : row.unitPrice || 'Pendiente'}
               </option>
             ))}
           </select>

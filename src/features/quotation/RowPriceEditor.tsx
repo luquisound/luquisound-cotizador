@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { calculateQuotation, formatMoney, parseMoney } from './calculation'
+import { getCurrencyLabel } from './currency-display.ts'
 import { Dialog } from './QuotationDialog'
 import { isFactoryEligibleRow, isFactoryRow, setRowFactoryMode } from './factory-mode'
 import { isFixedServiceRow, prepareFixedServiceRow } from './fixed-services'
@@ -88,8 +89,8 @@ export function RowPriceEditor({ row, quotation, onSave, onClose }: RowPriceEdit
         <p className="field-help row-price-concept">{base.concept.trim() || 'Concepto pendiente'}</p>
         {harness && <label className="row-harness-toggle"><input type="checkbox" checked={!inactiveHarness} onChange={(event) => changeHarness(event.target.checked)} /><span>Incluir en el presupuesto</span></label>}
         <div className="row-price-controls row-price-currency-controls">
-          <label className="row-price-input-label">{fixedService ? 'Precio' : 'Precio unitario'} · {base.currency}<input ref={input} className="compact-price-input" inputMode="decimal" value={unitPrice} disabled={factory} placeholder="Sin precio" aria-invalid={Boolean(error)} aria-describedby={`${helpId}${error ? ` ${errorId}` : ''}`} onChange={(event) => changePrice(event.target.value)} onFocus={(event) => event.currentTarget.select()} /></label>
-          <label className="row-price-currency-label">Moneda<select value={base.currency} aria-describedby={currencyError ? currencyErrorId : undefined} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">ARS</option><option value="USD">USD</option></select></label>
+          <label className="row-price-input-label">{fixedService ? 'Precio' : 'Precio unitario'} · {getCurrencyLabel(base.currency)}<input ref={input} className="compact-price-input" inputMode="decimal" value={unitPrice} disabled={factory} placeholder="Sin precio" aria-invalid={Boolean(error)} aria-describedby={`${helpId}${error ? ` ${errorId}` : ''}`} onChange={(event) => changePrice(event.target.value)} onFocus={(event) => event.currentTarget.select()} /></label>
+          <label className="row-price-currency-label">Moneda<select value={base.currency} aria-describedby={currencyError ? currencyErrorId : undefined} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">$</option><option value="USD">usd</option></select></label>
           {isFactoryEligibleRow(base) && <label className="row-factory-toggle"><input type="checkbox" checked={factory} onChange={(event) => changeFactory(event.target.checked)} /><span>De fábrica</span></label>}
         </div>
         <p id={helpId} className="field-help">{factory ? 'De fábrica: sin cargo.' : 'Usá coma para decimales: 1.234,56. Cero es válido.'}</p>

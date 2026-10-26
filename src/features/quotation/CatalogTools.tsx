@@ -11,6 +11,7 @@ import { buildCatalogEdit, captureCatalogEditBaseline } from './catalog-edit.ts'
 import { queryCatalogRanked, resolveCatalogQuery } from './catalog-search.ts'
 import { canSelectCatalogItem } from './catalog-stock.ts'
 import { getCatalogQuotationTitle } from './catalog-title.ts'
+import { getCurrencyLabel } from './currency-display.ts'
 import { CatalogAvailability } from './CatalogAvailability.tsx'
 import { getCatalogSelectionPrice } from './row-provenance.ts'
 import { useCatalogClock } from './useCatalogClock.ts'
@@ -53,7 +54,7 @@ function catalogPriceLabel(item: CatalogItem): string {
     const label = price.priceBasis === 'manual' ? 'Precio manual del cat\u00e1logo'
       : price.priceBasis === 'provisional-list' ? 'Lista hist\u00f3rica provisional, antes del descuento'
         : 'Lista aprobada, antes del descuento'
-    return `${label}: ${price.currency} ${price.unitPrice}`
+    return `${label}: ${getCurrencyLabel(price.currency)} ${price.unitPrice}`
   } catch {
     return 'Precio manual inv\u00e1lido: revisalo antes de seleccionar'
   }
@@ -63,7 +64,7 @@ function referenceAmount(price: CatalogReferencePrice): string {
   if (price.amount === null) return 'Importe no indicado'
   const [whole, fraction] = price.amount.split('.')
   const value = `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}${fraction === undefined ? '' : `,${fraction}`}`
-  return `${price.currency ?? 'Moneda no identificada'} ${value}`
+  return `${price.currency === null || price.currency === undefined ? 'Moneda no identificada' : getCurrencyLabel(price.currency)} ${value}`
 }
 
 function referenceInput(price: CatalogReferencePrice, currency: Currency | undefined): string | null {
@@ -78,7 +79,7 @@ function referenceUnavailableReason(price: CatalogReferencePrice, currency: Curr
   if (price.amount === null) return 'Esta referencia no indica un importe.'
   if (price.role === 'cost' || price.role === 'unknown') return 'El costo o un rol no identificado no se toma como venta. Cargá el precio de venta manualmente.'
   if (price.currency === null) return 'La moneda no está identificada. Cargá el precio de venta manualmente.'
-  if (currency !== undefined && price.currency !== currency) return `La referencia está en ${price.currency}. Cargá un precio de venta en ${currency}; no se convierte automáticamente.`
+  if (currency !== undefined && price.currency !== currency) return `La referencia está en ${getCurrencyLabel(price.currency)}. Cargá un precio de venta en ${getCurrencyLabel(currency)}; no se convierte automáticamente.`
   return 'Este importe requiere revisión manual: admite hasta dos decimales y debe estar dentro del límite de cálculo.'
 }
 
@@ -164,6 +165,7 @@ function useNameInput(value: string) {
     const field = ref.current
     if (!field) return
     let width = field.clientWidth
+    let resizeFrame: number | null = null
     const resize = () => {
       field.style.height = 'auto'
       field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`
@@ -172,10 +174,18 @@ function useNameInput(value: string) {
     const observer = new ResizeObserver(() => {
       if (field.clientWidth === width) return
       width = field.clientWidth
-      resize()
+      if (resizeFrame !== null) return
+      // Measure after observer delivery so a height change cannot trigger a resize loop.
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null
+        resize()
+      })
     })
     observer.observe(field)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame)
+    }
   }, [value])
   return ref
 }
@@ -693,14 +703,14 @@ export function CatalogEditor({
           <label>Detalle para el cliente <span>(opcional)</span><textarea rows={2} value={draft.detail} maxLength={2000} onChange={(event) => setDraft({ ...draft, detail: event.target.value })} /></label>
           <div className="form-grid">
             <label>Sección sugerida<select value={draft.section} onChange={(event) => setDraft({ ...draft, section: event.target.value as RowSection })}><option value="equipment">Equipamiento</option><option value="extras">Instalación y accesorios</option></select></label>
-            <label>Moneda del precio<select value={draft.currency} aria-invalid={Boolean(currencyError)} aria-describedby={currencyError ? currencyErrorId : undefined} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">ARS</option><option value="USD">USD</option></select></label>
+            <label>Moneda del precio<select value={draft.currency} aria-invalid={Boolean(currencyError)} aria-describedby={currencyError ? currencyErrorId : undefined} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">{getCurrencyLabel('ARS')}</option><option value="USD">{getCurrencyLabel('USD')}</option></select></label>
           </div>
           {currencyError && <p id={currencyErrorId} className="field-errors" role="alert">{currencyError}</p>}
-          <label>Precio manual para próximas selecciones · {draft.currency} <span>(opcional)</span><input className="compact-price-input" inputMode="decimal" placeholder={draft.listPrice ? 'Usar lista aprobada' : 'Precio pendiente'} value={draft.unitPrice} aria-invalid={Boolean(priceLengthError)} aria-describedby={priceLengthError ? priceErrorId : undefined} onChange={(event) => changePrice(event.target.value)} /></label>
+          <label>Precio manual para próximas selecciones · {getCurrencyLabel(draft.currency)} <span>(opcional)</span><input className="compact-price-input" inputMode="decimal" placeholder={draft.listPrice ? 'Usar lista aprobada' : 'Precio pendiente'} value={draft.unitPrice} aria-invalid={Boolean(priceLengthError)} aria-describedby={priceLengthError ? priceErrorId : undefined} onChange={(event) => changePrice(event.target.value)} /></label>
           {priceLengthError && <p id={priceErrorId} className="field-errors" role="alert">{priceLengthError}</p>}
           <p className="field-help">Este precio se guarda en el catálogo para futuras selecciones. Coma para decimales; cero es válido. Cambiarlo no modifica filas ya cargadas. Las referencias sin aprobar requieren confirmación.</p>
           {draft.listPrice && <div className="notice pending">
-            <p>Lista {draft.listPrice.provisional ? 'histórica provisional' : 'aprobada'}: {draft.listPrice.currency} {draft.listPrice.amount.replace('.', ',')}, PVP antes del descuento. Si dejás vacío el precio manual, se usará esta lista y su moneda al elegir el producto.</p>
+            <p>Lista {draft.listPrice.provisional ? 'histórica provisional' : 'aprobada'}: {getCurrencyLabel(draft.listPrice.currency)} {draft.listPrice.amount.replace('.', ',')}, PVP antes del descuento. Si dejás vacío el precio manual, se usará esta lista y su moneda al elegir el producto.</p>
             <p className="catalog-provenance">{sourceLabel(draft.listPrice.source)}</p>
           </div>}
           <CatalogAvailability item={draft} now={now} />

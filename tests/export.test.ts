@@ -288,7 +288,7 @@ test('requests the original multicolour logo and reports an unavailable resource
 test('renders the stored source and date completely between the rate and footer', () => {
   const quotation = exportableQuotation()
   const result = renderWithRecordedCanvas(quotation)
-  const rate = result.texts.find((entry) => entry.text === '1 USD = 1.234,56 ARS')
+  const rate = result.texts.find((entry) => entry.text === '1 usd = 1.234,56 $')
   assert.ok(rate)
   const sourceLines = result.texts.filter((entry) => entry.y > rate.y && entry.y < result.footerY)
   assert.equal(sourceLines.map((entry) => entry.text).join(' '), 'Dólar blue · DolarAPI · 16/10/2026, 10:30 (Buenos Aires)')
@@ -305,7 +305,7 @@ test('grows a long quotation image to reserve every wrapped source line above th
   const automatic = renderWithRecordedCanvas(quotation)
   const legacy = renderWithRecordedCanvas({ ...quotation, exchangeRateQuote: undefined })
   assert.ok(automatic.height > legacy.height)
-  const rate = automatic.texts.find((entry) => entry.text === '1 USD = 1.234,56 ARS')
+  const rate = automatic.texts.find((entry) => entry.text === '1 usd = 1.234,56 $')
   assert.ok(rate)
   const sourceLines = automatic.texts.filter((entry) => entry.y > rate.y && entry.y < automatic.footerY)
   assert.equal(sourceLines.map((entry) => entry.text).join(' '), exchangeRateDescription(quotation))
@@ -331,18 +331,35 @@ test('renders mixed row currencies, unit prices and converted totals without cli
   const result = renderWithRecordedCanvas(quotation)
   const text = result.texts.map((entry) => entry.text).join(' ')
   assert.equal(result.width, 1080)
-  assert.ok(text.includes('2 × USD 12,50 c/u'))
-  assert.ok(text.includes('USD 25,00'))
-  assert.ok(text.includes('ARS 35.000,00'))
+  assert.ok(text.includes('2 × usd 12,50 c/u'))
+  assert.ok(text.includes('usd 25,00'))
+  assert.ok(text.includes('$ 35.000,00'))
   assert.ok(text.includes('60.000,00'))
   assert.ok(text.includes('60,00'))
+  assert.deepEqual(result.texts.filter(({ text: entry }) => entry === '$' || entry === 'usd').map(({ text: entry }) => entry), ['$', 'usd'])
   assert.ok(text.includes('Final del detalle'))
-  assert.ok(text.includes('1 USD = 1.000 ARS'))
+  assert.ok(text.includes('1 usd = 1.000 $'))
   const bodyTexts = result.texts.filter((entry) => entry.y >= 348 && entry.y < result.footerY)
   assert.ok(bodyTexts.every((entry) => entry.y + 30 <= result.footerY))
   assert.ok(bodyTexts.every((entry) => entry.align === 'right'
     ? entry.x - entry.width >= 64
     : entry.x + entry.width <= 1016))
+})
+
+test('exports both complete safe-limit totals independently from their displayed currency labels', () => {
+  const quotation = exportableQuotation()
+  quotation.exchangeRate = '1'
+  quotation.exchangeRateQuote = undefined
+  quotation.rows = [{ ...quotation.rows[0], currency: 'ARS', unitPrice: '90071992547409,91' }]
+  const snapshot = structuredClone(quotation)
+  const result = renderWithRecordedCanvas(quotation)
+  const amount = '90.071.992.547.409,91'
+  const totalStart = result.texts.findIndex(({ text }) => text === 'TOTAL')
+  assert.ok(totalStart >= 0)
+  const totalTexts = result.texts.slice(totalStart + 1)
+  assert.equal(totalTexts.filter(({ align }) => align === 'right').map(({ text }) => text).join(''), amount.repeat(2))
+  assert.deepEqual(totalTexts.filter(({ text }) => text === '$' || text === 'usd').map(({ text }) => text), ['$', 'usd'])
+  assert.deepEqual(quotation, snapshot)
 })
 
 test('exports complete 500-character product names with separate legible prices and increasing row heights', () => {
@@ -378,7 +395,7 @@ test('exports complete 500-character product names with separate legible prices 
     assert.equal(lines.map(({ text }) => text).join('').replace(/\s/g, ''), names[index].replace(/\s/g, ''))
     assert.equal(amounts.length, 1)
     const amount = amounts[0]
-    assert.equal(amount.text, 'ARS 2.400,00')
+    assert.equal(amount.text, '$ 2.400,00')
     assert.equal(amount.align, 'right')
     assert.ok(amount.y + 38 <= boundary.y)
     assert.ok(amount.x <= result.width && amount.x - amount.width >= 64)
@@ -455,7 +472,7 @@ test('exports only the customer availability warning while retaining private tra
   const texts = result.texts.map(({ text }) => text).join(' ')
   assert.equal(result.texts.filter(({ text }) => text === 'Disponibilidad a confirmar.').length, 1)
   assert.doesNotMatch(texts, /PRIVATE-|ffff|private-item|Stock|Histórico/)
-  assert.ok(texts.includes('ARS 2.400,00'))
+  assert.ok(texts.includes('$ 2.400,00'))
   const warning = result.texts.find(({ text }) => text === 'Disponibilidad a confirmar.')!
   assert.ok(warning.x + warning.width <= 1016)
   assert.ok(warning.y + 30 <= result.footerY)
@@ -599,11 +616,11 @@ test('exports adapter variants under one heading with separate native currency a
   const result = renderWithRecordedCanvas(quotation)
   assert.equal(result.texts.filter(({ text }) => text === 'Aros adaptadores 3D').length, 1)
   const text = result.texts.map(({ text: entry }) => entry).join(' ')
-  assert.ok(text.includes('2 pares × 6,5″ · ARS 200,00'))
-  assert.ok(text.includes('2 unidades × 8″ · USD 10,00'))
+  assert.ok(text.includes('2 pares × 6,5″ · $ 200,00'))
+  assert.ok(text.includes('2 unidades × 8″ · usd 10,00'))
   const amounts = result.texts.filter(({ align }) => align === 'right').map(({ text: entry }) => entry)
-  assert.ok(amounts.includes('ARS 200,00'))
-  assert.ok(amounts.includes('USD 10,00'))
+  assert.ok(amounts.includes('$ 200,00'))
+  assert.ok(amounts.includes('usd 10,00'))
   assert.ok(!text.includes('Agregar') && !text.includes('Editar'))
   assert.deepEqual(quotation, snapshot)
 })
@@ -684,8 +701,8 @@ test('keeps legacy adapters, repeated equipment, included and explicit zero vari
   assert.ok(text.includes('Subwoofer sintético A') && text.includes('Subwoofer sintético B'))
   assert.ok(text.includes('Aros anteriores de 6,5 pulgadas Texto conservado'))
   assert.ok(text.includes('1 unidad × 6,5″ · Incluido'))
-  assert.ok(text.includes('1 unidad × 8″ · ARS 0,00'))
-  assert.ok(result.texts.some(({ text: entry, align }) => entry === 'ARS 0,00' && align === 'right'))
+  assert.ok(text.includes('1 unidad × 8″ · $ 0,00'))
+  assert.ok(result.texts.some(({ text: entry, align }) => entry === '$ 0,00' && align === 'right'))
 })
 
 test('blocks PNG generation when one explicitly grouped adapter remains pending', async () => {
@@ -709,7 +726,7 @@ test('keeps grouped adapter provenance private while preserving availability gua
   }
   const result = renderWithRecordedCanvas(quotation)
   const text = result.texts.map(({ text: entry }) => entry).join(' ')
-  assert.ok(text.includes('1 par × 6,5″ · ARS 2.400,00'))
+  assert.ok(text.includes('1 par × 6,5″ · $ 2.400,00'))
   assert.equal(result.texts.filter(({ text: entry }) => entry === 'Disponibilidad a confirmar.').length, 1)
   assert.doesNotMatch(text, /PRIVATE-|ffff|private-item|Stock|Histórico/)
   quotation.rows[0].provenance!.stock!.quantity = 0

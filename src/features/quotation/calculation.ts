@@ -2,6 +2,7 @@ import type { Currency, Quotation, QuotationRow } from './model.ts'
 import { convertMixedTotals, type ConvertedTotalsResult } from './exchange.ts'
 import { orderQuotationRows } from './audio-categories.ts'
 import { isInactiveHarnessRow } from './harness-preset.ts'
+import { getCurrencyLabel } from './currency-display.ts'
 
 type ParseFailure = { ok: false; reason: string }
 export type MoneyResult = { ok: true; cents: number } | ParseFailure
@@ -57,14 +58,18 @@ export function parseQuantity(input: string): QuantityResult {
   return { ok: true, thousandths }
 }
 
-export function formatMoney(cents: number, currency: Currency): string {
+export function formatMoneyAmount(cents: number): string {
   if (!Number.isSafeInteger(cents) || cents < 0) {
     throw new RangeError('Money must be a nonnegative safe integer in cents.')
   }
   const amount = BigInt(cents)
   const whole = integerFormatter.format(amount / 100n)
   const fraction = String(amount % 100n).padStart(2, '0')
-  return `${currency} ${whole},${fraction}`
+  return `${whole},${fraction}`
+}
+
+export function formatMoney(cents: number, currency: Currency): string {
+  return `${getCurrencyLabel(currency)} ${formatMoneyAmount(cents)}`
 }
 
 export function isEmptyRow(row: QuotationRow): boolean {
@@ -81,7 +86,7 @@ export function isEmptyRow(row: QuotationRow): boolean {
 export function calculateRow(row: QuotationRow): CalculatedRow {
   const errors: string[] = []
   if (!row.concept.trim()) errors.push('Ingresá el concepto de la fila.')
-  if (row.currency !== 'ARS' && row.currency !== 'USD') errors.push('Seleccioná una moneda válida para el ítem: ARS o USD.')
+  if (row.currency !== 'ARS' && row.currency !== 'USD') errors.push('Seleccioná una moneda válida para el ítem: $ o usd.')
 
   const quantity = parseQuantity(row.quantity)
   if (!quantity.ok) errors.push(quantity.reason)

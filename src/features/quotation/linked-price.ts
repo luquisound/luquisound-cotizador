@@ -1,4 +1,4 @@
-import { formatMoney, parseMoney, parseQuantity } from './calculation.ts'
+import { formatMoneyAmount, parseMoney, parseQuantity } from './calculation.ts'
 import { getPriceInputLengthError, PRICE_INPUT_MAX_LENGTH } from './price-input.ts'
 
 type LinkedPriceFailure = { ok: false; reason: string }
@@ -13,7 +13,7 @@ function roundHalfUp(numerator: bigint, denominator: bigint): bigint {
 
 function formatPriceInput(cents: number, allowLongDisplay = false): string | null {
   if (cents === 0) return '0'
-  const grouped = formatMoney(cents, 'ARS').slice(4)
+  const grouped = formatMoneyAmount(cents)
   if (grouped.length <= PRICE_INPUT_MAX_LENGTH) return grouped
   const amount = BigInt(cents)
   const whole = String(amount / 100n)

@@ -52,6 +52,12 @@ right-aligned amounts, totals, and dark contact footer. The approved public cont
 footer is 11 7358-1958 and @luquisound.ok. Fixed quotations remain in Figma with
 their existing dark headers; this app change does not modify those assets.
 
+Visible currency labels use `$` for Argentine pesos and lowercase `usd` for
+US dollars throughout the editor, catalogue, quotation preview and PNG, including
+the exchange-rate legend (`1 usd = X $`). Stored currency identifiers, backups,
+source metadata and calculation keys remain `ARS` and `USD`. Numeric price inputs
+use a separate amount-only formatter, independent of the displayed label length.
+
 Each row has separate edit buttons: its description opens the full row editor;
 its amount opens "Editar precio" with one unit-price or service-price field, an
 ARS/USD selector, and Save/Cancel actions. An explicit currency change converts the
@@ -100,10 +106,13 @@ recovery, imports, refresh and opening saved quotations never shorten or clear
 their existing concept or detail.
 
 The full row editor uses a bottom sheet on narrow screens and a centered dialog
-on desktop, with a distinct price panel, a currency badge and persistent Save/Cancel
-actions outside the scrolling fields. Existing rows also show "Eliminar item" in that footer, outside
-"Mas opciones"; deletion requires confirmation and removes only the open row.
-New drafts do not offer deletion.
+on desktop. It uses plain white fields, inline currency labels and two adjacent
+price inputs, without nested price panels or decorative badges. A single fixed
+footer contains Delete, Cancel and Save in visual and keyboard order; new drafts
+show only Cancel and Add. Delete remains outside "Mas opciones", requires
+confirmation and removes only the open row. Fields scroll independently from the
+heading and footer. Adapter "Guardar y agregar otra medida" remains available
+inside "Mas opciones".
 
 Variable-quantity rows in the full editor offer linked unit-price and total-price
 inputs in the row currency. Editing the unit price or quantity recalculates the

@@ -1,4 +1,5 @@
 import type { Currency } from './model.ts'
+import { getCurrencyLabel } from './currency-display.ts'
 
 type ExchangeFailure = { ok: false; reason: string }
 
@@ -29,7 +30,7 @@ export function parseExchangeRate(input: string): ExchangeRateResult {
   }
   const value = input.trim()
   if (!value) {
-    return { ok: false, reason: 'Ingresá el tipo de cambio: 1 USD = X ARS.' }
+    return { ok: false, reason: 'Ingresá el tipo de cambio: 1 usd = X $.' }
   }
   if (!/^(?:[0-9]+|[1-9][0-9]{0,2}(?:\.[0-9]{3})+)(?:,[0-9]{1,6})?$/.test(value)) {
     return {
@@ -49,7 +50,7 @@ export function parseExchangeRate(input: string): ExchangeRateResult {
   }
 
   const normalized = `${integerFormatter.format(BigInt(whole))}${fraction ? `,${fraction}` : ''}`
-  return { ok: true, numerator, denominator, normalized, rateLabel: `1 USD = ${normalized} ARS` }
+  return { ok: true, numerator, denominator, normalized, rateLabel: `1 ${getCurrencyLabel('USD')} = ${normalized} ${getCurrencyLabel('ARS')}` }
 }
 
 export function convertTotals(
@@ -61,7 +62,7 @@ export function convertTotals(
     return { ok: false, reason: 'El total base debe ser un importe válido en centavos enteros, mayor o igual a cero.' }
   }
   if (baseCurrency !== 'ARS' && baseCurrency !== 'USD') {
-    return { ok: false, reason: 'Seleccioná una moneda base válida: ARS o USD.' }
+    return { ok: false, reason: 'Seleccioná una moneda base válida: $ o usd.' }
   }
   const rate = parseExchangeRate(rateInput)
   if (!rate.ok) return rate

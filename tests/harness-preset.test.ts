@@ -234,7 +234,7 @@ test('PNG output omits unchecked bypass entirely and includes its edited amount 
   assert.equal(hidden.includes('Synthetic bypass description'), false)
   const shown = renderTexts(quotation(setHarnessPresetSelected(inactive, true))).join('\n')
   assert.equal(shown.includes('Ficha bypass est\u00e9reo'), true)
-  assert.equal(shown.includes('ARS 72.345,00'), true)
+  assert.equal(shown.includes('$ 72.345,00'), true)
   assert.equal(shown.includes('Synthetic bypass description'), true)
   assert.deepEqual(inactive, before)
 })

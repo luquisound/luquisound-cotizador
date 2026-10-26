@@ -3,10 +3,12 @@ import { test } from 'node:test'
 import {
   calculateQuotation,
   formatMoney,
+  formatMoneyAmount,
   isEmptyRow,
   parseMoney,
   parseQuantity,
 } from '../src/features/quotation/calculation.ts'
+import { getCurrencyLabel } from '../src/features/quotation/currency-display.ts'
 import type { Currency, Quotation, QuotationRow } from '../src/features/quotation/model.ts'
 
 function row(overrides: Partial<QuotationRow> = {}): QuotationRow {
@@ -67,12 +69,31 @@ test('quantity requires a value and rejects zero, grouping, overflow, and excess
 })
 
 test('formatting displays the explicit currency without losing the last cent', () => {
-  assert.equal(formatMoney(123456, 'ARS'), 'ARS 1.234,56')
-  assert.equal(formatMoney(1, 'USD'), 'USD 0,01')
-  assert.equal(formatMoney(0, 'ARS'), 'ARS 0,00')
-  assert.equal(formatMoney(Number.MAX_SAFE_INTEGER, 'USD'), 'USD 90.071.992.547.409,91')
+  assert.equal(getCurrencyLabel('ARS'), '$')
+  assert.equal(getCurrencyLabel('USD'), 'usd')
+  for (const [cents, amount] of [
+    [0, '0,00'], [1, '0,01'], [100, '1,00'], [123456, '1.234,56'],
+    [Number.MAX_SAFE_INTEGER, '90.071.992.547.409,91'],
+  ] as const) {
+    assert.equal(formatMoney(cents, 'ARS'), `$ ${amount}`)
+    assert.equal(formatMoney(cents, 'USD'), `usd ${amount}`)
+  }
   for (const cents of [-1, 0.1, Number.MAX_SAFE_INTEGER + 1, Number.NaN, Infinity]) {
     assert.throws(() => formatMoney(cents, 'ARS'), RangeError)
+  }
+})
+
+test('numeric-only formatting preserves complete amounts independently from currency label lengths', () => {
+  for (const [cents, amount] of [
+    [0, '0,00'], [1, '0,01'], [99, '0,99'], [100, '1,00'], [101, '1,01'],
+    [123456, '1.234,56'], [1234567890, '12.345.678,90'],
+    [Number.MAX_SAFE_INTEGER, '90.071.992.547.409,91'],
+  ] as const) {
+    assert.equal(formatMoneyAmount(cents), amount)
+    assert.deepEqual(parseMoney(formatMoneyAmount(cents)), { ok: true, cents })
+  }
+  for (const cents of [-1, 0.1, Number.MAX_SAFE_INTEGER + 1, Number.NaN, Infinity]) {
+    assert.throws(() => formatMoneyAmount(cents), RangeError)
   }
 })
 
@@ -321,12 +342,12 @@ test('manual conversion preserves ARS and USD base cents in both directions', ()
   const ars = calculateQuotation(quotation([row({ unitPrice: '0,03' })], { exchangeRate: '2' }))
   assert.equal(ars.nativeTotals.ARS, 3)
   assert.equal(ars.canExport, true)
-  assert.deepEqual(ars.conversion, { ok: true, arsCents: 3, usdCents: 2, rateLabel: '1 USD = 2 ARS' })
+  assert.deepEqual(ars.conversion, { ok: true, arsCents: 3, usdCents: 2, rateLabel: '1 usd = 2 $' })
 
   const usd = calculateQuotation(quotation([row({ unitPrice: '0,01', currency: 'USD' })], { currency: 'USD', exchangeRate: '1,5' }))
   assert.equal(usd.nativeTotals.USD, 1)
   assert.equal(usd.canExport, true)
-  assert.deepEqual(usd.conversion, { ok: true, arsCents: 2, usdCents: 1, rateLabel: '1 USD = 1,5 ARS' })
+  assert.deepEqual(usd.conversion, { ok: true, arsCents: 2, usdCents: 1, rateLabel: '1 usd = 1,5 $' })
 })
 
 test('conversion rounds the final total after rounding and summing the original rows', () => {
@@ -335,7 +356,7 @@ test('conversion rounds the final total after rounding and summing the original 
     row({ id: 'b', quantity: '0,5', unitPrice: '0,01' }),
   ], { exchangeRate: '2' }))
   assert.equal(result.nativeTotals.ARS, 2)
-  assert.deepEqual(result.conversion, { ok: true, arsCents: 2, usdCents: 1, rateLabel: '1 USD = 2 ARS' })
+  assert.deepEqual(result.conversion, { ok: true, arsCents: 2, usdCents: 1, rateLabel: '1 usd = 2 $' })
 })
 
 test('equivalent-total overflow blocks export while preserving the complete base total', () => {
@@ -372,7 +393,7 @@ test('zero and included rows still require a deliberate manual rate for both tot
   const complete = calculateQuotation(quotation(rows, { exchangeRate: '2' }))
   assert.equal(complete.itemsComplete, true)
   assert.equal(complete.canExport, true)
-  assert.deepEqual(complete.conversion, { ok: true, arsCents: 0, usdCents: 0, rateLabel: '1 USD = 2 ARS' })
+  assert.deepEqual(complete.conversion, { ok: true, arsCents: 0, usdCents: 0, rateLabel: '1 usd = 2 $' })
 })
 
 test('mixed rows preserve native prices and produce both totals independently of the legacy default', () => {

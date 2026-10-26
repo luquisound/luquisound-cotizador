@@ -71,7 +71,7 @@ export function buildCatalogEdit(
     throw new Error('Eleg\u00ed una secci\u00f3n v\u00e1lida para esta opci\u00f3n.')
   }
   if (draft.currency !== 'ARS' && draft.currency !== 'USD') {
-    throw new Error('Eleg\u00ed ARS o USD para el precio de venta.')
+    throw new Error('Eleg\u00ed $ o usd para el precio de venta.')
   }
 
   const manual: CatalogItem = {

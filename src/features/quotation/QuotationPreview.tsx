@@ -3,6 +3,7 @@ import {
   calculateQuotation,
   calculateRow,
   formatMoney,
+  formatMoneyAmount,
   isEmptyRow,
   parseQuantity,
 } from './calculation.ts'
@@ -11,6 +12,7 @@ import { getAudioCategories, hasRepeatCategoryAction, readAudioCategory } from '
 import type { AudioCategory } from './audio-categories.ts'
 import type { Quotation, QuotationRow, RowSection } from './model.ts'
 import { exchangeRateDescription } from './exchange-quote'
+import { getCurrencyLabel } from './currency-display.ts'
 import { QUOTATION_GRAPHIC } from './graphic.ts'
 import { adapterVariantAmount, adapterVariantDescription, buildQuotationPresentation } from './presentation.ts'
 import type { AdapterPresentationBlock, QuotationPresentationItem } from './presentation.ts'
@@ -341,9 +343,9 @@ export function QuotationPreview({
             const cents = calculation.totals[currency]
             return (
               <div className="quotation-converted-total" key={currency}>
-                <span className="quotation-total-currency">{currency}</span>
+                <span className="quotation-total-currency">{getCurrencyLabel(currency)}</span>
                 <span className={cents === null ? 'quotation-total-pending' : 'quotation-total-amount'}>
-                  {cents === null ? 'Pendiente' : formatMoney(cents, currency).slice(currency.length + 1)}
+                  {cents === null ? 'Pendiente' : formatMoneyAmount(cents)}
                 </span>
               </div>
             )
