@@ -488,10 +488,10 @@ button or hourly catalogue polling. There is no quotation upload, analytics, or
 synchronization of locally approved prices.
 
 The header contains the brand and editable quotation details. Below the template
-and contact footer, a single discreet "Opciones" menu contains bulk entry,
-"Presupuestos guardados", "Mi catalogo" and "Nuevo presupuesto" as secondary
-actions. The menu starts collapsed; history and save controls are accessed inside
-their workflow, not displayed on entry.
+and contact footer, always-visible buttons open "Pegar codigos o nombres",
+"Mi catalogo", "Presupuestos guardados" and "Nuevo presupuesto", including when
+the quotation is empty. Each action opens its existing secondary workflow;
+history and save controls remain inside their workflow.
 "Nuevo presupuesto" replaces only the
 current quotation, confirming before content or an unreadable recovery record is
 replaced. It preserves the catalogue, approved prices and legacy workspace key.
@@ -567,8 +567,8 @@ delivery until that row is reviewed.
 
 ## Saved quotation library
 
-Open "Opciones" > "Presupuestos guardados" to access the library. Saving is an
-explicit action with a trimmed name and save date. A duplicate name
+Use the "Presupuestos guardados" button below the contact footer to access the
+library. Saving is an explicit action with a trimmed name and save date. A duplicate name
 requires confirmation before replacing its entry. The library allows up to 100
 entries in a 5 MiB envelope; limits reject the action instead of deleting older
 records. A new archive requires a row with concept, detail, price or an explicit
@@ -609,8 +609,9 @@ separately; the application does not add a frontend PIN or claim one is security
 ## Optional private catalogue
 
 No catalogue data is embedded in the public application. Product selection stays
-in the row editor; catalogue management is available through "Opciones" > "Mi catalogo"
-and from a storage-error notice. A configured private endpoint loads the common catalogue automatically.
+in the row editor; catalogue management is available through the "Mi catalogo"
+button below the contact footer and from a storage-error notice. A configured
+private endpoint loads the common catalogue automatically.
 A private JSON file can also be imported after a summary and explicit confirmation.
 The catalogue combines a category filter with SKU, brand, and name search, ranks
 exact SKU matches first, and limits rendered
@@ -680,7 +681,8 @@ guaranteed availability. See `CATALOG-SOURCE-ROADMAP.md`.
 
 ## Reviewed bulk entry
 
-"Opciones" > "Pegar codigos o nombres" accepts up to 50 nonempty lines of 500 characters each,
+The "Pegar codigos o nombres" button below the contact footer opens reviewed bulk
+entry, which accepts up to 50 nonempty lines of 500 characters each,
 one product code or name per line. It does not parse pasted quantities or prices
 from extra columns. A unique exact SKU is preferred to a name; a unique exact
 name can also be proposed. Partial searches and ambiguous exact matches always

@@ -47,13 +47,8 @@
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .quotation-workspace { min-height: 100svh; padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px)); }
 .workspace-main { max-width: 1080px; padding: 0 0 24px; margin: 0 auto; }
-.workspace-options { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 12px max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px)); }
-.workspace-options-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 4px; border: 0; background: transparent; color: #62625c; font-size: 13px; }
-.workspace-options-toggle > span { font-size: 23px; line-height: 1; }
-.workspace-options-toggle:hover { color: #171717; }
-.workspace-options-panel { display: grid; gap: 4px; width: min(280px, 100%); padding: 6px; border: 1px solid #d3d2cb; border-radius: 8px; background: #fff; box-shadow: 0 8px 24px #0002; }
-.workspace-options button { scroll-margin-block: 12px calc(180px + env(safe-area-inset-bottom, 0px)); }
-.workspace-options-panel .button { justify-content: flex-start; border-color: transparent; text-align: left; }
+.workspace-options { display: grid; gap: 8px; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); }
+.workspace-options .button { min-width: 0; min-height: 48px; text-align: center; overflow-wrap: anywhere; scroll-margin-block: 12px calc(180px + env(safe-area-inset-bottom, 0px)); }
 .export-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .current-quotation-note { margin: 20px 0 0; color: #66665f; font-size: 12px; text-align: center; }
 button, summary, select { touch-action: manipulation; }
@@ -185,8 +180,12 @@ ul.field-errors { padding-left: 30px; }
 @media (min-width: 40rem) {
   .adapter-fields .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace-main { max-width: 1680px; }
+  .workspace-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .quotation-workspace { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
-  .workspace-options button { scroll-margin-block-end: calc(100px + env(safe-area-inset-bottom, 0px)); }
+  .workspace-options .button { scroll-margin-block-end: calc(100px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (min-width: 64rem) {
+  .workspace-options { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
   .export-bar { flex-direction: column; align-items: stretch; gap: 8px; padding-inline: 16px; }

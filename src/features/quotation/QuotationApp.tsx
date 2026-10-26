@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { calculateQuotation, isEmptyRow } from './calculation'
 import { createQuotation, hasQuotationContent, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
 import { isDirectExtraRow, isSingleRowCategory, type AudioCategory } from './audio-categories'
@@ -59,10 +59,6 @@ export default function QuotationApp() {
   const [recoveryError, setRecoveryError] = useState(initial.current.error)
   const [savedCatalog, setSavedCatalog] = useState<CatalogItem[] | null>(initial.catalog.stored ? initial.catalog.catalog : null)
   const [dialog, setDialog] = useState<'header' | 'catalog' | 'bulk' | 'library' | null>(null)
-  const [optionsOpen, setOptionsOpen] = useState(false)
-  const optionsId = useId()
-  const optionsContainer = useRef<HTMLDivElement>(null)
-  const optionsButton = useRef<HTMLButtonElement>(null)
   const [rowEditing, setRowEditing] = useState<RowEditingState | null>(null)
   const [priceEditing, setPriceEditing] = useState<RowEditingState | null>(null)
   const [message, setMessage] = useState('')
@@ -75,6 +71,7 @@ export default function QuotationApp() {
   const catalogButton = useRef<HTMLButtonElement>(null)
   const libraryButton = useRef<HTMLButtonElement>(null)
   const bulkButton = useRef<HTMLButtonElement>(null)
+  const newQuotationButton = useRef<HTMLButtonElement>(null)
   const rowEditorTrigger = useRef<HTMLElement | null>(null)
   const generation = useRef(0)
   const catalogSaveStatus = !catalogStorageEnabled ? 'Guardado del catálogo pausado' : catalogError ? 'No se pudo guardar el catálogo' : savedCatalog === catalog ? 'Catálogo y precios conservados en este navegador' : 'Guardando catálogo…'
@@ -122,35 +119,11 @@ export default function QuotationApp() {
     return result
   }
 
-  function openSecondaryDialog(next: 'catalog' | 'bulk' | 'library') {
-    setOptionsOpen(false)
-    setDialog(next)
-  }
-
-  useEffect(() => {
-    if (!optionsOpen) return
-    function closeOutside(event: PointerEvent) {
-      if (event.target instanceof Node && !optionsContainer.current?.contains(event.target)) setOptionsOpen(false)
-    }
-    function closeWithEscape(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      setOptionsOpen(false)
-      optionsButton.current?.focus()
-    }
-    document.addEventListener('pointerdown', closeOutside)
-    document.addEventListener('keydown', closeWithEscape)
-    return () => {
-      document.removeEventListener('pointerdown', closeOutside)
-      document.removeEventListener('keydown', closeWithEscape)
-    }
-  }, [optionsOpen])
-
   function closeCatalog() {
     setDialog(null)
     // Restore focus after the modal is removed and the page is no longer inert.
     window.requestAnimationFrame(() => {
-      const target = catalogButton.current ?? optionsButton.current ?? document.querySelector<HTMLButtonElement>('.quotation-heading-edit')
+      const target = catalogButton.current ?? document.querySelector<HTMLButtonElement>('.quotation-heading-edit')
       target?.focus()
     })
   }
@@ -159,7 +132,7 @@ export default function QuotationApp() {
     if ((hasQuotationContent(quotationRef.current) || recoveryError) && !window.confirm(
       '¿Comenzar un presupuesto nuevo? Se reemplazará el presupuesto en curso de este navegador. Descargá o guardá el actual antes de continuar. Tu catálogo y sus precios se conservan.',
     )) {
-      window.requestAnimationFrame(() => optionsButton.current?.focus())
+      window.requestAnimationFrame(() => newQuotationButton.current?.focus())
       return
     }
     const next = createQuotation()
@@ -176,12 +149,12 @@ export default function QuotationApp() {
 
   function closeLibrary() {
     setDialog(null)
-    window.requestAnimationFrame(() => (libraryButton.current ?? optionsButton.current)?.focus())
+    window.requestAnimationFrame(() => libraryButton.current?.focus())
   }
 
   function closeBulk() {
     setDialog(null)
-    window.requestAnimationFrame(() => (bulkButton.current ?? optionsButton.current)?.focus())
+    window.requestAnimationFrame(() => bulkButton.current?.focus())
   }
 
   function addBulkRows(rows: QuotationRow[]): boolean {
@@ -407,7 +380,7 @@ export default function QuotationApp() {
     setPriceEditing(null)
     window.requestAnimationFrame(() => {
       const target = rowId ? document.querySelector<HTMLElement>(`[data-row-price-id="${rowId}"]`) : null
-      const focusTarget = target ?? (previous?.isConnected ? previous : optionsButton.current)
+      const focusTarget = target ?? (previous?.isConnected ? previous : document.querySelector<HTMLButtonElement>('.quotation-heading-edit'))
       focusTarget?.focus()
     })
   }
@@ -616,17 +589,12 @@ export default function QuotationApp() {
             </>}
           />
         </div>
-        <div className="workspace-options" ref={optionsContainer} onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setOptionsOpen(false)
-        }}>
-          <button ref={optionsButton} className="workspace-options-toggle" type="button" aria-expanded={optionsOpen} aria-controls={optionsId} onClick={() => setOptionsOpen((open) => !open)}><span aria-hidden="true">⋯</span> Opciones</button>
-          {optionsOpen && <nav id={optionsId} className="workspace-options-panel" aria-label="Opciones del presupuesto">
-            <button ref={bulkButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('bulk')}>Pegar códigos o nombres</button>
-            <button ref={catalogButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('catalog')}>Mi catálogo</button>
-            <button ref={libraryButton} className="button secondary" type="button" onClick={() => openSecondaryDialog('library')}>Presupuestos guardados</button>
-            <button className="button secondary" type="button" onClick={() => { setOptionsOpen(false); startNewQuotation() }}>Nuevo presupuesto</button>
-          </nav>}
-        </div>
+        <nav className="workspace-options" aria-label="Opciones del presupuesto">
+          <button ref={bulkButton} className="button secondary" type="button" onClick={() => setDialog('bulk')}>Pegar códigos o nombres</button>
+          <button ref={catalogButton} className="button secondary" type="button" onClick={() => setDialog('catalog')}>Mi catálogo</button>
+          <button ref={libraryButton} className="button secondary" type="button" onClick={() => setDialog('library')}>Presupuestos guardados</button>
+          <button ref={newQuotationButton} className="button secondary" type="button" onClick={startNewQuotation}>Nuevo presupuesto</button>
+        </nav>
         <p className="current-quotation-note">El presupuesto en curso se recupera al recargar.</p>
       </main>
       <footer className="export-bar">

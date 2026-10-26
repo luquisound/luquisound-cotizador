@@ -46,9 +46,9 @@ inventory management, invoicing, and a general backend remain outside this stage
   whitespace, a global historical-source banner or a general pending-data
   disclaimer. Retain contextual validation and image-delivery guards. Keep private
   source metadata and stock rules in their existing internal workflows. Place bulk
-  entry, saved quotations, catalogue management and New behind the single discreet "Opciones"
-  menu below the template and contact footer. Keep history and save controls
-  inside those secondary workflows.
+  entry, saved quotations, catalogue management and New in always-visible buttons
+  below the template and contact footer, including when the quotation is empty.
+  Keep history and save controls inside those secondary workflows.
 - Keep the full modal for equipment and custom rows focused on "Producto", unit
   price (service price for cables and labour) with its ARS or USD label, and
   "Agregar" or "Guardar". Combine SKU, brand

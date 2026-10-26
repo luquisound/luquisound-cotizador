@@ -7,7 +7,8 @@ current quotation, a named local quotation library and deterministic PNG sharing
 Fixed budgets and reusable templates remain in Figma.
 
 The app opens on the quotation. Catalogue management, reviewed bulk entry, saved
-quotations and New are secondary workflows under "Opciones". Product behavior,
+quotations and New have always-visible buttons below the template and contact
+footer, including when the quotation is empty. Product behavior,
 pricing rules and graphic requirements belong in [PRODUCTO.md](docs/PRODUCTO.md).
 
 ## Local setup
