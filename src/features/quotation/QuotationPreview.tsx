@@ -78,11 +78,10 @@ function PreviewRow({ row, calculated, onEdit, onEditPrice }: PreviewRowProps) {
 }
 
 function PreviewHarnessPreset({
-  row, onEditPrice, onEditRow,
+  row, onEditPrice,
 }: {
   row: QuotationRow | undefined
   onEditPrice: () => void
-  onEditRow: (rowId: string) => void
 }) {
   if (!row || row.harnessSelection?.enabled === false) {
     return (
@@ -108,13 +107,12 @@ function PreviewHarnessPreset({
   return (
     <div className="quotation-row quotation-harness-preset">
       <div className="quotation-harness-description">
-        <button type="button" className="quotation-harness-open" onClick={onEditPrice} aria-label={`Editar precio e inclusión de ${concept}`}>
+        <button type="button" className="quotation-harness-open" onClick={onEditPrice} aria-label={`Editar ${concept}`}>
           <span className="quotation-row-concept">{concept}</span>
         </button>
         {row.detail.trim() && <span className="quotation-row-detail">{row.detail.trim()}</span>}
         {quantityLabel && <span className="quotation-row-quantity">{quantityLabel}</span>}
         {row.priceState === 'included' && <span className="quotation-row-quantity">Incluido sin cargo</span>}
-        <button type="button" className="quotation-harness-edit" data-row-id={row.id} onClick={() => onEditRow(row.id)} aria-label={`Editar datos de ${concept}`}>Editar datos</button>
       </div>
       <button type="button" className={`quotation-row-price${amount === 'Pendiente' ? ' quotation-price-pending' : ''}`} data-row-price-id={row.id} onClick={onEditPrice} aria-label={`Editar precio unitario de ${concept}. Importe de la fila: ${amount}`} title="Editar el precio y la selección de la ficha">
         {amount}
@@ -281,7 +279,7 @@ export function QuotationPreview({
                   return (
                     <div className="quotation-audio-category" key={category.id} data-audio-category={category.id}>
                       {isHarnessCategory && (
-                        <PreviewHarnessPreset row={harnessPreset} onEditPrice={onEditHarnessPreset} onEditRow={onEditRow} />
+                        <PreviewHarnessPreset row={harnessPreset} onEditPrice={onEditHarnessPreset} />
                       )}
                       {categoryRows.length === 0 && !isHarnessCategory ? (
                         <button

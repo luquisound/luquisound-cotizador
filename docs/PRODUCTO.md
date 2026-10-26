@@ -58,15 +58,17 @@ the exchange-rate legend (`1 usd = X $`). Stored currency identifiers, backups,
 source metadata and calculation keys remain `ARS` and `USD`. Numeric price inputs
 use a separate amount-only formatter, independent of the displayed label length.
 
-Each row has separate edit buttons: its description opens the full row editor;
+Except for the primary harness control described below, each row has separate
+edit buttons: its description opens the full row editor;
 its amount opens "Editar precio" with one unit-price or service-price field, an
 ARS/USD selector, and Save/Cancel actions. An explicit currency change converts the
 draft amount using the quotation's saved rate and the conversion rules below,
 including the persisted reference that prevents repeated-switch rounding drift.
 Blank stays blank and native zero needs no rate; nonzero amounts require a valid
 rate. A failed conversion keeps the draft amount and currency intact with an error;
-the user can still save those retained values. Save applies price, currency and any
-bypass selection together. Cancel or Escape discards all modal changes.
+the user can still save those retained values. Save applies price and currency;
+the harness activation/deactivation action also applies selection. Cancel or
+Escape discards all modal changes.
 The template amount remains quantity times unit price.
 Other row fields and provenance stay unchanged; fixed services use quantity one
 and the service amount described below. Manual price inputs accept up to 15
@@ -184,33 +186,38 @@ An unused installation concept can open a temporary draft with that name and qua
 one. The primary harness control opens "Editar precio" as described below. Cables and
 labour start with a pending price in the quotation's default
 currency. A new harness draft starts with the approved ARS 70,000 unit price,
-including in a quotation whose default currency is USD; amount and quantity
-remain editable. This harness preset applies only when creating a new draft.
+including in a quotation whose default currency is USD; its amount remains editable
+and stored quantities are preserved. This harness preset applies only when
+creating a new draft.
 It never overwrites existing or recovered harnesses, imported prices, manual
 overrides, currencies, included states or pending prices, and is not applied by
 reclassification. Except new adapters,
 which first focus size selection, its modal focuses and selects the unit-price
 input without product search, catalogue or category
-selection. "Mas opciones" retains harness quantity, detail, currency, explicit included
-state. Existing-row removal stays in the visible editor footer. No detail, supplier
+selection. In the full editor for independently classified harness rows,
+"Mas opciones" retains quantity, detail, currency and explicit included state.
+Existing-row removal stays in the visible full-editor footer. No detail, supplier
 data or included state is supplied automatically.
 
-The primary harness control opens "Editar precio", which contains the editable
-price and explicit inclusion checkbox. The main template has no harness checkbox,
-and its modal action remains available while inactive. An absent or unchecked
+The primary harness control opens "Editar precio" with editable price and currency,
+without an inclusion checkbox or an "Editar datos" link. Its yellow primary action
+is "Activar ficha" when initially inactive or absent, or "Desactivar ficha" when
+initially active. The white secondary action is "Cancelar"; there is no separate
+save action. The modal remains available while inactive. An absent or inactive
 harness uses the same full-width "+ Ficha bypass estereo" action and dashed
 separator as the other empty concepts, without an amount, detail or status subtitle.
-If no row exists, its modal draft starts unchecked at ARS 70,000. Saved rows retain
-their fields and editable price. Only a selected harness displays its actual amount
-in the template. It creates no
-stored row, total or PNG content merely by being displayed or opened. Save applies price
-and selection atomically; Cancel discards both draft changes. Explicit
-selection is stored as `harnessSelection.enabled`. A checked harness participates
-normally; an unchecked harness retains its price and fields for later reuse but
-does not participate in totals or image output. Existing harnesses without that
-metadata remain active with their historical values. Toggling an existing row
-records the user's choice without resetting its price or currency. Exclusion
-is independent of the included-without-charge price state.
+If no row exists, its modal draft starts inactive at ARS 70,000. Saved rows retain
+their fields and editable price. Only an active harness displays its actual amount
+in the template. Merely displaying or opening it creates no stored row, total or
+PNG content. Submitting applies the explicit activation/deactivation, draft price
+and currency atomically. Editing price or currency never changes selection.
+Cancel or Escape discards all draft changes. Explicit selection remains stored
+as `harnessSelection.enabled`. An active harness participates normally; an inactive
+harness retains its saved price and fields for later reuse but does not participate
+in totals or image output. Existing harnesses without that metadata remain active
+with their historical values. Activation/deactivation preserves price, currency
+and conversion references unless explicitly edited in the modal. Exclusion remains
+independent of the included-without-charge price state.
 With no active rows, both displayed totals are zero even before an exchange rate
 is available. This does not make an empty quotation eligible for image output.
 

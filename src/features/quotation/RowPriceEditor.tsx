@@ -43,7 +43,7 @@ export function RowPriceEditor({ row, quotation, onSave, onClose }: RowPriceEdit
   const amount = calculated?.lineTotalCents
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (draft) onSave(draft)
+    if (draft) onSave(harness ? setHarnessPresetSelected(draft, inactiveHarness) : draft)
   }
   function changePrice(value: string) {
     const lengthError = getPriceInputLengthError(value)
@@ -80,14 +80,10 @@ export function RowPriceEditor({ row, quotation, onSave, onClose }: RowPriceEdit
     setCurrencyError(null)
     setPriceEdited(false)
   }
-  function changeHarness(enabled: boolean) {
-    setBase((current) => setHarnessPresetSelected(current, enabled))
-  }
   return (
     <Dialog title="Editar precio" onClose={onClose}>
       <form className="form-stack" onSubmit={submit}>
         <p className="field-help row-price-concept">{base.concept.trim() || 'Concepto pendiente'}</p>
-        {harness && <label className="row-harness-toggle"><input type="checkbox" checked={!inactiveHarness} onChange={(event) => changeHarness(event.target.checked)} /><span>Incluir en el presupuesto</span></label>}
         <div className="row-price-controls row-price-currency-controls">
           <label className="row-price-input-label">{fixedService ? 'Precio' : 'Precio unitario'} · {getCurrencyLabel(base.currency)}<input ref={input} className="compact-price-input" inputMode="decimal" value={unitPrice} disabled={factory} placeholder="Sin precio" aria-invalid={Boolean(error)} aria-describedby={`${helpId}${error ? ` ${errorId}` : ''}`} onChange={(event) => changePrice(event.target.value)} onFocus={(event) => event.currentTarget.select()} /></label>
           <label className="row-price-currency-label">Moneda<select value={base.currency} aria-describedby={currencyError ? currencyErrorId : undefined} onChange={(event) => changeCurrency(event.target.value as Currency)}><option value="ARS">$</option><option value="USD">usd</option></select></label>
@@ -99,7 +95,7 @@ export function RowPriceEditor({ row, quotation, onSave, onClose }: RowPriceEdit
         {calculated && calculated.errors.length > 0 && <ul className="field-errors">{calculated.errors.map((issue) => <li key={issue}>{issue}</li>)}</ul>}
         {!factory && base.priceState === 'included' && <p className="field-help">Este concepto está incluido sin cargo. Un importe mayor que cero lo cambia a con precio; cero conserva «Incluido sin cargo».</p>}
         {error && <p id={errorId} className="field-errors" role="alert">{error}</p>}
-        <div className="dialog-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button primary" disabled={Boolean(error)}>Guardar precio</button></div>
+        <div className="dialog-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button type="submit" className="button primary" disabled={Boolean(error)}>{harness ? inactiveHarness ? 'Activar ficha' : 'Desactivar ficha' : 'Guardar precio'}</button></div>
       </form>
     </Dialog>
   )

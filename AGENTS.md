@@ -72,19 +72,23 @@ inventory management, invoicing, and a general backend remain outside this stage
   and quantity belong in the main form. New adapter rows require an explicit
   6.5-inch (ARS 25,000/unit) or 8-inch (ARS 35,000/unit) choice. A newly opened
   harness draft starts at the approved ARS 70,000 unit price, even from a USD
-  quotation; its price and variable quantity remain editable. These are the
-  approved direct-concept presets. Apply the harness preset only on new-draft
+  quotation; its price remains editable and stored quantities are preserved.
+  These are the approved direct-concept presets. Apply the harness preset only on new-draft
   creation, preserving existing, reclassified, imported and recovered amounts,
   currencies and pending states. Keep adapter quantity independent and price editable.
-  The primary harness control opens "Editar precio", which contains its explicit
-  inclusion checkbox; keep that checkbox off the main template. An absent or
-  unchecked harness uses the same full-width "+ Ficha bypass estereo" action and
-  dashed separator as other empty concepts, without an amount, detail or status.
-  Its new modal draft starts unchecked at ARS 70,000 without creating or charging
-  a row. Only a selected harness displays its actual amount in the template.
-  Saving applies price and selection together; Cancel discards both draft changes.
-  Checking includes the harness; unchecking excludes it from totals and PNG while
-  retaining its saved price and fields. Keep the modal action available while inactive.
+  The primary harness control opens "Editar precio" with editable price and
+  currency, without an inclusion checkbox or an "Editar datos" link. Its yellow
+  primary action is "Activar ficha" when initially inactive or absent, or
+  "Desactivar ficha" when initially active; the white secondary action is
+  "Cancelar", with no separate save action. An absent or inactive harness uses
+  the same full-width "+ Ficha bypass estereo" action and dashed separator as
+  other empty concepts, without an amount, detail or status. Its new modal draft
+  starts inactive at ARS 70,000 without creating or charging a row. Only an active
+  harness displays its actual amount in the template. Submitting activates or
+  deactivates it and applies price and currency together; price or currency edits
+  never change selection. Cancel or Escape discards all draft changes.
+  Deactivation excludes it from totals and PNG while retaining its saved price
+  and fields. Keep the modal action available while inactive.
   Persist explicit selection in `harnessSelection.enabled`. Older harness rows
   without that metadata remain active with their original values; never add,
   disable or reset them during reading or recovery.
@@ -139,8 +143,9 @@ inventory management, invoicing, and a general backend remain outside this stage
   quotation's saved rate and existing exact conversion helper. At the same saved rate,
   retain its conversion reference across currency and bypass-selection changes; a manual price edit
   resets the base. Blank stays blank and native zero needs no rate. Failed conversion
-  leaves price and currency intact with contextual feedback. Save commits price,
-  currency and selection together; Cancel or Escape discards the modal draft.
+  leaves price and currency intact with contextual feedback. Save commits price
+  and currency; the harness activation/deactivation action also commits selection.
+  Cancel or Escape discards the modal draft.
   Price edits and currency changes must never select or deselect the bypass.
 - Support safe-area insets where needed and avoid horizontal overflow. Verify
   responsive changes at mobile and desktop widths.
@@ -164,7 +169,7 @@ inventory management, invoicing, and a general backend remain outside this stage
 - Preserve the difference between a missing amount and an explicit zero.
 - Represent an included, no-charge concept explicitly; do not infer it from a
   blank amount or collapse it into an ordinary zero-priced row.
-  A harness excluded by its checkbox is separate from an included, no-charge row.
+  An inactive harness is separate from an included, no-charge row.
 - V1 uses an explicit ARS or USD currency per row, safe integer cents, and
   quantity times unit price rounded half up in each row's currency. Sum native
   ARS and USD subtotals separately. A positive ARS-per-USD rate is saved per
