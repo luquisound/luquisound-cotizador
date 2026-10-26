@@ -108,8 +108,9 @@ recovery, imports, refresh and opening saved quotations never shorten or clear
 their existing concept or detail.
 
 The full row editor uses a bottom sheet on narrow screens and a centered dialog
-on desktop. It uses plain white fields, inline currency labels and two adjacent
-price inputs, without nested price panels or decorative badges. A single fixed
+on desktop. It uses plain white fields, inline currency labels and adjacent
+unit-price and total-price inputs when the valid quantity differs from one,
+without nested price panels or decorative badges. A single fixed
 footer contains Delete, Cancel and Save in visual and keyboard order; new drafts
 show only Cancel and Add. Delete remains outside "Mas opciones", requires
 confirmation and removes only the open row. Fields scroll independently from the
@@ -123,7 +124,11 @@ Viewport changes preserve the current draft and focus; pinch zoom retains normal
 document sizing and panning.
 
 Variable-quantity rows in the full editor offer linked unit-price and total-price
-inputs in the row currency. Editing the unit price or quantity recalculates the
+inputs in the row currency when the valid quantity differs numerically from one,
+including fractions below one. Quantity one, including equivalent decimal forms,
+and invalid quantities show only the full-width unit-price input. Returning to one
+preserves the current unit price and clears temporary total edits and feedback.
+Editing the unit price or quantity recalculates the
 total. Editing the total divides it by the positive quantity and rounds the unit
 price half up to cents using integer arithmetic. The entered total stays editable
 until blur; then the field shows the actual rounded line amount, with a visible
