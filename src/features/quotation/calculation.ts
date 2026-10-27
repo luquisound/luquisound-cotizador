@@ -3,6 +3,7 @@ import { convertMixedTotals, type ConvertedTotalsResult } from './exchange.ts'
 import { orderQuotationRows } from './audio-categories.ts'
 import { isInactiveHarnessRow } from './harness-preset.ts'
 import { getCurrencyLabel } from './currency-display.ts'
+import { calculateQuotationDiscount, type CalculatedQuotationDiscount } from './discounts.ts'
 
 type ParseFailure = { ok: false; reason: string }
 export type MoneyResult = { ok: true; cents: number } | ParseFailure
@@ -16,6 +17,8 @@ export interface CalculatedRow {
 
 export interface QuotationCalculation {
   nativeTotals: Record<Currency, number>
+  discountedNativeTotals: Record<Currency, number>
+  discount: CalculatedQuotationDiscount | null
   totals: Record<Currency, number | null>
   rows: CalculatedRow[]
   itemsComplete: boolean
@@ -135,10 +138,16 @@ export function calculateQuotation(quotation: Quotation): QuotationCalculation {
     ARS: subtotals.ARS > maximumSafeInteger ? 0 : Number(subtotals.ARS),
     USD: subtotals.USD > maximumSafeInteger ? 0 : Number(subtotals.USD),
   }
+  const discount = calculateQuotationDiscount(quotation.discount, rows)
+  if (discount) issues.push(...discount.errors)
+  const discountedNativeTotals = {
+    ARS: totalOverflow ? nativeTotals.ARS : nativeTotals.ARS - (discount?.amounts.ARS ?? 0),
+    USD: totalOverflow ? nativeTotals.USD : nativeTotals.USD - (discount?.amounts.USD ?? 0),
+  }
   const itemsComplete = rows.length > 0
     && rows.every((row) => row.errors.length === 0 && row.lineTotalCents !== null)
-    && !totalOverflow
-  const conversion = convertMixedTotals(nativeTotals.ARS, nativeTotals.USD, quotation.exchangeRate ?? '')
+    && !totalOverflow && (discount?.errors.length ?? 0) === 0
+  const conversion = convertMixedTotals(discountedNativeTotals.ARS, discountedNativeTotals.USD, quotation.exchangeRate ?? '')
   if (!conversion.ok) issues.push(conversion.reason)
   const totals: Record<Currency, number | null> = { ARS: null, USD: null }
   if (!rows.length) {
@@ -152,10 +161,10 @@ export function calculateQuotation(quotation: Quotation): QuotationCalculation {
     } else {
       // Without conversion, a native subtotal is a full total only for a single-currency quotation.
       for (const currency of ['ARS', 'USD'] as const) {
-        if (rows.every(({ row }) => row.currency === currency)) totals[currency] = nativeTotals[currency]
+        if (rows.every(({ row }) => row.currency === currency)) totals[currency] = discountedNativeTotals[currency]
       }
     }
   }
   const canExport = quotation.title.trim().length > 0 && itemsComplete && conversion.ok
-  return { nativeTotals, totals, rows, itemsComplete, conversion, canExport, issues }
+  return { nativeTotals, discountedNativeTotals, discount, totals, rows, itemsComplete, conversion, canExport, issues }
 }

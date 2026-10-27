@@ -132,9 +132,14 @@ export function serializeQuotationLibrary(library: QuotationLibrary): string {
 
 function cloneWithNewIds(quotation: Quotation): Quotation {
   const copy = validatedQuotation(quotation)
+  const rows = copy.rows.map((row) => ({ ...row, id: crypto.randomUUID() }))
+  const rowIds = new Map(copy.rows.map((row, index) => [row.id, rows[index]!.id]))
   return {
     ...copy, id: crypto.randomUUID(), exchangeRateMode: 'frozen',
-    rows: copy.rows.map((row) => ({ ...row, id: crypto.randomUUID() })),
+    rows,
+    ...(copy.discount ? { discount: {
+      ...copy.discount, rowIds: copy.discount.rowIds.map((id) => rowIds.get(id) ?? id),
+    } } : {}),
   }
 }
 

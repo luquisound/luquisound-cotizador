@@ -26,6 +26,8 @@ custom quotation with browser-local recovery of its current state.
 - ARS and USD totals using a rate saved with the quotation. Automatic-mode
   quotations refresh DolarAPI blue sale hourly; compatible frozen recovery data
   retains its saved rate until an explicit update.
+- Optional manual percentage sale discount on explicitly selected equipment,
+  shown separately in the preview and customer image.
 - Recovery of the current quotation and a separate persistent catalogue with
   private catalogue JSON backup/import.
 - PNG image with only the graphic quotation, plus browser file sharing or download.
@@ -457,9 +459,12 @@ explicit zero, and included states retain their distinct meanings.
   modifying its row prices. Recovered
   manual rates remain valid without invented provenance until
   a successful automatic lookup replaces them. See `EXCHANGE-RATE.md`.
-- Convert each currency subtotal once, rounding half up to cents:
-  `totalARS = arsSubtotal + halfUp(usdSubtotal * rate)` and
-  `totalUSD = usdSubtotal + halfUp(arsSubtotal / rate)`. This total calculation never
+- Apply a valid manual quotation discount in each native currency before
+  conversion: `netARS = arsSubtotal - discountARS` and
+  `netUSD = usdSubtotal - discountUSD`. Without a discount, each net subtotal
+  equals its native subtotal. Convert each net currency subtotal once, rounding
+  half up to cents: `totalARS = netARS + halfUp(netUSD * rate)` and
+  `totalUSD = netUSD + halfUp(netARS / rate)`. This total calculation never
   converts individual row amounts or derives one total from the other. Explicit
   row-currency editing is the separate unit-amount operation described above.
   Both totals and the explicit rate appear
@@ -471,8 +476,43 @@ explicit zero, and included states retain their distinct meanings.
 - Completely empty rows are omitted from export. A concept with a pending price,
   a missing concept with other content, an invalid quantity or amount, a blank
   title, no nonempty rows, or numeric overflow blocks final image generation.
-- Incomplete current quotations can still be recovered. No discount, tax,
-  supplier rounding, automatic margin, or inferred commercial rule is implemented.
+- Incomplete current quotations can still be recovered. No supplier discount,
+  tax, supplier rounding, automatic margin, or inferred commercial rule is implemented.
+
+### Manual quotation sale discount
+
+A quotation may explicitly apply one manual percentage sale discount to selected
+equipment rows. It has no default commercial percentage and is distinct from a
+supplier discount or a cost-to-sale margin. Store the applied selection in
+`Quotation.discount: { percentage: string, rowIds: string[] }`. The percentage
+must be positive, at most 100, with up to two decimal places.
+
+The editor offers main audio categories as a reviewed initial selection in its
+temporary draft. Other manual equipment requires explicit opt-in. Only eligible
+equipment with valid charged amounts can form the base. Installation and
+accessories (`extras`, including labour, cables, bypass and adapters), factory
+equipment, included rows, pending prices and invalid rows are excluded. No action
+changes row prices, currencies, catalogue amounts or private provenance. Applying,
+editing or removing a discount is explicit; Cancel or Escape leaves the quotation
+unchanged.
+
+For each currency, sum the selected eligible line amounts after their existing
+quantity-times-unit-price rounding. Calculate the percentage of that sum and
+round half up to cents once per currency with exact integer/rational arithmetic.
+Do not round separate row discounts or convert rows to create a shared base.
+Subtract each native discount from its native subtotal, then use the existing
+single foreign-subtotal conversion for each final total. The preview and PNG
+show the applied percentage and discount amounts separately from original row
+prices and final net totals.
+
+The selected IDs remain fixed after application. Editing a selected row's price,
+quantity or currency recalculates its contribution; newly added rows are never
+selected automatically. Deleted or ineligible rows contribute nothing. A discount
+with no eligible base requires review rather than inventing a base or expanding
+its selection. Current recovery validates discount metadata; older quotations
+without it remain undiscounted and reading data never activates a discount.
+"Nuevo presupuesto" starts without a discount. Catalogue backups and previously
+stored quotation-library bytes remain independent.
 
 ## Local persistence and privacy
 
@@ -617,7 +657,7 @@ known ARS or USD currency, at most two decimals, `retail-list-before-discount`
 basis, provenance and a provisional flag. This is distinct from a historical
 reference; it is not inferred from one. A manual catalogue amount takes precedence.
 Provisional historical list prices are labelled as such, before the supplier's
-20% discount, and never presented as verified current prices. No discount or
+20% discount, and never presented as verified current prices. No supplier discount or
 cost-to-sale conversion is applied automatically. Unknown commercial dates remain
 unknown, regardless of file creation, extraction or import dates.
 
@@ -693,7 +733,8 @@ reports an error instead of exporting missing branding or fallback typography.
 Run typecheck, lint, calculation/persistence/export tests, and build. Check mobile
 and desktop layouts, long text, many rows, pending/zero/included states, decimal
 input, invalid values, current-quotation recovery, catalogue backups, legacy
-catalogue extraction, untouched legacy-library bytes and frozen recovery rates,
+catalogue extraction, manual discount selection/rounding/recovery, untouched
+legacy-library bytes and frozen recovery rates,
 concurrent-tab conflicts, corrupt storage, failed saves, reviewed bulk matching, stock expiry,
 manual row trace, and share cancellation.
 Browser emulation is useful evidence but does not replace physical Android and

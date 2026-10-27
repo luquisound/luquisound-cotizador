@@ -32,6 +32,7 @@ export interface QuotationPreviewProps {
   onEditPrice: (rowId: string) => void
   onAddRow: (section: RowSection, audioCategory?: AudioCategory) => void
   onEditHarnessPreset: () => void
+  onEditDiscount: () => void
   notices: ReactNode
   exchangeDetails: ReactNode
 }
@@ -219,10 +220,12 @@ export function QuotationPreview({
   onEditPrice,
   onAddRow,
   onEditHarnessPreset,
+  onEditDiscount,
   notices,
   exchangeDetails,
 }: QuotationPreviewProps) {
   const calculation = calculateQuotation(quotation)
+  const discount = calculation.discount
   const harnessRows = quotation.rows.filter((row) => row.section === 'extras' && row.audioCategory === 'harness')
   const harnessPreset = harnessRows.find(isHarnessPresetRow) ?? harnessRows.find((row) => !isEmptyRow(row))
 
@@ -336,7 +339,19 @@ export function QuotationPreview({
         </div>
 
         <div className="quotation-total quotation-total-dual" aria-live="polite" aria-atomic="true">
-          <span className="quotation-total-label">TOTAL</span>
+          {discount && (
+            <div className="quotation-discount-summary">
+              <span>Descuento en equipos · {discount.percentage} %</span>
+              {(['ARS', 'USD'] as const).filter((currency) => discount.eligibleTotals[currency] > 0).map((currency) => (
+                <span className="quotation-discount-amount" key={currency}>− {formatMoney(discount.amounts[currency], currency)}</span>
+              ))}
+              {discount.errors.length > 0 && <ul className="quotation-discount-errors" role="alert">{discount.errors.map((error) => <li key={error}>{error}</li>)}</ul>}
+            </div>
+          )}
+          <div className="quotation-total-heading">
+            <span className="quotation-total-label">TOTAL</span>
+            <button className="quotation-discount-action" type="button" onClick={onEditDiscount}>{quotation.discount ? 'Editar descuento' : 'Agregar descuento'}</button>
+          </div>
           {(['ARS', 'USD'] as const).map((currency) => {
             const cents = calculation.totals[currency]
             return (

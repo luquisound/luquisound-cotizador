@@ -2,7 +2,8 @@
 
 Mobile-first graphic quotation editor for Luquisound, built with Vite, React,
 strict TypeScript and Tailwind CSS. V1 includes editable manual concepts, a private
-common catalogue, optional personal products, ARS/USD calculations, recovery of one
+common catalogue, optional personal products, ARS/USD calculations, an optional
+manual sale discount on selected equipment, recovery of one
 current quotation, private catalogue backups and deterministic PNG sharing.
 Fixed budgets and reusable templates remain in Figma.
 

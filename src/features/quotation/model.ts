@@ -74,6 +74,11 @@ export interface QuotationRow {
   currencyConversionOrigin?: RowCurrencyConversionOrigin
 }
 
+export interface QuotationDiscount {
+  percentage: string
+  rowIds: string[]
+}
+
 export interface Quotation {
   id: string
   title: string
@@ -83,6 +88,7 @@ export interface Quotation {
   exchangeRate?: string
   exchangeRateQuote?: BlueDollarQuote
   exchangeRateMode?: 'automatic' | 'frozen'
+  discount?: QuotationDiscount
   rows: QuotationRow[]
   notes: string
   createdAt: string
@@ -138,6 +144,7 @@ export function createWorkspace(): Workspace {
 }
 
 export function hasQuotationContent(quotation: Quotation): boolean {
+  if (quotation.discount !== undefined) return true
   const title = quotation.title.trim()
   if (title && !/^presupuesto(?:\s*\(copia\))*$/i.test(title)) return true
   if (quotation.subtitle.trim() || quotation.notes.trim()) return true
@@ -174,9 +181,14 @@ export function prepareWorkspaceForStorage(workspace: Workspace, persistedIds: R
 
 export function duplicateQuotation(quotation: Quotation): Quotation {
   const now = new Date().toISOString()
+  const rows = quotation.rows.map((row) => ({ ...structuredClone(row), id: crypto.randomUUID() }))
+  const rowIds = new Map(quotation.rows.map((row, index) => [row.id, rows[index]!.id]))
   return {
     ...quotation, id: crypto.randomUUID(), title: `${(quotation.title || 'PRESUPUESTO').slice(0, 492)} (copia)`,
-    rows: quotation.rows.map((row) => ({ ...structuredClone(row), id: crypto.randomUUID() })),
+    rows,
+    ...(quotation.discount ? { discount: {
+      ...quotation.discount, rowIds: quotation.discount.rowIds.map((id) => rowIds.get(id) ?? id),
+    } } : {}),
     ...(quotation.exchangeRateQuote ? { exchangeRateQuote: { ...quotation.exchangeRateQuote } } : {}),
     createdAt: now, updatedAt: now,
   }

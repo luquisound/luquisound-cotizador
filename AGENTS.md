@@ -10,7 +10,8 @@ or committed; listed paths do not expand authorization.
 
 The current V1 includes an editable graphic quotation template, manual rows,
 an optional personal catalogue, a private common catalogue loaded through a
-read-only endpoint, reviewed bulk entry, calculations, recovery of one current
+read-only endpoint, reviewed bulk entry, calculations, an optional manual sale
+discount on selected equipment, recovery of one current
 quotation, private catalogue backups, and deterministic PNG download or file
 sharing. Fixed budgets and templates remain in Figma. Named quotation saving,
 opening, duplication and history import/export are not part of the current UI.
@@ -173,7 +174,8 @@ inventory management, invoicing, and a general backend remain outside this stage
   An inactive harness is separate from an included, no-charge row.
 - V1 uses an explicit ARS or USD currency per row, safe integer cents, and
   quantity times unit price rounded half up in each row's currency. Sum native
-  ARS and USD subtotals separately. A positive ARS-per-USD rate is saved per
+  ARS and USD subtotals separately. Subtract any valid manual quotation discount
+  from its native subtotal before conversion. A positive ARS-per-USD rate is saved per
   quotation; each total adds its native subtotal to one conversion of the other
   subtotal, rounded half up to cents. Total calculation never converts individual
   rows or derives one total from the other. Legacy rows without a currency inherit
@@ -205,8 +207,23 @@ inventory management, invoicing, and a general backend remain outside this stage
   metadata and recovered values until an automatic lookup succeeds. Preserve
   compatible frozen metadata when recovering the current quotation; only the
   confirmed current-dollar action resumes automatic lookup for that copy.
-  Discounts and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
+  Supplier discounts and automatic margins are not implemented. See `docs/PRODUCTO.md` for the full
   calculation contract and remaining decisions.
+- A manual quotation sale discount is optional and has no commercial default.
+  Store it as `Quotation.discount` with `percentage: string` and `rowIds: string[]`.
+  Require a positive percentage at most 100 with up to two decimals and explicit
+  equipment-row selection. Main audio categories can be preselected in the draft
+  for review; manual equipment requires opt-in. Exclude extras, factory equipment,
+  included, pending and invalid rows. Keep row prices, catalogue amounts and
+  provenance unchanged. Sum selected rounded native lines, apply the percentage
+  once per currency with exact half-up rounding, subtract it from native subtotals,
+  then convert each net foreign subtotal once. Preview and PNG show the discount.
+  Edit/remove actions are explicit; Cancel or Escape discards the draft. Recovery
+  validates existing discount metadata without activating absent discounts. New
+  starts without a discount and new rows are never selected automatically.
+  Recalculate against the selected row IDs after price, quantity or currency
+  edits; deleted or ineligible rows contribute nothing and an empty eligible base
+  requires review. This sale discount does not apply a supplier discount or margin.
 - Preserve the approved graphic composition and official brand assets. Private
   source quotations and commercial data must never enter the public repository
   or client bundle, including when deployment access is restricted.

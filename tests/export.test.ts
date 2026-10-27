@@ -362,6 +362,73 @@ test('exports both complete safe-limit totals independently from their displayed
   assert.deepEqual(quotation, snapshot)
 })
 
+test('exports native equipment discounts and final mixed totals while preserving installation amounts', () => {
+  const quotation = exportableQuotation()
+  quotation.exchangeRate = '1.000'
+  quotation.exchangeRateQuote = undefined
+  const sample = quotation.rows[0]
+  quotation.rows = [
+    { ...sample, id: 'private-ars-discount-row', concept: 'Synthetic amplifier', audioCategory: 'amplifier-dsp', quantity: '2', unitPrice: '1000' },
+    { ...sample, id: 'private-usd-discount-row', concept: 'Synthetic speakers', audioCategory: 'speakers', currency: 'USD', quantity: '3', unitPrice: '10' },
+    { ...sample, id: 'private-labor-row', concept: 'Synthetic installation', section: 'extras', audioCategory: 'labor', unitPrice: '300' },
+    { ...sample, id: 'private-cables-row', concept: 'Synthetic cables', section: 'extras', audioCategory: 'cables', unitPrice: '100' },
+  ]
+  quotation.discount = { percentage: '10', rowIds: ['private-ars-discount-row', 'private-usd-discount-row'] }
+  const before = structuredClone(quotation)
+  const result = renderWithRecordedCanvas(quotation)
+  const texts = result.texts.map(({ text }) => text)
+  assert.ok(texts.includes('Descuento en equipos · 10 %'))
+  assert.ok(texts.includes('− $ 200,00'))
+  assert.ok(texts.includes('− usd 3,00'))
+  assert.ok(texts.includes('$ 2.000,00'))
+  assert.ok(texts.includes('usd 30,00'))
+  assert.ok(texts.includes('$ 300,00'))
+  assert.ok(texts.includes('$ 100,00'))
+  assert.ok(texts.includes('29.200,00'))
+  assert.ok(texts.includes('29,20'))
+  assert.ok(!texts.some((text) => /Agregar descuento|Editar descuento|private-|rowIds|percentage/.test(text)))
+  const discount = result.texts.find(({ text }) => text === 'Descuento en equipos · 10 %')
+  const total = result.texts.find(({ text }) => text === 'TOTAL')
+  assert.ok(discount && total && discount.y < total.y)
+  const discountAmounts = result.texts.filter(({ text }) => text.startsWith('− '))
+  assert.ok(discountAmounts.every(({ y, x, width, align }) => y > discount.y && y + 30 < total.y
+    && align === 'right' && x - width >= 64 && x <= result.width - 64))
+  assert.deepEqual(quotation, before)
+})
+
+test('exports a discount that rounds to zero in its native currency without inventing another currency', () => {
+  const quotation = exportableQuotation()
+  quotation.rows[0].unitPrice = '0,01'
+  quotation.discount = { percentage: '1', rowIds: [quotation.rows[0].id] }
+  const result = renderWithRecordedCanvas(quotation)
+  const text = result.texts.map(({ text }) => text).join(' ')
+  assert.ok(text.includes('Descuento en equipos · 1 %'))
+  assert.ok(text.includes('− $ 0,00'))
+  assert.ok(!text.includes('− usd'))
+})
+
+test('keeps long mixed-currency discount amounts and wrapped net totals inside the image', () => {
+  const quotation = exportableQuotation()
+  quotation.exchangeRate = '1'
+  quotation.exchangeRateQuote = undefined
+  quotation.rows = [
+    { ...quotation.rows[0], id: 'large-ars', unitPrice: '30023997515803,30' },
+    { ...quotation.rows[0], id: 'large-usd', currency: 'USD', unitPrice: '30023997515803,30' },
+  ]
+  quotation.discount = { percentage: '10', rowIds: ['large-ars', 'large-usd'] }
+  const result = renderWithRecordedCanvas(quotation)
+  const discount = result.texts.find(({ text }) => text === 'Descuento en equipos · 10 %')
+  const total = result.texts.find(({ text }) => text === 'TOTAL')
+  assert.ok(discount && total)
+  assert.ok(result.texts.some(({ text }) => text === '− $ 3.002.399.751.580,33'))
+  assert.ok(result.texts.some(({ text }) => text === '− usd 3.002.399.751.580,33'))
+  const totalTexts = result.texts.filter(({ y }) => y > total.y && y < result.footerY)
+  assert.equal(totalTexts.filter(({ align }) => align === 'right').map(({ text }) => text).join(''), '54.043.195.528.445,94'.repeat(2))
+  const summaryTexts = result.texts.filter(({ y }) => y >= discount.y && y < result.footerY)
+  assert.ok(summaryTexts.every(({ x, y, width, align }) => y + 30 < result.footerY
+    && (align === 'right' ? x - width >= 64 && x <= 1016 : x >= 64 && x + width <= 1016)))
+})
+
 test('exports complete 500-character product names with separate legible prices and increasing row heights', () => {
   const quotation = exportableQuotation()
   const names = [
@@ -521,6 +588,21 @@ test('blocks zero, negative, unknown, stale and quarantined source rows before a
   const blocked = provisionalQuotation()
   blocked.rows[0].provenance!.selectionBlock = 'Synthetic source conflict'
   await assert.rejects(createQuotationFile(blocked), /Synthetic source conflict/)
+})
+
+test('a full equipment discount never bypasses protected stock or source guards', async () => {
+  for (const blockedBy of ['stock', 'source'] as const) {
+    const quotation = provisionalQuotation()
+    quotation.discount = { percentage: '100', rowIds: [quotation.rows[0].id] }
+    if (blockedBy === 'stock') quotation.rows[0].provenance!.stock!.quantity = 0
+    else quotation.rows[0].provenance!.selectionBlock = 'Synthetic source conflict'
+    const snapshot = structuredClone(quotation)
+    const expected = blockedBy === 'stock' ? /stock/ : /Synthetic source conflict/
+    await assert.rejects(createQuotationFile(quotation), expected)
+    assert.throws(() => renderQuotationCanvas(quotation, {} as CanvasImageSource), expected)
+    assert.equal(quotation.rows[0].unitPrice, '2400')
+    assert.deepEqual(quotation, snapshot)
+  }
 })
 
 test('a logo that never settles times out after fifteen seconds and releases handlers', async (context) => {

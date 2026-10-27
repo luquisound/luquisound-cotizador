@@ -13,6 +13,7 @@ import { parseFixedServiceOrigin } from './fixed-services.ts'
 import { isFactoryRow, parseFactoryEquipment } from './factory-mode.ts'
 import { isHarnessPresetRow, parseHarnessSelection } from './harness-preset.ts'
 import { parseRowCurrencyConversionOrigin } from './row-currency.ts'
+import { readQuotationDiscount } from './discounts.ts'
 import type { CatalogItem, CatalogReferencePrice, CatalogSource, Currency, PriceState, Quotation, QuotationRow, RowSection, Workspace } from './model.ts'
 
 export interface StorageAdapter {
@@ -137,6 +138,10 @@ function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
   if (quotation.exchangeRateMode !== undefined && quotation.exchangeRateMode !== 'automatic'
     && quotation.exchangeRateMode !== 'frozen') invalidBackup()
   let exchangeRateQuote: Quotation['exchangeRateQuote']
+  let discount: Quotation['discount']
+  if (quotation.discount !== undefined) {
+    try { discount = readQuotationDiscount(quotation.discount) } catch { invalidBackup() }
+  }
   if (quotation.exchangeRateQuote !== undefined) {
     try {
       exchangeRateQuote = readStoredBlueDollarQuote(quotation.exchangeRateQuote)
@@ -157,6 +162,7 @@ function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
     ...(quotation.exchangeRate === undefined ? {} : { exchangeRate: readString(quotation.exchangeRate, 64) }),
     ...(exchangeRateQuote === undefined ? {} : { exchangeRateQuote }),
     ...(quotation.exchangeRateMode === undefined ? {} : { exchangeRateMode: quotation.exchangeRateMode }),
+    ...(discount === undefined ? {} : { discount }),
     rows: readArray(quotation.rows, 1000).map((row) => readRow(row, identifiers, currency)),
     notes: readString(quotation.notes, 10000),
     createdAt: readTimestamp(quotation.createdAt),

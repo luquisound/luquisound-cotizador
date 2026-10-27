@@ -10,9 +10,13 @@ API keys, or additional environment variables.
 
 The value is stored as ARS per USD. Each quotation row has its own ARS or USD
 currency. Quantity times price is rounded half up to cents in the row's currency,
-then rounded row amounts are summed separately by currency. The ARS total adds
-the ARS subtotal to the USD subtotal converted once; the USD total adds the USD
-subtotal to the ARS subtotal converted once. Each conversion rounds half up to
+then rounded row amounts are summed separately by currency. An optional manual
+quotation sale discount is calculated from explicitly selected eligible equipment
+lines, with one half-up rounding of the percentage amount per native currency.
+Subtract those amounts from their native subtotals before conversion; row prices,
+catalogue amounts and provenance remain unchanged. The ARS total adds the net
+ARS subtotal to the net USD subtotal converted once; the USD total adds the net
+USD subtotal to the net ARS subtotal converted once. Each conversion rounds half up to
 cents using exact integer/rational arithmetic with overflow checks. Neither total
 is derived from the other, and individual rows are never converted.
 `exchangeRateQuote` records the rate, DolarAPI source, blue market, sale side,
@@ -32,7 +36,9 @@ after reload. There is no automatic lookup for that copy, even when its saved
 reference is old. "Actualizar dolar guardado" asks before switching the current
 copy to automatic mode and requesting the shared current reference. Previously
 stored quotation-library bytes remain untouched.
-No update changes row prices, currencies, or quantities.
+No update changes row prices, currencies, quantities, the manual discount
+percentage or its selected row IDs. The discount's native amounts are calculated
+before exchange-rate conversion.
 An in-flight response applies to the latest quotation state and cannot replace
 a newly started quotation or overwrite local edits. Header edits preserve an
 updated rate.

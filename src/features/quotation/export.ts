@@ -201,6 +201,7 @@ export function renderQuotationCanvas(
   quotation: Quotation, logo: CanvasImageSource, options: QuotationExportOptions = {},
 ): HTMLCanvasElement {
   const calculation = calculateQuotation(quotation)
+  const discount = calculation.discount
   if (!calculation.canExport || !calculation.conversion.ok) {
     throw new Error('Completá los campos pendientes antes de preparar la imagen.')
   }
@@ -235,6 +236,13 @@ export function renderQuotationCanvas(
   setFont(context, 30, BODY_FONT)
   const noteLines = quotation.notes.trim()
     ? measureLines(context, quotation.notes.trim(), CONTENT_WIDTH) : []
+  const discountLines = discount
+    ? measureLines(context, `Descuento en equipos · ${discount.percentage} %`, CONTENT_WIDTH) : []
+  const discountAmounts = discount
+    ? (['ARS', 'USD'] as const).filter((currency) => discount.eligibleTotals[currency] > 0)
+      .flatMap((currency) => measureLines(context, `− ${formatMoney(discount.amounts[currency], currency)}`, CONTENT_WIDTH))
+    : []
+  const discountHeight = discountLines.length ? (discountLines.length + discountAmounts.length) * 38 + 28 : 0
   const notesHeight = noteLines.length ? 68 + noteLines.length * 38 : 0
   const contentHeight = 44 + sections.reduce(
     (height, section) => height + 60 + section.rows.reduce((sum, row) => sum + row.height, 0) + 36,
@@ -255,7 +263,7 @@ export function renderQuotationCanvas(
     ? measureLines(context, 'Disponibilidad a confirmar.', CONTENT_WIDTH) : []
   const rateHeight = rateLines.length * 30 + 8 + rateSourceLines.length * 30
   const availabilityHeight = availabilityLines.length ? 14 + availabilityLines.length * 30 : 0
-  const totalHeight = 76 + totalRows.reduce((sum, row) => sum + row.height, 0) + 18 + rateHeight + availabilityHeight + 28
+  const totalHeight = discountHeight + 76 + totalRows.reduce((sum, row) => sum + row.height, 0) + 18 + rateHeight + availabilityHeight + 28
   const bodyHeight = Math.max(contentHeight, 1320 - headerHeight - 5 - totalHeight - FOOTER_HEIGHT)
   const height = Math.ceil(headerHeight + 5 + bodyHeight + totalHeight + FOOTER_HEIGHT)
   if (WIDTH * height > MAX_CANVAS_PIXELS) {
@@ -333,8 +341,14 @@ export function renderQuotationCanvas(
   context.fillRect(MARGIN, totalY, CONTENT_WIDTH, 2)
   context.fillStyle = BLACK
   setFont(context, 30, BODY_FONT)
-  context.fillText('TOTAL', MARGIN, totalY + 28)
-  let totalRowY = totalY + 76
+  if (discountLines.length) {
+    drawLines(context, discountLines, MARGIN, totalY + 28, 38)
+    context.textAlign = 'right'
+    drawLines(context, discountAmounts, WIDTH - MARGIN, totalY + 28 + discountLines.length * 38, 38)
+    context.textAlign = 'left'
+  }
+  context.fillText('TOTAL', MARGIN, totalY + discountHeight + 28)
+  let totalRowY = totalY + discountHeight + 76
   for (const row of totalRows) {
     context.fillStyle = '#626262'
     setFont(context, 30, BODY_FONT)

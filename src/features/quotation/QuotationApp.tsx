@@ -12,6 +12,7 @@ import { createQuotationFile, downloadQuotationFile, shareQuotationFile } from '
 import { QuotationPreview } from './QuotationPreview'
 import { HeaderEditor, RowEditor } from './QuotationDialogs'
 import { RowPriceEditor } from './RowPriceEditor'
+import { DiscountEditor } from './DiscountEditor'
 import { prepareFixedServiceQuotation } from './fixed-services'
 import { CatalogEditor } from './CatalogTools'
 import type { CatalogImportDocument } from './catalog'
@@ -56,7 +57,7 @@ export default function QuotationApp() {
   const [catalogError, setCatalogError] = useState(initial.catalog.error)
   const [recoveryError, setRecoveryError] = useState(initial.current.error)
   const [savedCatalog, setSavedCatalog] = useState<CatalogItem[] | null>(initial.catalog.stored ? initial.catalog.catalog : null)
-  const [dialog, setDialog] = useState<'header' | 'catalog' | 'bulk' | null>(null)
+  const [dialog, setDialog] = useState<'header' | 'catalog' | 'bulk' | 'discount' | null>(null)
   const [rowEditing, setRowEditing] = useState<RowEditingState | null>(null)
   const [priceEditing, setPriceEditing] = useState<RowEditingState | null>(null)
   const [message, setMessage] = useState('')
@@ -70,6 +71,7 @@ export default function QuotationApp() {
   const bulkButton = useRef<HTMLButtonElement>(null)
   const newQuotationButton = useRef<HTMLButtonElement>(null)
   const rowEditorTrigger = useRef<HTMLElement | null>(null)
+  const discountTrigger = useRef<HTMLElement | null>(null)
   const generation = useRef(0)
   const catalogSaveStatus = !catalogStorageEnabled ? 'Guardado del catálogo pausado' : catalogError ? 'No se pudo guardar el catálogo' : savedCatalog === catalog ? 'Catálogo y precios conservados en este navegador' : 'Guardando catálogo…'
   const calculation = calculateQuotation(quotation)
@@ -146,6 +148,20 @@ export default function QuotationApp() {
   function closeBulk() {
     setDialog(null)
     window.requestAnimationFrame(() => bulkButton.current?.focus())
+  }
+
+  function openDiscount() {
+    discountTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setDialog('discount')
+  }
+
+  function closeDiscount() {
+    setDialog(null)
+    window.requestAnimationFrame(() => {
+      const target = discountTrigger.current?.isConnected ? discountTrigger.current
+        : document.querySelector<HTMLButtonElement>('.quotation-heading-edit')
+      target?.focus()
+    })
   }
 
   function addBulkRows(rows: QuotationRow[]): boolean {
@@ -533,6 +549,7 @@ export default function QuotationApp() {
             onEditPrice={editPrice}
             onAddRow={addRow}
             onEditHarnessPreset={editHarnessPreset}
+            onEditDiscount={openDiscount}
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
               {catalogError && <div className="notice error" role="status"><p>El catálogo tiene un problema de guardado. Podés seguir armando este presupuesto.</p><button className="button secondary" type="button" onClick={() => setDialog('catalog')}>Revisar catálogo</button></div>}
@@ -563,6 +580,12 @@ export default function QuotationApp() {
       {dialog === 'header' && <HeaderEditor quotation={quotation} onClose={() => setDialog(null)} onSave={(next) => { if (updateQuotation(next)) setDialog(null) }} />}
       {dialog === 'catalog' && <CatalogEditor catalog={catalog} exchangeRate={quotation.exchangeRate ?? ''} saveStatus={catalogSaveStatus} saveError={catalogError} sharedCatalogStatus={sharedCatalogStatus} onExportBackup={exportCatalogBackup} onImportBackup={importCatalogBackup} onEnableStorage={!catalogStorageEnabled ? enableCatalogStorage : undefined} onClose={closeCatalog} onSave={updateCatalog} />}
       {dialog === 'bulk' && <BulkEntryDialog catalog={catalog} canSelect={canSelectCatalogItem} defaultCurrency={quotation.currency} existingRowCount={quotation.rows.length} onApply={addBulkRows} onClose={closeBulk} />}
+      {dialog === 'discount' && <DiscountEditor quotation={quotation} onClose={closeDiscount} onSave={(discount) => {
+        const next = { ...quotation }
+        if (discount) next.discount = discount
+        else delete next.discount
+        if (updateQuotation(next)) closeDiscount()
+      }} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} directConcept={isDirectExtraRow(editingRow) ? editingRow.concept : undefined} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} onEditExisting={(rowId) => setRowEditing({ kind: 'existing', rowId })} />}
       {priceEditingRow && <RowPriceEditor key={priceEditingRow.id} row={priceEditingRow} quotation={quotation} onClose={closePriceEditor} onSave={savePrice} />}
     </div>
