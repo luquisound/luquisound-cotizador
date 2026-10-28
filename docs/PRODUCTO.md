@@ -55,6 +55,13 @@ right-aligned amounts, totals, and dark contact footer. The approved public cont
 footer is 11 7358-1958 and @luquisound.ok. Fixed quotations remain in Figma with
 their existing dark headers; this app change does not modify those assets.
 
+The editable header stacks the brand and title on narrow screens. Typography
+scales with its container without a size jump at the tablet breakpoint. From
+1024 CSS pixels, the brand sits on the left and the editable title and subtitle
+on the right; long text wraps and determines the header height. Keep the logo's
+original proportions, safe-area padding and the title's 48-pixel touch target.
+These responsive screen rules do not change the fixed-width Canvas PNG layout.
+
 Visible currency labels use `$` for Argentine pesos and lowercase `usd` for
 US dollars throughout the editor, catalogue, quotation preview and PNG, including
 the exchange-rate legend (`1 usd = X $`). Stored currency identifiers, backups,

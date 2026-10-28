@@ -45,7 +45,7 @@
 }
 
 .quotation-header {
-  min-height: 32.2222cqw;
+  min-height: 0;
   padding: calc(3.7037cqw + env(safe-area-inset-top, 0px)) max(5.9259cqw, env(safe-area-inset-right, 0px)) 3.1481cqw max(5.9259cqw, env(safe-area-inset-left, 0px));
   border-bottom: max(2px, 0.463cqw) solid var(--quotation-black);
   background: var(--quotation-yellow);
@@ -69,7 +69,7 @@
 
 .quotation-logo {
   display: block;
-  width: 62.037cqw;
+  width: clamp(12rem, 56cqw, 22rem);
   max-width: 76%;
   height: auto;
   aspect-ratio: 3469.76 / 393.05;
@@ -87,7 +87,7 @@
 }
 
 .quotation-heading {
-  margin: 5.1852cqw 0 0;
+  margin: clamp(16px, 3cqw, 20px) 0 0;
   font: inherit;
 }
 
@@ -103,7 +103,7 @@
   align-items: baseline;
   gap: 1.1111cqw;
   font-family: "Luquisound Pliant Static Expanded", Arial, sans-serif;
-  font-size: clamp(1.625rem, 7.7778cqw, 5.25rem);
+  font-size: clamp(1.625rem, 6.4cqw, 4.25rem);
   font-weight: 700;
   font-stretch: 125%;
   line-height: 1.08;
@@ -515,19 +515,18 @@
 
   .quotation-brand-line {
     align-items: center;
-    justify-content: flex-start;
+    justify-content: space-between;
     gap: 24px;
     min-width: 0;
   }
 
   .quotation-logo {
-    width: 300px;
     max-width: 65%;
   }
 
   .quotation-document-label {
     font-size: 11px;
-    text-align: left;
+    text-align: right;
   }
 
   .quotation-heading {
@@ -535,10 +534,6 @@
     grid-row: 2;
     min-width: 0;
     margin: 0;
-  }
-
-  .quotation-title {
-    font-size: clamp(2rem, 3vw, 3rem);
   }
 
   .quotation-subtitle {
@@ -650,6 +645,43 @@
 }
 
 @media (min-width: 64rem) {
+  .quotation-header {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.6fr);
+    gap: clamp(24px, 3cqw, 48px);
+    padding-top: calc(clamp(20px, 2cqw, 32px) + env(safe-area-inset-top, 0px));
+    padding-bottom: clamp(20px, 2cqw, 32px);
+  }
+
+  .quotation-brand-line {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .quotation-logo {
+    width: min(100%, 24rem);
+    max-width: 100%;
+  }
+
+  .quotation-document-label {
+    text-align: left;
+  }
+
+  .quotation-heading {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+  }
+
+  .quotation-title {
+    justify-content: flex-end;
+    font-size: clamp(2rem, 4cqw, 4rem);
+  }
+
+  .quotation-subtitle {
+    font-size: clamp(0.875rem, 1.5cqw, 1.25rem);
+  }
+
   .quotation-sheet {
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(320px, 26vw, 400px);
