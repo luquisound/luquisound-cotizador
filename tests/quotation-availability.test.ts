@@ -42,6 +42,15 @@ test('quotation availability uses the stored observation without pretending a mi
   assert.deepEqual(current, before)
 })
 
+test('availability issue numbers follow the custom grouped category order', () => {
+  const quote = quotation()
+  const selected = quote.rows[0]!
+  selected.audioCategory = 'subwoofer'
+  quote.rows.push({ ...createRow(), concept: 'Synthetic front', audioCategory: 'speakers', unitPrice: '10', priceState: 'priced' })
+  quote.blockOrder = ['category:speakers', 'category:subwoofer']
+  assert.match(inspectQuotationAvailability(quote, [item(0)], now).issues[0]!, /^Fila 2:.*cero/)
+})
+
 test('latest matching catalogue availability blocks zero, negative, unknown and explicitly quarantined products', () => {
   const quote = quotation(item(3, true))
   for (const [quantity, expected] of [[0, /cero/], [-2, /negativo/], [null, /verificable/]] as const) {

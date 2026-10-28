@@ -17,6 +17,8 @@
   },
   "packageManager": "npm@10.9.8",
   "dependencies": {
+    "@dnd-kit/dom": "0.5.1",
+    "@dnd-kit/react": "0.5.1",
     "@vercel/blob": "2.8.2",
     "@vercel/functions": "3.10.1",
     "react": "^19.2.8",

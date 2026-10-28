@@ -388,13 +388,39 @@ Legacy adapter descriptions are never parsed to guess their size or identity;
 they remain independent until explicitly classified in the editor. No group
 record or new storage key is introduced, and catalogue storage remains separate.
 
-The preview and PNG use the table's category order within each section, keeping
-the existing relative order of items in each category. Free-form and legacy
-unclassified concepts appear after categorized items, preserving their own
-relative order. Validation issue numbers refer to that order of nonempty
-concepts. PNG output contains entered concepts and declared adapter groups under
-the existing two section headings; unused category labels, empty suggestions,
-and controls are omitted.
+Without a saved order, the preview and PNG use the table's category order within
+each section, keeping the existing relative order of items in each category.
+Free-form and legacy unclassified concepts initially follow categorized items.
+Users can reorder occupied category blocks and individual free-form concepts
+within their original section. Categories stay grouped; rows inside a category
+can be reordered independently. Declared adapter variants remain together and
+can be reordered within their shared block, separately from generic legacy aros.
+Empty suggestions and add actions are not draggable quotation content.
+
+A separate 48-pixel handle starts dragging after a short touch hold, or a small
+mouse movement. Normal description and price taps retain their editing actions;
+scrolling outside handles remains native. Dragging shows the destination and
+scrolls near viewport edges. A successful drop applies one change. Escape,
+pointer cancellation, loss of window focus or page visibility discards the drag.
+The handle also exposes explicit Up/Down actions, with keyboard controls,
+visible focus and Spanish screen-reader instructions and announcements.
+
+Optional `Quotation.blockOrder` stores stable `category:<id>` and `row:<id>`
+block identities; source row order stores the order within a category. Recovery
+validates bounded metadata without migrating older quotations or modifying the
+catalogue, legacy workspace or quotation-library stores. Unknown references are
+ignored, deleted free-row references are pruned on reorder, and new blocks append
+after the saved order. Moves preserve row identities, prices, currencies,
+discount selections, provenance and harness selection. An inactive harness is
+not draggable; its remembered category position can be reused on activation.
+
+Preview, validation issue numbers and PNG use the same order of nonempty
+concepts, including the contiguous declared-adapter breakdown. A committed move
+invalidates a prepared image; a cancelled or unchanged drag does not. PNG output
+contains entered concepts and declared adapter groups under the existing two
+section headings; unused category labels, empty suggestions and controls are
+omitted. Physical Android and iPhone acceptance remains distinct from browser
+touch emulation.
 
 Quotation categories are independent of imported catalogue categories. Product
 selection preserves the chosen quotation category and follows the existing

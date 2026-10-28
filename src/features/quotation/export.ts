@@ -218,7 +218,7 @@ export function renderQuotationCanvas(
     ? measureLines(context, quotation.subtitle.trim(), CONTENT_WIDTH) : []
   const subtitleY = 174 + titleLines.length * 92 + 12
   const headerHeight = Math.max(348, subtitleY + subtitleLines.length * 38 + 28)
-  const presentation = buildQuotationPresentation(calculation.rows)
+  const presentation = buildQuotationPresentation(calculation.rows, quotation.blockOrder)
   setFont(context, 38, BODY_FONT)
   const amountLabels = presentation.flatMap((item) => (
     item.kind === 'adapters' ? item.amounts : [amountLabel(item.item)]

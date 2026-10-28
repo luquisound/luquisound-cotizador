@@ -89,6 +89,7 @@ export interface Quotation {
   exchangeRateQuote?: BlueDollarQuote
   exchangeRateMode?: 'automatic' | 'frozen'
   discount?: QuotationDiscount
+  blockOrder?: string[]
   rows: QuotationRow[]
   notes: string
   createdAt: string
@@ -186,6 +187,9 @@ export function duplicateQuotation(quotation: Quotation): Quotation {
   return {
     ...quotation, id: crypto.randomUUID(), title: `${(quotation.title || 'PRESUPUESTO').slice(0, 492)} (copia)`,
     rows,
+    ...(quotation.blockOrder ? { blockOrder: quotation.blockOrder.map((id) => (
+      id.startsWith('row:') ? `row:${rowIds.get(id.slice(4)) ?? id.slice(4)}` : id
+    )) } : {}),
     ...(quotation.discount ? { discount: {
       ...quotation.discount, rowIds: quotation.discount.rowIds.map((id) => rowIds.get(id) ?? id),
     } } : {}),

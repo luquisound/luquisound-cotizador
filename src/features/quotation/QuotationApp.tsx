@@ -25,6 +25,7 @@ import { canSelectCatalogItem } from './catalog-stock'
 import { inspectQuotationAvailability } from './quotation-availability'
 import { useCatalogClock } from './useCatalogClock'
 import { createHarnessPresetRow, isHarnessPresetRow } from './harness-preset'
+import { moveQuotationBlock, moveQuotationRow } from './quotation-order'
 
 function initialData() {
   try {
@@ -187,6 +188,18 @@ export default function QuotationApp() {
     quotationRef.current = updated
     setQuotation(updated)
     return true
+  }
+
+  function reorderBlock(section: RowSection, activeId: string, overId: string) {
+    const current = quotationRef.current
+    const next = moveQuotationBlock(current, section, activeId, overId)
+    if (next !== current) updateQuotation(next)
+  }
+
+  function reorderRow(activeId: string, overId: string) {
+    const current = quotationRef.current
+    const next = moveQuotationRow(current, activeId, overId)
+    if (next !== current) updateQuotation(next)
   }
 
   const applyDollarQuote = useEffectEvent((id: string, quote: BlueDollarQuote): boolean => {
@@ -492,6 +505,8 @@ export default function QuotationApp() {
             onAddRow={addRow}
             onEditHarnessPreset={editHarnessPreset}
             onEditDiscount={openDiscount}
+            onMoveBlock={reorderBlock}
+            onMoveRow={reorderRow}
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
               {catalogError && <p className="notice error" role="status">{catalogError} Podés seguir armando este presupuesto.</p>}

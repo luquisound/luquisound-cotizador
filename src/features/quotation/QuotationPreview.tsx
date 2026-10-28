@@ -8,7 +8,7 @@ import {
   parseQuantity,
 } from './calculation.ts'
 import type { CalculatedRow } from './calculation.ts'
-import { getAudioCategories, hasRepeatCategoryAction, readAudioCategory } from './audio-categories.ts'
+import { getAudioCategories, hasRepeatCategoryAction } from './audio-categories.ts'
 import type { AudioCategory } from './audio-categories.ts'
 import type { Quotation, QuotationRow, RowSection } from './model.ts'
 import { exchangeRateDescription } from './exchange-quote'
@@ -17,6 +17,8 @@ import { QUOTATION_GRAPHIC } from './graphic.ts'
 import { adapterVariantAmount, adapterVariantDescription, buildQuotationPresentation } from './presentation.ts'
 import type { AdapterPresentationBlock, QuotationPresentationItem } from './presentation.ts'
 import { HARNESS_PRESET_CONCEPT, isHarnessPresetRow } from './harness-preset.ts'
+import { getQuotationBlocks } from './quotation-order.ts'
+import { SortableList } from './SortableList.tsx'
 import './preview.css'
 import './exchange-ui.css'
 
@@ -33,6 +35,8 @@ export interface QuotationPreviewProps {
   onAddRow: (section: RowSection, audioCategory?: AudioCategory) => void
   onEditHarnessPreset: () => void
   onEditDiscount: () => void
+  onMoveBlock: (section: RowSection, activeId: string, overId: string) => void
+  onMoveRow: (activeId: string, overId: string) => void
   notices: ReactNode
   exchangeDetails: ReactNode
 }
@@ -123,11 +127,12 @@ function PreviewHarnessPreset({
 }
 
 function PreviewAdapterGroup({
-  block, onEditRow, onEditPrice,
+  block, onEditRow, onEditPrice, onMoveRow,
 }: {
   block: AdapterPresentationBlock
   onEditRow: (rowId: string) => void
   onEditPrice: (rowId: string) => void
+  onMoveRow: (activeId: string, overId: string) => void
 }) {
   return (
     <div className="quotation-adapter-group">
@@ -137,9 +142,14 @@ function PreviewAdapterGroup({
           {block.amounts.map((amount) => <span key={amount}>{amount}</span>)}
         </span>
       </div>
-      <ul className="quotation-rows quotation-adapter-variants">
-        {block.items.map((item, index) => (
-          <li key={item.row.id} className="quotation-adapter-variant-row">
+      <SortableList
+        label="Orden de las variantes de aros adaptadores"
+        className="quotation-adapter-variants quotation-sortable-rows"
+        onMove={onMoveRow}
+        items={block.items.map((item, index) => ({
+          id: item.row.id,
+          label: adapterVariantDescription(item),
+          content: <div className="quotation-adapter-variant-row">
             <button
               type="button"
               className="quotation-adapter-variant"
@@ -160,37 +170,46 @@ function PreviewAdapterGroup({
             >
               {adapterVariantAmount(item)}
             </button>
-          </li>
-        ))}
-      </ul>
+          </div>,
+        }))}
+      />
     </div>
   )
 }
 
 function PreviewItems({
-  items, onEditRow, onEditPrice,
+  items, onEditRow, onEditPrice, onMoveRow, harnessPresetId, onEditHarnessPreset,
 }: {
   items: QuotationPresentationItem[]
   onEditRow: (rowId: string) => void
   onEditPrice: (rowId: string) => void
+  onMoveRow: (activeId: string, overId: string) => void
+  harnessPresetId?: string
+  onEditHarnessPreset?: () => void
 }) {
   return (
-    <ul className="quotation-rows">
-      {items.map((item) => (
-        <li key={item.kind === 'row' ? item.item.row.id : item.items[0].row.id}>
-          {item.kind === 'adapters' ? (
-            <PreviewAdapterGroup block={item} onEditRow={onEditRow} onEditPrice={onEditPrice} />
-          ) : (
-            <PreviewRow
-              row={item.item.row}
-              calculated={item.item}
-              onEdit={() => onEditRow(item.item.row.id)}
-              onEditPrice={() => onEditPrice(item.item.row.id)}
-            />
-          )}
-        </li>
-      ))}
-    </ul>
+    <SortableList
+      label="Orden de los ítems de la categoría"
+      className="quotation-sortable-rows"
+      onMove={onMoveRow}
+      items={items.map((item) => ({
+        id: item.kind === 'row' ? item.item.row.id : `adapters:${item.items[0].row.id}`,
+        label: item.kind === 'row' ? item.item.row.concept.trim() || 'Concepto pendiente' : item.title,
+        disabled: item.kind === 'adapters',
+        content: item.kind === 'adapters' ? (
+          <PreviewAdapterGroup block={item} onEditRow={onEditRow} onEditPrice={onEditPrice} onMoveRow={onMoveRow} />
+        ) : item.item.row.id === harnessPresetId && onEditHarnessPreset ? (
+          <PreviewHarnessPreset row={item.item.row} onEditPrice={onEditHarnessPreset} />
+        ) : (
+          <PreviewRow
+            row={item.item.row}
+            calculated={item.item}
+            onEdit={() => onEditRow(item.item.row.id)}
+            onEditPrice={() => onEditPrice(item.item.row.id)}
+          />
+        ),
+      }))}
+    />
   )
 }
 
@@ -221,6 +240,8 @@ export function QuotationPreview({
   onAddRow,
   onEditHarnessPreset,
   onEditDiscount,
+  onMoveBlock,
+  onMoveRow,
   notices,
   exchangeDetails,
 }: QuotationPreviewProps) {
@@ -270,55 +291,61 @@ export function QuotationPreview({
           {notices}
           {sections.map(({ section, label, accessibleLabel }) => {
             const sectionRows = calculation.rows.filter(({ row }) => row.section === section)
-            const freeRows = sectionRows.filter(({ row }) => !readAudioCategory(row.audioCategory, section))
+            const byId = new Map(sectionRows.map((item) => [item.row.id, item]))
+            const blocks = getQuotationBlocks(quotation, section)
             return (
               <section className="quotation-section" key={section} aria-label={label}>
                 <h2 className="quotation-section-title">{label}</h2>
-                {getAudioCategories(section).map((category) => {
-                  const isHarnessCategory = section === 'extras' && category.id === 'harness'
-                  const categoryRows = sectionRows.filter(({ row }) => row.audioCategory === category.id
-                    && (!isHarnessCategory || row.id !== harnessPreset?.id))
-                  const items = buildQuotationPresentation(categoryRows)
-                  return (
-                    <div className="quotation-audio-category" key={category.id} data-audio-category={category.id}>
-                      {isHarnessCategory && (
-                        <PreviewHarnessPreset row={harnessPreset} onEditPrice={onEditHarnessPreset} />
+                <SortableList
+                  label={`Orden de categorías y conceptos en ${accessibleLabel}`}
+                  className="quotation-sortable-blocks"
+                  onMove={(activeId, overId) => onMoveBlock(section, activeId, overId)}
+                  items={blocks.map((block) => ({
+                    id: block.id,
+                    label: block.label,
+                    content: <div className="quotation-audio-category" data-audio-category={block.category}>
+                      {section === 'equipment' && block.category && (
+                        <h3 className="quotation-category-label">{block.label}</h3>
                       )}
-                      {categoryRows.length === 0 && !isHarnessCategory ? (
+                      <PreviewItems
+                        items={buildQuotationPresentation(block.rows.map((row) => byId.get(row.id)!), quotation.blockOrder)}
+                        onEditRow={onEditRow}
+                        onEditPrice={onEditPrice}
+                        onMoveRow={onMoveRow}
+                        harnessPresetId={harnessPreset?.id}
+                        onEditHarnessPreset={onEditHarnessPreset}
+                      />
+                      {block.category && hasRepeatCategoryAction(block.category) && (
                         <button
                           type="button"
-                          className="quotation-empty-row"
-                          data-audio-category={category.id}
-                          onClick={() => onAddRow(section, category.id)}
-                          aria-label={`Agregar ${category.label}`}
+                          className="quotation-category-add"
+                          data-audio-category={block.category}
+                          onClick={() => onAddRow(section, block.category)}
+                          aria-label={`Agregar ${block.label}`}
                         >
-                          <span aria-hidden="true">+</span> {category.label}
+                          <span aria-hidden="true">+</span> {block.label}
                         </button>
-                      ) : categoryRows.length > 0 ? (
-                        <>
-                          {section === 'equipment' && (
-                            <h3 className="quotation-category-label">{category.label}</h3>
-                          )}
-                          <PreviewItems items={items} onEditRow={onEditRow} onEditPrice={onEditPrice} />
-                          {hasRepeatCategoryAction(category.id) && (
-                            <button
-                              type="button"
-                              className="quotation-category-add"
-                              data-audio-category={category.id}
-                              onClick={() => onAddRow(section, category.id)}
-                              aria-label={`Agregar ${category.label}`}
-                            >
-                              <span aria-hidden="true">+</span> {category.label}
-                            </button>
-                          )}
-                        </>
-                      ) : null}
-                    </div>
-                  )
-                })}
-                {freeRows.length > 0 && (
-                  <PreviewItems items={buildQuotationPresentation(freeRows)} onEditRow={onEditRow} onEditPrice={onEditPrice} />
-                )}
+                      )}
+                    </div>,
+                  }))}
+                />
+                {getAudioCategories(section).filter((category) => (
+                  !blocks.some((block) => block.category === category.id)
+                  || (category.id === 'harness' && harnessPreset?.harnessSelection?.enabled === false)
+                )).map((category) => category.id === 'harness' ? (
+                  <PreviewHarnessPreset key={category.id} row={harnessPreset} onEditPrice={onEditHarnessPreset} />
+                ) : (
+                  <button
+                    key={category.id}
+                    type="button"
+                    className="quotation-empty-row"
+                    data-audio-category={category.id}
+                    onClick={() => onAddRow(section, category.id)}
+                    aria-label={`Agregar ${category.label}`}
+                  >
+                    <span aria-hidden="true">+</span> {category.label}
+                  </button>
+                ))}
                 <button
                   type="button"
                   className="quotation-add-row"

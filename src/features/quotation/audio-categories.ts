@@ -99,6 +99,38 @@ function rowOrder(row: QuotationRow): number {
   return sectionStart + (categoryIndex === -1 ? AUDIO_CATEGORIES.length : categoryIndex)
 }
 
-export function orderQuotationRows(rows: readonly QuotationRow[]): QuotationRow[] {
-  return [...rows].sort((left, right) => rowOrder(left) - rowOrder(right))
+export function quotationRowBlockId(row: QuotationRow): string {
+  const category = readAudioCategory(row.audioCategory, row.section)
+  return category ? `category:${category}` : `row:${row.id}`
+}
+
+function groupAdapterRows(rows: QuotationRow[]): QuotationRow[] {
+  const variants = rows.filter((row) => readAdapterVariant(row.adapterVariant, row.section, row.audioCategory))
+  if (variants.length < 2) return rows
+  const ids = new Set(variants.map((row) => row.id))
+  const result: QuotationRow[] = []
+  let grouped = false
+  for (const row of rows) {
+    if (!ids.has(row.id)) result.push(row)
+    else if (!grouped) {
+      result.push(...variants)
+      grouped = true
+    }
+  }
+  return result
+}
+
+export function orderQuotationRows(rows: readonly QuotationRow[], blockOrder?: readonly string[]): QuotationRow[] {
+  const ordered = [...rows].sort((left, right) => rowOrder(left) - rowOrder(right))
+  if (!blockOrder?.length) return groupAdapterRows(ordered)
+  const ranks = new Map<string, number>()
+  for (const id of blockOrder) if (!ranks.has(id)) ranks.set(id, ranks.size)
+  for (const row of ordered) {
+    const id = quotationRowBlockId(row)
+    if (!ranks.has(id)) ranks.set(id, ranks.size)
+  }
+  return groupAdapterRows(ordered.sort((left, right) => {
+    if (left.section !== right.section) return left.section === 'equipment' ? -1 : 1
+    return ranks.get(quotationRowBlockId(left))! - ranks.get(quotationRowBlockId(right))!
+  }))
 }

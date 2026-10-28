@@ -14,6 +14,7 @@ import { isFactoryRow, parseFactoryEquipment } from './factory-mode.ts'
 import { isHarnessPresetRow, parseHarnessSelection } from './harness-preset.ts'
 import { parseRowCurrencyConversionOrigin } from './row-currency.ts'
 import { readQuotationDiscount } from './discounts.ts'
+import { readQuotationBlockOrder } from './quotation-order.ts'
 import type { CatalogItem, CatalogReferencePrice, CatalogSource, Currency, PriceState, Quotation, QuotationRow, RowSection, Workspace } from './model.ts'
 
 export interface StorageAdapter {
@@ -134,6 +135,7 @@ function readRow(value: unknown, identifiers: Set<string>, legacyCurrency: Curre
 
 function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
   const quotation = readRecord(value)
+  const blockOrder = readQuotationBlockOrder(quotation.blockOrder)
   const currency = readCurrency(quotation.currency)
   if (quotation.exchangeRateMode !== undefined && quotation.exchangeRateMode !== 'automatic'
     && quotation.exchangeRateMode !== 'frozen') invalidBackup()
@@ -163,6 +165,7 @@ function readQuotation(value: unknown, identifiers: Set<string>): Quotation {
     ...(exchangeRateQuote === undefined ? {} : { exchangeRateQuote }),
     ...(quotation.exchangeRateMode === undefined ? {} : { exchangeRateMode: quotation.exchangeRateMode }),
     ...(discount === undefined ? {} : { discount }),
+    ...(blockOrder === undefined ? {} : { blockOrder }),
     rows: readArray(quotation.rows, 1000).map((row) => readRow(row, identifiers, currency)),
     notes: readString(quotation.notes, 10000),
     createdAt: readTimestamp(quotation.createdAt),

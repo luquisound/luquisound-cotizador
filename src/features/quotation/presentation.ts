@@ -86,9 +86,11 @@ function adapterBlock(items: CalculatedRow[]): AdapterPresentationBlock {
 }
 
 /** Group explicit adapter variants without changing the source rows or their rounded amounts. */
-export function buildQuotationPresentation(rows: readonly CalculatedRow[]): QuotationPresentationItem[] {
+export function buildQuotationPresentation(
+  rows: readonly CalculatedRow[], blockOrder?: readonly string[],
+): QuotationPresentationItem[] {
   const byRow = new Map(rows.map((item) => [item.row, item]))
-  const ordered = orderQuotationRows(rows.map((item) => item.row)).map((row) => byRow.get(row)!)
+  const ordered = orderQuotationRows(rows.map((item) => item.row), blockOrder).map((row) => byRow.get(row)!)
   const adapters = ordered.filter(({ row }) => (
     readAdapterVariant(row.adapterVariant, row.section, row.audioCategory) !== undefined
   ))

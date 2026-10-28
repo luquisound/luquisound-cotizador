@@ -1,0 +1,150 @@
+.quotation-sortable-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.quotation-sortable-item {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  min-width: 0;
+  position: relative;
+}
+
+.quotation-sortable-item:not(:has(> .quotation-sortable-controls)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.quotation-sortable-content {
+  min-width: 0;
+}
+
+.quotation-sortable-controls {
+  position: relative;
+  z-index: 1;
+}
+
+.quotation-sortable-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #555;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.quotation-sortable-handle:active {
+  cursor: grabbing;
+}
+
+.quotation-sortable-handle:hover,
+.quotation-sortable-handle[aria-expanded="true"] {
+  color: #101010;
+  background: #f2f2f2;
+}
+
+.quotation-sortable-handle:focus-visible,
+.quotation-sortable-steps button:focus-visible {
+  outline: 3px solid #101010;
+  outline-offset: -3px;
+}
+
+.quotation-sortable-steps {
+  position: absolute;
+  top: 48px;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  padding: 4px;
+  border: 1px solid #c7c7c7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 4px 12px #0002;
+  white-space: nowrap;
+}
+
+.quotation-sortable-steps button {
+  min-width: 78px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 4px;
+  color: #101010;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.quotation-sortable-steps button:hover:not(:disabled) {
+  background: #ffda00;
+}
+
+.quotation-sortable-steps button:disabled {
+  color: #777;
+  cursor: default;
+}
+
+.quotation-sortable-item.is-drag-source {
+  opacity: .4;
+}
+
+.quotation-sortable-item.is-drop-target {
+  outline: 2px dashed #222;
+  outline-offset: -2px;
+  background: #fff8d0;
+}
+
+.quotation-sortable-overlay {
+  max-width: min(440px, calc(100vw - 24px));
+  padding: 14px 18px;
+  border: 2px solid #101010;
+  border-radius: 8px;
+  color: #101010;
+  background: #ffda00;
+  box-shadow: 0 8px 24px #0003;
+  font: 600 16px/1.35 'Luquisound Barlow', sans-serif;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+/* Match Feedback's inactive state before its lazily injected styles are available. */
+.quotation-sortable-overlay:not([data-dnd-dragging]) {
+  display: none;
+  visibility: hidden;
+}
+
+/* Blocks put their handle above content so nested rows keep the full width. */
+.quotation-sortable-blocks > .quotation-sortable-item {
+  display: block;
+}
+
+.quotation-sortable-blocks > .quotation-sortable-item > .quotation-sortable-controls {
+  display: flex;
+  justify-content: flex-end;
+  height: 48px;
+}
+
+.quotation-sortable-blocks > .quotation-sortable-item > .quotation-sortable-controls > .quotation-sortable-steps {
+  left: auto;
+  right: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quotation-sortable-item,
+  .quotation-sortable-overlay {
+    transition: none !important;
+    animation: none !important;
+  }
+}

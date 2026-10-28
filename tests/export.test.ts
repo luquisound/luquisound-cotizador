@@ -8,6 +8,8 @@ import { exchangeRateDescription } from '../src/features/quotation/exchange-quot
 import type { CatalogItem, Quotation } from '../src/features/quotation/model.ts'
 import { QUOTATION_GRAPHIC } from '../src/features/quotation/graphic.ts'
 import { rowFromCatalog } from '../src/features/quotation/row-provenance.ts'
+import { moveQuotationBlock, moveQuotationRow } from '../src/features/quotation/quotation-order.ts'
+import { parseWorkspace, serializeWorkspace } from '../src/features/quotation/persistence.ts'
 
 const measure = (text: string): number => Array.from(text).length
 const file = new File(['synthetic image data'], 'luquisound-test.png', { type: 'image/png' })
@@ -472,6 +474,31 @@ test('exports complete 500-character product names with separate legible prices 
   }
   assert.ok(previousBoundary < total.y && total.y < result.footerY)
   assert.deepEqual(quotation, before)
+})
+
+test('exports the recovered custom block and row order without drag controls', () => {
+  const quotation = exportableQuotation()
+  const sample = quotation.rows[0]!
+  quotation.rows = [
+    { ...sample, id: 'bass', audioCategory: 'subwoofer', concept: 'Synthetic bass' },
+    { ...sample, id: 'front', audioCategory: 'speakers', concept: 'Synthetic front' },
+    { ...sample, id: 'rear', audioCategory: 'speakers', concept: 'Synthetic rear' },
+    { ...sample, id: 'custom', concept: 'Synthetic custom' },
+    { ...sample, id: 'wire', section: 'extras', audioCategory: 'cables', concept: 'Synthetic wire' },
+    { ...sample, id: 'work', section: 'extras', audioCategory: 'labor', concept: 'Synthetic work' },
+  ]
+  let moved = moveQuotationBlock(quotation, 'equipment', 'category:speakers', 'category:subwoofer')
+  moved = moveQuotationRow(moved, 'rear', 'front')
+  moved = moveQuotationBlock(moved, 'equipment', 'row:custom', 'category:subwoofer')
+  moved = moveQuotationBlock(moved, 'extras', 'category:labor', 'category:cables')
+  const restored = parseWorkspace(serializeWorkspace({ version: 1, activeQuotationId: moved.id, quotations: [moved], catalog: [] })).quotations[0]!
+  const before = structuredClone(restored)
+  const result = renderWithRecordedCanvas(restored)
+  assert.deepEqual(result.texts.filter(({ text }) => text.startsWith('Synthetic ')).map(({ text }) => text), [
+    'Synthetic rear', 'Synthetic front', 'Synthetic custom', 'Synthetic bass', 'Synthetic work', 'Synthetic wire',
+  ])
+  assert.ok(!result.texts.some(({ text }) => /Subir|Bajar|Mover|Arrastrar/.test(text)))
+  assert.deepEqual(restored, before)
 })
 
 test('exports categorized concepts in display order without empty suggestions or category controls', () => {
