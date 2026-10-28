@@ -6,56 +6,39 @@
 }
 
 .quotation-sortable-item {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  align-items: start;
+  display: block;
   min-width: 0;
   position: relative;
-}
-
-.quotation-sortable-item:not(:has(> .quotation-sortable-controls)) {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .quotation-sortable-content {
   min-width: 0;
 }
 
-.quotation-sortable-controls {
-  position: relative;
-  z-index: 1;
-}
-
-.quotation-sortable-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  min-width: 48px;
-  height: 48px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #555;
+.quotation-sortable-item[tabindex] > .quotation-sortable-content {
   cursor: grab;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
 
-.quotation-sortable-handle:active {
+.quotation-sortable-item[tabindex] > .quotation-sortable-content :is(.quotation-row-description, .quotation-row-price, .quotation-adapter-variant, .quotation-harness-open) {
+  cursor: grab;
+}
+
+.quotation-sortable-item.is-drag-source > .quotation-sortable-content {
   cursor: grabbing;
 }
 
-.quotation-sortable-handle:hover,
-.quotation-sortable-handle[aria-expanded="true"] {
-  color: #101010;
-  background: #f2f2f2;
+.quotation-sortable-content :is(input, textarea, [contenteditable="true"]) {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
-.quotation-sortable-handle:focus-visible,
+.quotation-sortable-item:focus-visible,
 .quotation-sortable-steps button:focus-visible {
   outline: 3px solid #101010;
   outline-offset: -3px;
@@ -63,8 +46,8 @@
 
 .quotation-sortable-steps {
   position: absolute;
-  top: 48px;
-  left: 0;
+  top: 100%;
+  right: 0;
   z-index: 5;
   display: flex;
   padding: 4px;
@@ -108,13 +91,13 @@
 
 .quotation-sortable-overlay {
   max-width: min(440px, calc(100vw - 24px));
-  padding: 14px 18px;
-  border: 2px solid #101010;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid #d5d5d5;
+  border-radius: 6px;
   color: #101010;
-  background: #ffda00;
-  box-shadow: 0 8px 24px #0003;
-  font: 600 16px/1.35 'Luquisound Barlow', sans-serif;
+  background: #fff;
+  box-shadow: 0 4px 12px #0002;
+  font: 400 16px/1.35 'Luquisound Barlow', sans-serif;
   overflow-wrap: anywhere;
   pointer-events: none;
 }
@@ -123,22 +106,6 @@
 .quotation-sortable-overlay:not([data-dnd-dragging]) {
   display: none;
   visibility: hidden;
-}
-
-/* Blocks put their handle above content so nested rows keep the full width. */
-.quotation-sortable-blocks > .quotation-sortable-item {
-  display: block;
-}
-
-.quotation-sortable-blocks > .quotation-sortable-item > .quotation-sortable-controls {
-  display: flex;
-  justify-content: flex-end;
-  height: 48px;
-}
-
-.quotation-sortable-blocks > .quotation-sortable-item > .quotation-sortable-controls > .quotation-sortable-steps {
-  left: auto;
-  right: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

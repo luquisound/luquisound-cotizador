@@ -397,13 +397,20 @@ can be reordered independently. Declared adapter variants remain together and
 can be reordered within their shared block, separately from generic legacy aros.
 Empty suggestions and add actions are not draggable quotation content.
 
-A separate 48-pixel handle starts dragging after a short touch hold, or a small
-mouse movement. Normal description and price taps retain their editing actions;
-scrolling outside handles remains native. Dragging shows the destination and
-scrolls near viewport edges. A successful drop applies one change. Escape,
-pointer cancellation, loss of window focus or page visibility discards the drag.
-The handle also exposes explicit Up/Down actions, with keyboard controls,
-visible focus and Spanish screen-reader instructions and announcements.
+Dragging starts directly on an item after a small mouse movement, or a 250 ms
+touch hold followed by movement. There are no separate grips, control strips or
+reserved gutters. Short description and price taps retain their editing actions;
+an early vertical swipe scrolls the page normally. Category headings move their
+whole block, while individual rows in a category with several items move inside
+that category. Declared adapter variants move inside their shared block.
+Dragging shows the destination and scrolls near viewport edges. A successful
+drop applies one change. Escape, pointer cancellation, loss of window focus or
+page visibility discards the drag.
+
+Right-clicking, holding and releasing without moving, or pressing Shift+F10 or
+the context-menu key exposes explicit Up/Down actions without permanent visible
+controls. Keyboard dragging, visible focus and Spanish screen-reader
+instructions and announcements remain available.
 
 Optional `Quotation.blockOrder` stores stable `category:<id>` and `row:<id>`
 block identities; source row order stores the order within a category. Recovery

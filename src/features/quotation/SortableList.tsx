@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { DragDropProvider, DragOverlay, useDragDropManager } from '@dnd-kit/react'
 import { isSortable, useSortable } from '@dnd-kit/react/sortable'
 import { Accessibility, KeyboardSensor, PointerActivationConstraints, PointerSensor } from '@dnd-kit/dom'
@@ -23,6 +23,12 @@ export interface SortableListProps {
 
 const sensors = [
   PointerSensor.configure({
+    preventActivation(event, source) {
+      const target = event.target
+      return event.button !== 0 || !(target instanceof Element)
+        || target.closest('[data-sortable-surface]') !== source.element
+        || target.closest('.quotation-category-add, .quotation-add-row, .quotation-empty-row, .quotation-sortable-steps, input, select, textarea, a, [contenteditable="true"]') !== null
+    },
     activationConstraints(event) {
       return event.pointerType === 'touch'
         ? [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })]
@@ -34,7 +40,7 @@ const sensors = [
 
 const accessibility = Accessibility.configure({
   screenReaderInstructions: {
-    draggable: 'Para mover, presioná espacio o Enter, usá las flechas y confirmá con espacio o Enter. Escape cancela. También podés tocar el control para subir o bajar.',
+    draggable: 'Para mover, presioná espacio o Enter, usá las flechas y confirmá con espacio o Enter. Escape cancela. Shift más F10 muestra Subir y Bajar. Con el dedo, mantené presionado y arrastrá; soltá sin mover para ver las opciones.',
   },
   announcements: {
     dragstart({ operation }: DragStartEvent) {
@@ -74,7 +80,7 @@ function CancelOnInterruption() {
 }
 
 function SortableItem({
-  item, index, group, helpId, disabled, expanded, onToggle, onClose, onStep, hasPrevious, hasNext,
+  item, index, group, helpId, disabled, expanded, onOpen, onClose, onStep, onClickCapture, hasPrevious, hasNext,
 }: {
   item: SortableListItem
   index: number
@@ -82,69 +88,72 @@ function SortableItem({
   helpId: string
   disabled: boolean
   expanded: boolean
-  onToggle: () => void
+  onOpen: () => void
   onClose: () => void
   onStep: (direction: -1 | 1) => void
+  onClickCapture: (event: MouseEvent<HTMLLIElement>) => void
   hasPrevious: boolean
   hasNext: boolean
 }) {
-  const handleButton = useRef<HTMLButtonElement | null>(null)
-  const { ref, handleRef, isDragSource, isDropTarget } = useSortable({
+  const element = useRef<HTMLLIElement | null>(null)
+  const { ref, isDragSource, isDropTarget } = useSortable({
     id: item.id, index, group, type: group, accept: group,
     data: { label: item.label }, disabled, transition: null,
   })
+  const setElement = useCallback((node: HTMLLIElement | null) => {
+    element.current = node
+    ref(node)
+  }, [ref])
 
   function step(direction: -1 | 1) {
     onStep(direction)
-    window.requestAnimationFrame(() => handleButton.current?.focus({ preventScroll: true }))
+    window.requestAnimationFrame(() => element.current?.focus({ preventScroll: true }))
   }
+
+  useEffect(() => {
+    if (expanded) element.current?.querySelector<HTMLButtonElement>('.quotation-sortable-steps button:not(:disabled)')?.focus()
+  }, [expanded])
 
   return (
     <li
-      ref={ref}
+      ref={setElement}
       className={`quotation-sortable-item${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
       data-sortable-id={item.id}
+      data-sortable-surface={disabled ? undefined : group}
+      tabIndex={disabled ? undefined : 0}
+      aria-label={disabled ? undefined : `Mover ${item.label}`}
+      aria-describedby={disabled ? undefined : helpId}
+      onClickCapture={onClickCapture}
+      onContextMenu={(event) => {
+        if (disabled || (event.target as Element).closest('[data-sortable-surface]') !== event.currentTarget
+          || (event.target as Element).closest('.quotation-category-add, .quotation-add-row, .quotation-empty-row')) return
+        event.preventDefault()
+        event.stopPropagation()
+        onOpen()
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onClose()
+      }}
+      onKeyDown={(event) => {
+        if (disabled || (event.target as Element).closest('[data-sortable-surface]') !== event.currentTarget) return
+        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+          event.preventDefault()
+          event.stopPropagation()
+          onOpen()
+        } else if (event.key === 'Escape' && expanded) {
+          event.stopPropagation()
+          onClose()
+          element.current?.focus({ preventScroll: true })
+        }
+      }}
     >
-      {!disabled && (
-        <div
-          className="quotation-sortable-controls"
-          onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) onClose()
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape' && expanded) {
-              event.stopPropagation()
-              onClose()
-            }
-          }}
-        >
-          <button
-            type="button"
-            ref={(element) => {
-              handleButton.current = element
-              handleRef(element)
-            }}
-            className="quotation-sortable-handle"
-            data-sortable-handle={item.id}
-            aria-label={`Mover ${item.label}`}
-            aria-describedby={helpId}
-            aria-expanded={expanded}
-            onClick={onToggle}
-            title="Mantené presionado y arrastrá, o tocá para subir o bajar"
-          >
-            <svg viewBox="0 0 20 24" width="16" height="22" fill="currentColor" aria-hidden="true">
-              {[5, 12, 19].flatMap((cy) => [6, 14].map((cx) => <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.6" />))}
-            </svg>
-          </button>
-          {expanded && (
-            <div className="quotation-sortable-steps" role="group" aria-label={`Cambiar posición de ${item.label}`}>
-              <button type="button" disabled={!hasPrevious} onClick={() => step(-1)} aria-label={`Subir ${item.label}`}>↑ Subir</button>
-              <button type="button" disabled={!hasNext} onClick={() => step(1)} aria-label={`Bajar ${item.label}`}>↓ Bajar</button>
-            </div>
-          )}
+      <div className="quotation-sortable-content">{item.content}</div>
+      {expanded && !disabled && (
+        <div className="quotation-sortable-steps" role="group" aria-label={`Cambiar posición de ${item.label}`}>
+          <button type="button" disabled={!hasPrevious} onClick={() => step(-1)} aria-label={`Subir ${item.label}`}>↑ Subir</button>
+          <button type="button" disabled={!hasNext} onClick={() => step(1)} aria-label={`Bajar ${item.label}`}>↓ Bajar</button>
         </div>
       )}
-      <div className="quotation-sortable-content">{item.content}</div>
     </li>
   )
 }
@@ -156,6 +165,7 @@ export function SortableList({ items, onMove, label, className = '', disabled = 
   const [message, setMessage] = useState('')
   const snapshot = useRef<string[]>([])
   const suppressClickUntil = useRef(0)
+  const dragSourceId = useRef<string | null>(null)
   const canSort = !disabled && items.filter((item) => !item.disabled).length > 1
 
   function neighbor(index: number, direction: -1 | 1): SortableListItem | undefined {
@@ -177,8 +187,9 @@ export function SortableList({ items, onMove, label, className = '', disabled = 
     <DragDropProvider
       sensors={sensors}
       plugins={(defaults) => [...defaults.filter((plugin) => plugin !== Accessibility), accessibility]}
-      onDragStart={() => {
+      onDragStart={({ operation }) => {
         snapshot.current = items.map((item) => item.id)
+        dragSourceId.current = operation.source ? String(operation.source.id) : null
         suppressClickUntil.current = Infinity
         setExpandedId(null)
       }}
@@ -186,18 +197,25 @@ export function SortableList({ items, onMove, label, className = '', disabled = 
         suppressClickUntil.current = Date.now() + 350
         const { source, target } = event.operation
         if (isSortable(source) && source.group === group) {
-          const sourceHandle = source.handle
-          // Feedback restores the source asynchronously; focus its actual handle after cleanup.
+          const sourceElement = source.element
+          // Feedback restores the source asynchronously; focus it after cleanup.
           window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-            if (sourceHandle instanceof HTMLElement && sourceHandle.isConnected) {
-              sourceHandle.focus({ preventScroll: true })
+            if (sourceElement instanceof HTMLElement && sourceElement.isConnected) {
+              sourceElement.focus({ preventScroll: true })
             }
           }))
         }
         if (event.canceled || !target || !isSortable(source) || source.group !== group) return
         const unchangedItems = snapshot.current.length === items.length
           && snapshot.current.every((id, index) => id === items[index].id)
-        if (!unchangedItems || source.initialIndex === source.index) return
+        if (!unchangedItems) return
+        if (source.initialIndex === source.index) {
+          const activator = event.operation.activatorEvent
+          if (target.id === source.id && activator instanceof PointerEvent && activator.pointerType === 'touch') {
+            setExpandedId(String(source.id))
+          }
+          return
+        }
         const destination = items[source.index]
         if (destination && !destination.disabled && destination.id !== source.id) {
           onMove(String(source.id), destination.id)
@@ -205,7 +223,7 @@ export function SortableList({ items, onMove, label, className = '', disabled = 
       }}
     >
       <CancelOnInterruption />
-      <p id={helpId} className="sr-only">Mantené presionado el agarre para arrastrar. Tocá para mostrar Subir y Bajar. Con teclado, espacio o Enter inicia y confirma, las flechas mueven y Escape cancela.</p>
+      <p id={helpId} className="sr-only">Arrastrá directamente el ítem. En móvil, mantené presionado antes de mover; un toque breve edita. Clic derecho, Shift más F10 o mantener y soltar sin mover muestra Subir y Bajar. Espacio o Enter inicia y confirma, las flechas mueven y Escape cancela.</p>
       <ul className={`quotation-sortable-list ${className}`} aria-label={label}>
         {items.map((item, index) => (
           <SortableItem
@@ -216,8 +234,16 @@ export function SortableList({ items, onMove, label, className = '', disabled = 
             helpId={helpId}
             disabled={item.disabled === true}
             expanded={expandedId === item.id}
-            onToggle={() => {
-              if (Date.now() >= suppressClickUntil.current) setExpandedId(expandedId === item.id ? null : item.id)
+            onOpen={() => setExpandedId(item.id)}
+            onClickCapture={(event) => {
+              const target = event.target
+              if (event.detail > 0 && Date.now() < suppressClickUntil.current
+                && item.id === dragSourceId.current && target instanceof Element
+                && target.closest('[data-sortable-surface]') === event.currentTarget
+                && !target.closest('.quotation-sortable-steps')) {
+                event.preventDefault()
+                event.stopPropagation()
+              }
             }}
             onClose={() => setExpandedId((current) => current === item.id ? null : current)}
             hasPrevious={neighbor(index, -1) !== undefined}
