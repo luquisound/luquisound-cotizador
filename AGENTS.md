@@ -9,10 +9,10 @@ non-trivial work. The local context routes external sources and is never staged
 or committed; listed paths do not expand authorization.
 
 The current V1 includes an editable graphic quotation template, manual rows,
-an optional personal catalogue, a private common catalogue loaded through a
+previously stored personal products, a private common catalogue loaded through a
 read-only endpoint, reviewed bulk entry, calculations, an optional manual sale
 discount on selected equipment, recovery of one current
-quotation, private catalogue backups, and deterministic PNG download or file
+quotation, and deterministic PNG download or file
 sharing. Fixed budgets and templates remain in Figma. Named quotation saving,
 opening, duplication and history import/export are not part of the current UI.
 Previously stored quotation-library bytes remain untouched. A quotation
@@ -48,9 +48,11 @@ inventory management, invoicing, and a general backend remain outside this stage
   whitespace, a global historical-source banner or a general pending-data
   disclaimer. Retain contextual validation and image-delivery guards. Keep private
   source metadata and stock rules in their existing internal workflows. Place bulk
-  entry, catalogue management and New in always-visible buttons
+  entry and New in always-visible buttons
   below the template and contact footer, including when the quotation is empty.
-  Do not mount the former saved-quotation library or its controls.
+  Do not mount the former personal catalogue manager, its import/backup controls,
+  or the saved-quotation library. Preserve existing local catalogue products,
+  approved prices and the shared-catalogue cache without deletion or migration.
 - Keep the full modal for equipment and custom rows focused on "Producto", unit
   price (service price for cables and labour) with its ARS or USD label, and
   "Agregar" or "Guardar". Combine SKU, brand
@@ -196,9 +198,7 @@ inventory management, invoicing, and a general backend remain outside this stage
   the original product makes its prior price, currency and anchor consistent again.
   Format converted input within 15 characters, preferring grouped Argentine notation, then
   ungrouped notation; otherwise reject without truncation or partial changes.
-  Personal-catalogue currency editing uses the same open quotation rate only for
-  its manual sale price, with a temporary editor anchor and no catalogue-schema
-  addition. Never convert source list prices, historical references or the
+  Never convert source list prices, historical references or the
   catalogue's commercial source amounts automatically. Reading old data, opening
   a quote or changing its saved rate does not convert entered row prices.
   An automatic-mode quotation uses DolarAPI blue sale,
@@ -233,9 +233,8 @@ inventory management, invoicing, and a general backend remain outside this stage
   and preserve unreadable bytes and pending in-memory changes on failure.
   The former named quotation library is not mounted; do not read, rewrite or
   delete its `luquisound.quotation-library.v1` bytes as part of normal app use.
-  Catalogue backups preserve approved prices, IDs, and provenance;
-  their importer restores only the catalogue from an old workspace backup after
-  confirmation.
+  Retain compatible catalogue backup parsers and serialization contracts without
+  exposing personal catalogue management or import/export controls in the UI.
   Never rewrite or delete the legacy `luquisound.workspace.v1` storage key.
 - Respect availability policies at selection, bulk application and image delivery.
   Protected products require valid prices and positive eligible stock; historical

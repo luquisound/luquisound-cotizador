@@ -2,12 +2,12 @@
 
 Mobile-first graphic quotation editor for Luquisound, built with Vite, React,
 strict TypeScript and Tailwind CSS. V1 includes editable manual concepts, a private
-common catalogue, optional personal products, ARS/USD calculations, an optional
-manual sale discount on selected equipment, recovery of one
-current quotation, private catalogue backups and deterministic PNG sharing.
+common catalogue, previously stored personal products, ARS/USD calculations, an
+optional manual sale discount on selected equipment, recovery of one
+current quotation and deterministic PNG sharing.
 Fixed budgets and reusable templates remain in Figma.
 
-The app opens on the quotation. Catalogue management, reviewed bulk entry and
+The app opens on the quotation. Reviewed bulk entry and
 New have always-visible buttons below the template and contact
 footer, including when the quotation is empty. Product behavior,
 pricing rules and graphic requirements belong in [PRODUCTO.md](docs/PRODUCTO.md).
@@ -128,10 +128,12 @@ source code or a historical checkpoint.
 
 ## Data and deployment boundaries
 
-Current recovery and the personal catalogue use separate browser-local stores.
-The catalogue retains its private backup workflow. Named quotation saving,
-opening, duplication and quotation-history import/export are not available in
-the current UI. Previously stored quotation-library bytes and the legacy
+Current recovery and the catalogue cache use separate browser-local stores.
+The personal catalogue manager and its file import/backup controls are not
+available. Existing local products and prices remain selectable; their data and
+the common-catalogue cache are preserved without deletion or migration.
+Named quotation saving, opening, duplication and quotation-history import/export
+are not available in the current UI. Previously stored quotation-library bytes and the legacy
 workspace key remain untouched. Browser data can be lost with a device, origin
 or storage reset. There is no cross-device quotation history or synchronized
 manual pricing. A quotation connection to Sheets or Drive is future work and

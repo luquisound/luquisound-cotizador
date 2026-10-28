@@ -17,8 +17,9 @@ custom quotation with browser-local recovery of its current state.
 - Equipment groups and optional direct installation concepts, preserving multiple
   existing rows per category and arbitrary work.
 - Private common catalogue loaded automatically on each device when configured,
-  plus optional personal entries; every selected description and price remains
-  editable. A field may be left blank without requiring a catalogue selection.
+  plus previously stored personal entries; every selected description and price
+  remains editable. A field may be left blank without requiring a catalogue
+  selection.
 - Explicit quantity, unit price, ARS or USD currency per row, pending price, and
   included-without-charge state.
 - Reviewed bulk addition from one code or name per line, with explicit resolution
@@ -28,8 +29,8 @@ custom quotation with browser-local recovery of its current state.
   retains its saved rate until an explicit update.
 - Optional manual percentage sale discount on explicitly selected equipment,
   shown separately in the preview and customer image.
-- Recovery of the current quotation and a separate persistent catalogue with
-  private catalogue JSON backup/import.
+- Recovery of the current quotation and a separate persistent catalogue cache,
+  preserving existing local products and approved prices.
 - PNG image with only the graphic quotation, plus browser file sharing or download.
 
 Without the configured common catalogue service, a new browser starts empty.
@@ -385,7 +386,7 @@ Optional variant metadata is validated and recovered alongside its row. Missing,
 invalid or incompatible metadata is omitted without losing the original row.
 Legacy adapter descriptions are never parsed to guess their size or identity;
 they remain independent until explicitly classified in the editor. No group
-record or new storage key is introduced, and catalogue backups remain separate.
+record or new storage key is introduced, and catalogue storage remains separate.
 
 The preview and PNG use the table's category order within each section, keeping
 the existing relative order of items in each category. Free-form and legacy
@@ -441,12 +442,9 @@ explicit zero, and included states retain their distinct meanings.
   Argentine notation; if grouping does not fit, use an ungrouped amount with the
   same comma decimal separator. If neither representation fits, reject the
   conversion without truncation, partial changes or a different amount.
-- The personal-catalogue editor applies the same explicit conversion to its
-  manual sale price using the open quotation rate passed by the app. It retains
-  a round-trip anchor only within that editor session and does not persist a new
-  catalogue field. Supplier list prices, costs and historical reference amounts
-  retain their source currency and are not converted by this action. Selecting
-  a catalogue product still copies its approved price and currency together.
+- Supplier list prices, costs and historical reference amounts retain their
+  source currency. Selecting a catalogue product copies its approved price and
+  currency together; quotation edits do not convert or update catalogue prices.
 - The rate states how many ARS equal one USD, using Argentine separators, a
   positive value, and up to six decimal places. An automatic-mode quotation requests DolarAPI
   blue sale through the server automatically when its saved fetch reference is
@@ -511,7 +509,7 @@ selected automatically. Deleted or ineligible rows contribute nothing. A discoun
 with no eligible base requires review rather than inventing a base or expanding
 its selection. Current recovery validates discount metadata; older quotations
 without it remain undiscounted and reading data never activates a discount.
-"Nuevo presupuesto" starts without a discount. Catalogue backups and previously
+"Nuevo presupuesto" starts without a discount. Catalogue storage and previously
 stored quotation-library bytes remain independent.
 
 ## Local persistence and privacy
@@ -528,9 +526,13 @@ button or hourly catalogue polling. There is no quotation upload, analytics, or
 synchronization of locally approved prices.
 
 The header contains the brand and editable quotation details. Below the template
-and contact footer, always-visible buttons open "Pegar codigos o nombres",
-"Mi catalogo" and "Nuevo presupuesto", including when the quotation is empty.
+and contact footer, always-visible buttons open "Pegar codigos o nombres"
+and "Nuevo presupuesto", including when the quotation is empty.
 Each action opens its existing secondary workflow.
+The personal catalogue manager is not mounted. Its add, edit, delete, source
+import and backup import/export controls, including the alternative
+"Revisar catalogo" storage-error action, are unavailable. Existing local products,
+prices and cache remain available for selection without deletion or migration.
 "Nuevo presupuesto" replaces only the
 current quotation, confirming before content or an unreadable recovery record is
 replaced. It preserves the catalogue, approved prices and legacy workspace key.
@@ -559,7 +561,7 @@ not automatically archive it; previously stored library bytes remain intact.
 
 When `luquisound.catalog.v1` is absent, the app may seed its catalogue from a
 validated legacy `luquisound.workspace.v1`. It does not reopen old quotations.
-The legacy key is never rewritten or deleted, including during import.
+The legacy key is never rewritten or deleted.
 Invalid legacy data is not used as a catalogue source.
 
 This is individual browser storage, not shared or access-controlled cloud storage.
@@ -567,10 +569,12 @@ Browser clearing, private mode, device loss, or origin changes can remove access
 The app does not encrypt local data. Backups can contain private business data
 and must be stored privately; no backup belongs in the public repository.
 
-Catalogue backups preserve approved prices, currencies, item IDs, metadata, and
-provenance without loss. They use the existing Workspace v1 envelope with
-`quotations: []` and `activeQuotationId: null`. Import replaces the catalogue
-after confirmation. A compatible old full-workspace backup contributes only its
+Compatible catalogue backup helpers preserve approved prices, currencies, item
+IDs, metadata, and provenance without loss. They use the existing Workspace v1
+envelope with
+`quotations: []` and `activeQuotationId: null`. These formats remain supported by
+the parsers and serializers; the app offers no catalogue import/export workflow.
+A compatible old full-workspace backup contributes only its
 catalogue; no quotation is restored and the current quotation is unchanged. This
 lossless backup path is distinct from the `luquisound.catalog` private source format,
 which merges source records without importing manually approved sale amounts.
@@ -578,8 +582,9 @@ which merges source records without importing manually approved sale amounts.
 JSON validation checks schema, version, identities, dates, field lengths, and a
 5 MiB limit; unknown properties are discarded. Corrupt stored data is not
 overwritten automatically. An unreadable current recovery record remains intact.
-Resetting an unreadable catalogue or resuming paused saving requires an explicit
-user action. Save failures remain visible and isolated to their store.
+The app offers no catalogue reset or resume control. A paused or unreadable
+catalogue remains protected; reloading reads the current stored state again.
+Save failures remain visible and isolated to their store.
 Changes from another tab pause saving for
 the affected store to avoid silently overwriting its work. Current recovery and
 catalogue writes also compare their expected stored bytes again immediately
@@ -598,8 +603,8 @@ explicit reviewed list price, and the corresponding currency together, including
 an explicit zero. Without either price, one
 unambiguous explicit currency across its source references supplies the row
 default without copying any amount; missing or conflicting reference currencies
-fall back to the catalogue entry's currency. Editing or removing that entry later
-does not change the current quotation's row prices or currencies. A catalogue
+fall back to the catalogue entry's currency. Later catalogue updates or removals
+do not change the current quotation's row prices or currencies. A catalogue
 refresh can still invalidate a protected product's availability and block image
 delivery until that row is reviewed.
 
@@ -610,7 +615,7 @@ app. Its save, open, duplicate, delete, backup and import workflows are not
 available. Existing `luquisound.quotation-library.v1` bytes are not read,
 rewritten or deleted by normal app use; removing the UI does not migrate or erase
 previously stored quotations. Current-quotation recovery, compatible frozen-rate
-metadata and private catalogue backups remain independent.
+metadata and catalogue storage remain independent.
 
 A quotation connection to Sheets or Drive is future work and is not implemented.
 No quotation is uploaded or synchronized through those services. The existing
@@ -621,22 +626,21 @@ commit supplier lists, discounts, internal costs, customers, real quotations, or
 secrets. Deployment protection and access for intended users must be checked
 separately; the application does not add a frontend PIN or claim one is security.
 
-## Optional private catalogue
+## Private catalogue selection
 
-No catalogue data is embedded in the public application. Product selection stays
-in the row editor; catalogue management is available through the "Mi catalogo"
-button below the contact footer and from a storage-error notice. A configured
-private endpoint loads the common catalogue automatically.
-A private JSON file can also be imported after a summary and explicit confirmation.
-The catalogue combines a category filter with SKU, brand, and name search, ranks
-exact SKU matches first, and limits rendered
-results for mobile use. Both the catalogue editor and quotation product picker
-derive category options from their available data. "Todas" clears the filter;
+No catalogue data is embedded in the public application. A configured private
+endpoint loads the common catalogue automatically. Product selection stays in
+the row editor and reviewed bulk entry. There is no personal catalogue manager
+or manual file import/backup UI; existing local entries and prices are retained.
+The product picker combines a category filter with SKU, brand, and name search,
+ranks exact SKU matches first, and limits rendered
+results for mobile use. The quotation product picker derives category options
+from its available data. "Todas" clears the filter;
 missing categories appear as "Sin clasificar". No provider taxonomy or automatic
-category assignment is bundled. Manual concepts remain independent. Import
+category assignment is bundled. Manual concepts remain independent. Common loading
 matches normalized supplier and SKU, preserves approved manual prices, and does
-not change the current quotation's row values. Conflicts and records without a
-complete key are reported before applying changes. See `CATALOG-IMPORT.md` for
+not change the current quotation's row values. Invalid or conflicting shared
+records preserve the last valid local catalogue. See `CATALOG-IMPORT.md` for
 the schema.
 
 Catalogue sections suggest the ordering of choices. Equipment and extras can
@@ -649,8 +653,9 @@ dates remain distinct.
 Only an explicitly confirmed list/sale reference with a known ARS or USD currency
 and at most two decimals may be copied into an editable price. Confirmation copies
 the reference amount and currency together. Costs and unknown roles/currencies
-require manual pricing. Provenance remains in the private
-catalogue UI and backup, never in customer-facing descriptions or images.
+require manual pricing in the quotation. Provenance remains in private selection
+and row details and compatible backup data, never in customer-facing descriptions
+or images.
 
 A reviewed private source can additionally supply an explicit `listPrice`, with
 known ARS or USD currency, at most two decimals, `retail-list-before-discount`
@@ -672,8 +677,8 @@ Optional stock snapshots and selection policies are active. `fresh-positive`
 requires a positive unexpired observation; `historical-positive` also permits
 positive historical stock provisionally. Both require a valid manual or reviewed
 list price. Explicit selection blocks take precedence. Zero, negative, unknown,
-stale or future stock cannot qualify. Entries remain visible in catalogue
-management through "Mostrar no habilitados", with quantity, age, source date and
+stale or future stock cannot qualify. Entries remain visible in the product
+picker through "Mostrar no habilitados", with quantity, age, source date and
 a textual eligibility reason;
 independent manual concepts remain available. Historical records can have unknown
 observation dates and never become fresh at import time.
@@ -687,7 +692,7 @@ The picker, bulk review and open quotation check availability again as time pass
 and before image preparation or delivery. The latest matching catalogue snapshot
 is authoritative for availability but never replaces a row's prices. A blocked
 existing row remains editable and saved, but blocks image export. Historical
-source details remain in the private catalogue and row provenance workflows;
+source details remain in the private selection and row provenance workflows;
 there is no global historical-source banner above the template. Provisional
 availability still adds only "Disponibilidad a confirmar." to the customer image,
 without exposing stock quantities or source details.
@@ -732,7 +737,8 @@ reports an error instead of exporting missing branding or fallback typography.
 
 Run typecheck, lint, calculation/persistence/export tests, and build. Check mobile
 and desktop layouts, long text, many rows, pending/zero/included states, decimal
-input, invalid values, current-quotation recovery, catalogue backups, legacy
+input, invalid values, current-quotation recovery, catalogue cache preservation,
+compatible backup helpers, legacy
 catalogue extraction, manual discount selection/rounding/recovery, untouched
 legacy-library bytes and frozen recovery rates,
 concurrent-tab conflicts, corrupt storage, failed saves, reviewed bulk matching, stock expiry,

@@ -8,9 +8,9 @@ reconnection check that daily cycle; there is no refresh/retry button. Every new
 device receives the configured common product catalogue without a file picker.
 The endpoint is read-only. The app does not upload quotations or manual price
 edits, and those edits are not synchronized between devices.
-Manual catalogue management and its backups remain available through
-"Opciones" > "Mi catalogo", while product selection stays in the row editor.
-The initial quotation view does not show a prominent catalogue toolbar.
+The personal catalogue manager and manual file import/backup controls are not
+mounted. Product selection stays in the row editor and reviewed bulk entry;
+existing local products, approved prices and cache remain available.
 
 Common records need a complete, unique supplier and SKU key. Merging is atomic:
 local identities, approved prices (including zero), currencies, personal entries,
@@ -18,13 +18,14 @@ and current quotation row values are preserved. Common metadata, reviewed list
 prices, stock observations, selection policies and historical references can be
 updated. By default, entries absent from the common file remain
 in the local catalogue. Conflicts or limits retain the previous local catalogue
-until the next daily cycle. Missing configuration retains manual file import and local use.
+until the next daily cycle. Missing configuration retains local selection and
+independent manual quotation entry, without a manual file import UI.
 
 A reviewed private JSON can opt into `replaceSourceDocuments`, using the same
 [explicit source replacement contract](CATALOG-IMPORT.md#explicit-source-replacement)
-as manual import. Only entries with primary source documents exactly listed in
-that manifest can be removed, and only when their supplier/SKU key is absent from
-the incoming items. Retained in-scope products replace old metadata and historical
+as the compatible import helpers. Only entries with primary source documents
+exactly listed in that manifest can be removed, and only when their supplier/SKU
+key is absent from the incoming items. Retained in-scope products replace old metadata and historical
 references while keeping local IDs, approved prices and currencies. Source-less
 manual entries and unrelated primary sources are outside the removal scope.
 Incomplete or ambiguous scoped keys block the entire replacement. Empty items
@@ -32,10 +33,10 @@ retire entries only with an explicit valid source scope; an ordinary empty file
 changes nothing. Removal-only updates are saved normally.
 
 Local copies and approved prices use `luquisound.catalog.v1`, independently of
-the single current quotation's recovery snapshot. Private catalogue JSON backups
-preserve IDs, approved prices, and provenance. Backup import replaces the
-catalogue after confirmation; an old workspace backup contributes only its
-catalogue and never restores quotations.
+the single current quotation's recovery snapshot. Compatible catalogue JSON
+backup helpers retain IDs, approved prices and provenance; an old workspace
+backup parser extracts only its catalogue and never restores quotations.
+These formats have no import/export controls in the current UI.
 The legacy `luquisound.workspace.v1` storage key remains untouched.
 An explicit `refreshSuppliers` scope replaces source-owned stock, reviewed list
 price, policy and block fields, including omitted values, without deleting absent
@@ -59,9 +60,9 @@ private JSON schema. Protected product selection is active: positive eligible
 stock and a valid price are required. Historical-positive policy remains
 provisional, while fresh-positive requires an unexpired current observation.
 Zero, negative, unknown, stale or future stock and explicit blocks prevent
-selection. The manager retains excluded entries for review, and independent
-manual concepts remain available. A common update can block image delivery for
-an existing row without changing that row's saved amount, currency or private
+selection. The product picker can show excluded entries for review, and
+independent manual concepts remain available. A common update can block image
+delivery for an existing row without changing that row's saved amount, currency or private
 original source trace. Stock quantities and source details never appear in
 customer images; provisional usage adds only an availability warning.
 
@@ -125,9 +126,9 @@ It requires explicit authorization after the code and local checks are reviewed.
    blocked and an authorized session receives the valid catalogue.
 5. Open two fresh authorized browser profiles. Both must receive the catalogue
    without importing a file. Confirm reload, manual-price preservation,
-   catalogue-backup recovery, reviewed list/manual-price precedence, stock-only
-   updates, blocked-product handling, private row trace and continued local use when the
-   source is temporarily unavailable.
+   existing catalogue cache and product preservation, reviewed list/manual-price
+   precedence, stock-only updates, blocked-product handling, private row trace
+   and continued local use when the source is temporarily unavailable.
 6. Verify the intended access and automatic load on Android and Lucas's iPhone.
 
 Local Vite development and preview serve the frontend only. Full local checks

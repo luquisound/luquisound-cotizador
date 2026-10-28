@@ -109,8 +109,8 @@ are preserved. Other providers and personal entries retain their existing rules.
 `replaceSourceDocuments` remains a separate legacy import contract.
 
 No refresh writes quotation rows, selected prices, conversion anchors, the saved
-rate or the quotation library. Open catalogue editors retain their draft and
-conflict checks. Bulk review requires a new review if its catalogue changed.
+rate or the quotation library. Bulk review requires a new review if its catalogue
+changed.
 
 ## Conditional writes and recovery
 

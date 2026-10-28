@@ -1,13 +1,13 @@
 # Private catalogue import contract
 
-The application imports a privately supplied JSON document into the personal
-browser catalogue. The JSON file, extracted source material, and commercial data
+The shared catalogue and compatible import helpers use this private JSON
+contract. The JSON file, extracted source material, and commercial data
 must remain outside the public repository and client bundle. This document uses
 synthetic examples only. No network request or price lookup is part of import.
 
-Manual file import is available inside "Opciones" > "Mi catalogo"; it does not
-add a prominent control to the quotation's initial view.
-This document describes manual file import. The same schema also supplies the
+The personal catalogue manager and manual file import/backup controls are not
+mounted in the current app. This document describes the retained schema and
+merge helpers, not an available manual import workflow. The schema supplies the
 automatic common catalogue through a protected endpoint. That service requires
 complete, unique supplier and SKU keys and applies common updates automatically
 while preserving local sale prices. See [shared catalogue setup](SHARED-CATALOG.md).
@@ -271,7 +271,8 @@ quotation unchanged. The quotation recovery snapshot is stored separately.
 `buildCatalogImportPreview(existing, document)` returns additions, proposed
 updates, removals, unchanged entries, conflicts, a summary, a `replacesSources`
 flag, and a baseline snapshot.
-The UI must show this preview and obtain confirmation before applying changes.
+A future manual import UI must show this preview and obtain confirmation before
+applying changes; the automatic common catalogue uses its separate contract.
 `summary` contains `received`, `additions`, `updates`, `removals`, `unchanged`, `conflicts`,
 `duplicateRows`, and `withoutKey`. Conflict `itemIndexes` are zero-based indexes
 in the original input; conflicts are counted as groups, not individual rows.
@@ -287,17 +288,17 @@ is also a conflict. Neither chooses an arbitrary winner. Conflicted records are
 skipped; other unambiguous records can still be imported after review.
 
 Without a complete supplier/SKU key, records are only added; they never update
-an existing name match. Reimporting such records can add duplicates, so the UI
-must display the `withoutKey` warning before confirmation. Exact repeats inside
-the same file are still collapsed. A names-only catalogue is supported without
-pretending the names prove product identity.
+an existing name match. Reimporting such records can add duplicates, so any manual
+import UI must display the `withoutKey` warning before confirmation. Exact
+repeats inside the same file are still collapsed. A names-only catalogue is
+supported without pretending the names prove product identity.
 
 `applyCatalogImport(existing, preview, { allowUpdates })` returns a new catalogue.
 With `allowUpdates: false`, it adds new records and leaves proposed updates
 untouched. With explicit update approval, it updates descriptions and metadata
 while preserving each existing ID, approved `unitPrice`, and current-price
 currency. Empty or omitted optional descriptions, brand, category, unit, and
-presentation do not erase known values; use manual editing to clear those fields.
+presentation do not erase known values.
 Nonempty imported values can update them after confirmation. Historical
 references are accumulated without exact duplicates, including source in their
 identity. Equal prices from different documents retain separate references and
@@ -384,10 +385,12 @@ entries without complete keys or with ambiguous duplicate keys block replacement
 Incoming conflicts also block the entire operation, preserving the previous
 catalogue. Unlike a normal additive import, replacement cannot skip conflicts or
 apply additions only: `applyCatalogImport` requires `allowUpdates: true` and a
-conflict-free preview. The import UI displays removals and confirms the complete
-replacement together. Item and byte limits are checked after the scoped removals.
+conflict-free preview. Any future manual import UI must display removals and
+confirm the complete replacement together. Item and byte limits are checked
+after the scoped removals.
 
-The same manifest is used by manual imports and the automatic common catalogue.
+The same manifest is supported by import helpers and the automatic common
+catalogue.
 It adds no persistent ownership flags or new storage keys. Unattributed old entries
 cannot safely be classified as imported and remain outside the removal scope.
 
@@ -398,11 +401,11 @@ brand, category, unit, presentation, source, references, reviewed list price,
 stock and selection policy metadata. The
 model and persistence whitelist must preserve and validate these fields; earlier
 version-1 backups without them remain compatible catalogue sources. Source import
-merges only catalogue data. Catalogue-backup import is a separate confirmed
-replacement operation that preserves approved prices, IDs, currencies, and
-provenance from the backup. It accepts the Workspace v1 envelope; compatible old
-full-workspace backups contribute only their catalogue and never restore quotations.
-New backups contain
+merges only catalogue data. Compatible catalogue-backup parsing preserves
+approved prices, IDs, currencies, and provenance from the backup. It accepts
+the Workspace v1 envelope; compatible old full-workspace backups contribute only
+their catalogue and never restore quotations.
+The retained backup serializer writes
 `quotations: []` and `activeQuotationId: null`. Neither path changes the current
 quotation or rewrites or deletes the legacy `luquisound.workspace.v1` storage key.
 

@@ -110,8 +110,8 @@ export function saveCatalog(
     return { ok: false, error: 'El catálogo excede el tamaño o el formato permitido para el guardado.', raw: null, conflict: false }
   }
   return saveWorkingValue(storage, CATALOG_STORAGE_KEY, text, options, parseStoredCatalog, CATALOG_READ_ERROR,
-    'No se pudo guardar el catálogo en este navegador. Descargá un respaldo del catálogo.',
-    'Otra pestaña cambió el catálogo. Su guardado se pausó para evitar sobrescribirlo. Conservá un respaldo antes de habilitarlo.')
+    'No se pudo guardar el catálogo en este navegador. Las opciones disponibles siguen en esta pestaña.',
+    'Otra pestaña cambió el catálogo. Su guardado se pausó para evitar sobrescribirlo. Recargá para usar los datos guardados por la otra pestaña.')
 }
 
 export function saveCurrentQuotation(
