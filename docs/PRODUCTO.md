@@ -414,9 +414,9 @@ Dragging shows the destination and scrolls near viewport edges. A successful
 drop applies one change. Escape, pointer cancellation, loss of window focus or
 page visibility discards the drag.
 
-Right-clicking, holding and releasing without moving, or pressing Shift+F10 or
-the context-menu key exposes explicit Up/Down actions without permanent visible
-controls. Keyboard dragging, visible focus and Spanish screen-reader
+Holding and releasing without moving leaves the order unchanged. There are no
+Up/Down buttons or quotation ordering menus on right-click, Shift+F10 or the
+context-menu key. Keyboard dragging, visible focus and Spanish screen-reader
 instructions and announcements remain available.
 
 Optional `Quotation.blockOrder` stores stable `category:<id>` and `row:<id>`

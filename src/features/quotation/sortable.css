@@ -38,45 +38,9 @@
   -webkit-touch-callout: default;
 }
 
-.quotation-sortable-item:focus-visible,
-.quotation-sortable-steps button:focus-visible {
+.quotation-sortable-item:focus-visible {
   outline: 3px solid #101010;
   outline-offset: -3px;
-}
-
-.quotation-sortable-steps {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 5;
-  display: flex;
-  padding: 4px;
-  border: 1px solid #c7c7c7;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 4px 12px #0002;
-  white-space: nowrap;
-}
-
-.quotation-sortable-steps button {
-  min-width: 78px;
-  min-height: 48px;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 4px;
-  color: #101010;
-  background: #fff;
-  font: inherit;
-  cursor: pointer;
-}
-
-.quotation-sortable-steps button:hover:not(:disabled) {
-  background: #ffda00;
-}
-
-.quotation-sortable-steps button:disabled {
-  color: #777;
-  cursor: default;
 }
 
 .quotation-sortable-item.is-drag-source {
