@@ -90,6 +90,7 @@ export interface Quotation {
   exchangeRateMode?: 'automatic' | 'frozen'
   discount?: QuotationDiscount
   blockOrder?: string[]
+  rowOrder?: string[]
   rows: QuotationRow[]
   notes: string
   createdAt: string
@@ -190,6 +191,10 @@ export function duplicateQuotation(quotation: Quotation): Quotation {
     ...(quotation.blockOrder ? { blockOrder: quotation.blockOrder.map((id) => (
       id.startsWith('row:') ? `row:${rowIds.get(id.slice(4)) ?? id.slice(4)}` : id
     )) } : {}),
+    ...(quotation.rowOrder ? { rowOrder: quotation.rowOrder.flatMap((id) => {
+      const copiedId = rowIds.get(id)
+      return copiedId ? [copiedId] : []
+    }) } : {}),
     ...(quotation.discount ? { discount: {
       ...quotation.discount, rowIds: quotation.discount.rowIds.map((id) => rowIds.get(id) ?? id),
     } } : {}),

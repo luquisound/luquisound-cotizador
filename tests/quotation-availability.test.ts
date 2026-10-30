@@ -51,6 +51,21 @@ test('availability issue numbers follow the custom grouped category order', () =
   assert.match(inspectQuotationAvailability(quote, [item(0)], now).issues[0]!, /^Fila 2:.*cero/)
 })
 
+test('availability issue numbers follow free row positions across categories and ignore hidden rows', () => {
+  const quote = quotation()
+  const selected = quote.rows[0]!
+  selected.audioCategory = 'subwoofer'
+  const front = { ...createRow(), concept: 'Synthetic front', audioCategory: 'speakers' as const, unitPrice: '10', priceState: 'priced' as const }
+  const amplifier = { ...createRow(), concept: 'Synthetic amplifier', audioCategory: 'amplifier-dsp' as const, unitPrice: '10', priceState: 'priced' as const }
+  const hidden = createRow()
+  quote.rows = [selected, amplifier, hidden, front]
+  quote.blockOrder = ['category:subwoofer', 'category:speakers', 'category:amplifier-dsp']
+  quote.rowOrder = [front.id, hidden.id, amplifier.id, selected.id]
+  const snapshot = structuredClone(quote)
+  assert.match(inspectQuotationAvailability(quote, [item(0)], now).issues[0]!, /^Fila 3:.*cero/)
+  assert.deepEqual(quote, snapshot)
+})
+
 test('latest matching catalogue availability blocks zero, negative, unknown and explicitly quarantined products', () => {
   const quote = quotation(item(3, true))
   for (const [quantity, expected] of [[0, /cero/], [-2, /negativo/], [null, /verificable/]] as const) {

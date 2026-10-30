@@ -103,7 +103,7 @@ export function inspectQuotationAvailability(
 ): QuotationAvailability {
   const issues: string[] = []
   let hasProvisional = false
-  const rows = orderQuotationRows(quotation.rows, quotation.blockOrder).filter((row) => !isEmptyRow(row))
+  const rows = orderQuotationRows(quotation.rows, quotation.blockOrder, quotation.rowOrder).filter((row) => !isEmptyRow(row))
   for (const [index, row] of rows.entries()) {
     const item = getRowAvailabilityItem(row, catalog)
     if (!item) continue

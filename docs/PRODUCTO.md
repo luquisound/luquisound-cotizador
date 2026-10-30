@@ -176,8 +176,8 @@ is inserted; a plus sign explicitly typed as part of the title is retained.
 
 ## Optional audio categories
 
-Equipment keeps optional groups. Installation uses optional direct concepts in
-the corresponding stored category order:
+Equipment keeps optional category metadata. Installation uses optional direct
+concepts. The default order within each parent section is:
 
 | Equipment | Installation and accessories |
 | --- | --- |
@@ -301,8 +301,8 @@ Cables and labour accept one concept for new entries or reclassification; an
 occupied category directs the user to edit it. Existing repeated concepts in
 those categories remain editable and are never merged or removed automatically.
 The harness suggestion disappears when occupied, but another harness can still
-be classified manually. Installation omits standalone category headings, while
-declared adapter variants use a common product heading. "Otro concepto" remains
+be classified manually. The preview shows only the two parent section headings;
+each item uses its own product name. "Otro concepto" remains
 a secondary repeatable action for manual or catalogue entry. Add controls fill
 their own row width with a minimum 48-pixel height without covering neighbouring
 rows or price controls. Unused suggestions create no quotation rows, prices,
@@ -381,13 +381,12 @@ must retain its own source amount and original line rounding when switching back
 The 1000-row limit applies to the resulting rows, allowing an exact accumulation at the
 limit. Editing, recovering or reloading rows never triggers accumulation.
 
-Declared variants share a visual "Aros adaptadores 3D" block with their size,
-quantity, presentation and meaningful descriptions. Every source row remains
-independently editable and removable. ARS and USD summaries stay separate;
-pending, explicit zero and included states remain distinct. Summary amounts
-sum already-rounded source line amounts without calculating a common price or
-converting currencies. In the PNG the same breakdown is plain text, without
-editing controls. Text wraps and increases the image height rather than clipping.
+Declared variants display as individual rows with their product name, size,
+quantity, sale presentation, meaningful details and native rounded line amount.
+Every source row remains independently movable, editable and removable, including
+variants separated by another accessory. Pending, explicit zero and included
+states remain distinct. The PNG uses the same individual rows without editing
+controls. Text wraps and increases the image height rather than clipping.
 
 Optional variant metadata is validated and recovered alongside its row. Missing,
 invalid or incompatible metadata is omitted without losing the original row.
@@ -398,18 +397,18 @@ record or new storage key is introduced, and catalogue storage remains separate.
 Without a saved order, the preview and PNG use the table's category order within
 each section, keeping the existing relative order of items in each category.
 Free-form and legacy unclassified concepts initially follow categorized items.
-Users can reorder occupied category blocks and individual free-form concepts
-within their original section. Categories stay grouped; rows inside a category
-can be reordered independently. Declared adapter variants remain together and
-can be reordered within their shared block, separately from generic legacy aros.
+Users can move each item to any position within its original parent section,
+including between items of other audio categories. This also applies to manual
+concepts, generic legacy adapters and declared adapter variants. Moving changes
+layout only, never the row's section or category. Categories do not force items
+to stay together, and subcategory headings are not repeated in the preview.
 Empty suggestions and add actions are not draggable quotation content.
 
 Dragging starts directly on an item after a small mouse movement, or a 250 ms
 touch hold followed by movement. There are no separate grips, control strips or
 reserved gutters. Short description and price taps retain their editing actions;
-an early vertical swipe scrolls the page normally. Category headings move their
-whole block, while individual rows in a category with several items move inside
-that category. Declared adapter variants move inside their shared block.
+an early vertical swipe scrolls the page normally. Each parent section has one
+sortable list of individual rows, and dragging cannot cross between the parents.
 Dragging shows the destination and scrolls near viewport edges. A successful
 drop applies one change. Escape, pointer cancellation, loss of window focus or
 page visibility discards the drag.
@@ -419,19 +418,32 @@ Up/Down buttons or quotation ordering menus on right-click, Shift+F10 or the
 context-menu key. Keyboard dragging, visible focus and Spanish screen-reader
 instructions and announcements remain available.
 
-Optional `Quotation.blockOrder` stores stable `category:<id>` and `row:<id>`
-block identities; source row order stores the order within a category. Recovery
-validates bounded metadata without migrating older quotations or modifying the
-catalogue, legacy workspace or quotation-library stores. Unknown references are
-ignored, deleted free-row references are pruned on reorder, and new blocks append
-after the saved order. Moves preserve row identities, prices, currencies,
-discount selections, provenance and harness selection. An inactive harness is
-not draggable; its remembered category position can be reused on activation.
+Optional `Quotation.rowOrder` stores up to 1000 row IDs without changing the source
+`rows` array. A saved row order takes precedence over compatible legacy
+`Quotation.blockOrder` metadata. Recovery validates and deduplicates bounded
+metadata without migrating older quotations or modifying the catalogue, legacy
+workspace or quotation-library stores. Unknown references are ignored, deleted
+references are pruned on reorder, and new rows append within their parent section
+in source order. Moves preserve row identities, prices, currencies, discount
+selections, provenance and harness selection. An inactive harness is not draggable;
+its remembered row position can be reused on activation.
+
+Below the template and contact footer, a combined control has two adjacent actions:
+"Restaurar orden predeterminado" and an undo arrow labelled
+"Deshacer restauracion del orden". Restore removes visual row and legacy block
+overrides for both sections, returning to canonical category order and stable
+source order within each category. It is disabled when the visible order already
+matches that default. Earlier versions reordered source rows directly, so their
+prior insertion order cannot be reconstructed; their stored relative order is the
+compatible base. The arrow is enabled only after a successful restoration and
+recovers its exact preceding layout, retaining later price, text and rate edits.
+Undo is in-memory for the current quotation and expires after use, another move,
+row addition/removal, reclassification, a row visibility change or reload.
 
 Preview, validation issue numbers and PNG use the same order of nonempty
-concepts, including the contiguous declared-adapter breakdown. A committed move
-invalidates a prepared image; a cancelled or unchanged drag does not. PNG output
-contains entered concepts and declared adapter groups under the existing two
+concepts. A committed move, restore or undo invalidates a prepared image when
+the order changes; a cancelled or unchanged drag does not. PNG output
+contains individual entered concepts and adapter variants under the existing two
 section headings; unused category labels, empty suggestions and controls are
 omitted. Physical Android and iPhone acceptance remains distinct from browser
 touch emulation.
@@ -567,7 +579,8 @@ synchronization of locally approved prices.
 
 The header contains the brand and editable quotation details. Below the template
 and contact footer, always-visible buttons open "Pegar codigos o nombres"
-and "Nuevo presupuesto", including when the quotation is empty.
+and "Nuevo presupuesto", including when the quotation is empty. The combined
+restore/undo order control sits between those actions.
 Each action opens its existing secondary workflow.
 The personal catalogue manager is not mounted. Its add, edit, delete, source
 import and backup import/export controls, including the alternative

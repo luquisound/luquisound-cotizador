@@ -123,7 +123,7 @@ export function calculateQuotation(quotation: Quotation): QuotationCalculation {
   if (!quotation.title.trim()) issues.push('Ingresá un título para el presupuesto.')
   const rows: CalculatedRow[] = []
   const subtotals = { ARS: 0n, USD: 0n }
-  const orderedRows = orderQuotationRows(quotation.rows, quotation.blockOrder).filter((row) => !isEmptyRow(row))
+  const orderedRows = orderQuotationRows(quotation.rows, quotation.blockOrder, quotation.rowOrder).filter((row) => !isEmptyRow(row))
   for (const [index, row] of orderedRows.entries()) {
     const calculated = calculateRow(row)
     rows.push(calculated)

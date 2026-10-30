@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { calculateQuotation } from '../src/features/quotation/calculation.ts'
+import { calculateQuotation, calculateRow } from '../src/features/quotation/calculation.ts'
 import {
-  adapterVariantAmount, adapterVariantDescription, buildQuotationPresentation,
+  adapterVariantQuantity, buildQuotationPresentation, presentQuotationRow,
 } from '../src/features/quotation/presentation.ts'
-import type { AdapterPresentationBlock } from '../src/features/quotation/presentation.ts'
 import type { Quotation, QuotationRow } from '../src/features/quotation/model.ts'
 
 function adapter(id: string, changes: Partial<QuotationRow> = {}): QuotationRow {
@@ -16,101 +15,103 @@ function adapter(id: string, changes: Partial<QuotationRow> = {}): QuotationRow 
   }
 }
 
-function present(rows: QuotationRow[]) {
-  const quotation: Quotation = {
+function quotation(rows: QuotationRow[], rowOrder?: string[]): Quotation {
+  return {
     id: 'synthetic', title: 'PRESUPUESTO', subtitle: '', currency: 'ARS', exchangeRate: '1000',
-    rows, notes: '', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+    rows, rowOrder, notes: '', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
   }
-  return buildQuotationPresentation(calculateQuotation(quotation).rows)
 }
 
-function onlyGroup(rows: QuotationRow[]): AdapterPresentationBlock {
-  const result = present(rows)
-  assert.equal(result.length, 1)
-  const block = result[0]
-  assert.equal(block.kind, 'adapters')
-  if (block.kind !== 'adapters') throw new Error('Expected an adapter group.')
-  return block
-}
-
-test('groups explicit adapter variants with quantities, sale presentations and native subtotal', () => {
+test('presents each explicit adapter independently with its own quantity, presentation and rounded amount', () => {
   const rows = [
     adapter('small', { quantity: '2', adapterVariant: { productKey: 'small', size: '6,5', presentation: 'pair' } }),
     adapter('large', { quantity: '3', adapterVariant: { productKey: 'large', size: '8', presentation: 'set' } }),
   ]
   const snapshot = structuredClone(rows)
-  const block = onlyGroup(rows)
-  assert.equal(block.title, 'Aros adaptadores 3D')
-  assert.deepEqual(block.details, ['2 pares × 6,5″ · $ 200,00', '3 juegos × 8″ · $ 300,00'])
-  assert.deepEqual(block.amounts, ['$ 500,00'])
-  assert.deepEqual(block.items.map(({ row }) => row.id), ['small', 'large'])
-  assert.equal(block.pending, false)
+  const calculated = calculateQuotation(quotation(rows)).rows
+  const result = buildQuotationPresentation(calculated)
+  assert.equal(result.length, 2)
+  assert.deepEqual(result.map(({ concept, quantity }) => [concept, quantity]), [
+    ['Aros adaptadores 3D', '2 pares × 6,5″'], ['Aros adaptadores 3D', '3 juegos × 8″'],
+  ])
+  assert.deepEqual(result.map(({ item }) => item.lineTotalCents), [20000, 30000])
+  assert.equal(result[0].item, calculated[0])
+  assert.equal(result[1].item, calculated[1])
   assert.deepEqual(rows, snapshot)
 })
 
-test('preserves single quantities, custom descriptions and manual details in the adapter breakdown', () => {
-  const block = onlyGroup([adapter('custom', {
-    concept: 'Aro de prueba reforzado', detail: 'Terminación especial\nDetalle final',
+test('keeps custom product names and details separate from explicit adapter size and quantity', () => {
+  const row = adapter('custom', {
+    concept: ' Aro de prueba reforzado ', detail: ' Terminación especial\nDetalle final ',
     adapterVariant: { productKey: 'custom', size: '6.50', presentation: 'pair' },
-  })])
-  assert.deepEqual(block.details, [
-    '1 par × 6,5″ · Aro de prueba reforzado · Terminación especial\nDetalle final · $ 100,00',
-  ])
+  })
+  const result = presentQuotationRow(calculateRow(row))
+  assert.equal(result.concept, 'Aro de prueba reforzado')
+  assert.equal(result.detail, 'Terminación especial\nDetalle final')
+  assert.equal(result.quantity, '1 par × 6,5″')
+  assert.equal(result.item.row, row)
 })
 
-test('exposes separate adapter descriptions and amounts for individual editing controls', () => {
-  const block = onlyGroup([adapter('editable', { quantity: '2' })])
-  assert.equal(adapterVariantDescription(block.items[0]), '2 unidades × 6,5″')
-  assert.equal(adapterVariantAmount(block.items[0]), '$ 200,00')
-  assert.equal(block.details[0], `${adapterVariantDescription(block.items[0])} · ${adapterVariantAmount(block.items[0])}`)
+test('preserves the resolved sequence without regrouping adapter variants or other categories', () => {
+  const rows = [
+    adapter('large', { adapterVariant: { productKey: 'large', size: '8', presentation: 'unit' } }),
+    adapter('manual', { audioCategory: undefined, adapterVariant: undefined, concept: 'Otro concepto' }),
+    adapter('small'),
+    adapter('wire', { audioCategory: 'cables', adapterVariant: undefined }),
+    adapter('bass', { section: 'equipment', audioCategory: 'subwoofer', adapterVariant: undefined }),
+  ]
+  const calculated = rows.map(calculateRow)
+  const result = buildQuotationPresentation(calculated)
+  assert.deepEqual(result.map(({ item }) => item.row.id), rows.map(({ id }) => id))
+  assert.ok(result.every((entry, index) => entry.item === calculated[index]))
 })
 
-test('sums rounded source rows instead of recalculating a combined quantity', () => {
-  const block = onlyGroup([
+test('uses the saved free row order for separate equipment and interleaved adapter rows', () => {
+  const rows = [
+    adapter('small'),
+    adapter('large', { adapterVariant: { productKey: 'large', size: '8', presentation: 'unit' } }),
+    adapter('work', { audioCategory: 'labor', adapterVariant: undefined }),
+    adapter('bass', { section: 'equipment', audioCategory: 'subwoofer', adapterVariant: undefined }),
+    adapter('speaker', { section: 'equipment', audioCategory: 'speakers', adapterVariant: undefined }),
+    adapter('amp', { section: 'equipment', audioCategory: 'amplifier-dsp', adapterVariant: undefined }),
+  ]
+  const result = buildQuotationPresentation(calculateQuotation(quotation(rows, [
+    'speaker', 'amp', 'bass', 'large', 'work', 'small',
+  ])).rows)
+  assert.deepEqual(result.map(({ item }) => item.row.id), ['speaker', 'amp', 'bass', 'large', 'work', 'small'])
+})
+
+test('retains each rounded native source line instead of combining adapter quantities', () => {
+  const rows = [
     adapter('fraction-a', { quantity: '0,5', unitPrice: '0,01' }),
     adapter('fraction-b', { quantity: '0,5', unitPrice: '0,01' }),
-  ])
-  assert.deepEqual(block.items.map(({ lineTotalCents }) => lineTotalCents), [1, 1])
-  assert.deepEqual(block.amounts, ['$ 0,02'])
+  ]
+  const calculation = calculateQuotation(quotation(rows))
+  const result = buildQuotationPresentation(calculation.rows)
+  assert.deepEqual(result.map(({ item }) => item.lineTotalCents), [1, 1])
+  assert.equal(calculation.nativeTotals.ARS, 2)
 })
 
-test('keeps ARS and USD subtotals separate and included variants explicit', () => {
-  const block = onlyGroup([
+test('keeps currencies, included state and explicit zero distinct on independent adapter rows', () => {
+  const result = buildQuotationPresentation(calculateQuotation(quotation([
     adapter('ars', { quantity: '2' }),
     adapter('usd', { currency: 'USD', unitPrice: '5' }),
     adapter('included', { currency: 'USD', priceState: 'included', unitPrice: '' }),
+    adapter('zero', { unitPrice: '0' }),
+  ])).rows)
+  assert.deepEqual(result.map(({ item }) => [item.row.currency, item.row.priceState, item.lineTotalCents]), [
+    ['ARS', 'priced', 20000], ['USD', 'priced', 500], ['USD', 'included', 0], ['ARS', 'priced', 0],
   ])
-  assert.deepEqual(block.amounts, ['$ 200,00', 'usd 5,00'])
-  assert.equal(block.details[2], '1 unidad × 6,5″ · Incluido')
 })
 
-test('distinguishes included groups from explicitly zero-priced groups', () => {
-  assert.deepEqual(onlyGroup([adapter('included', { priceState: 'included' })]).amounts, ['Incluido'])
-  const zero = onlyGroup([
-    adapter('zero', { unitPrice: '0' }), adapter('included', { priceState: 'included' }),
-  ])
-  assert.deepEqual(zero.amounts, ['$ 0,00'])
-  assert.match(zero.details[0], /\$ 0,00$/)
-  assert.match(zero.details[1], /Incluido$/)
-})
-
-test('marks incomplete adapter groups pending without presenting a partial subtotal as complete', () => {
-  const block = onlyGroup([
+test('preserves individual pending errors without presenting a merged partial amount', () => {
+  const result = buildQuotationPresentation(calculateQuotation(quotation([
     adapter('complete'), adapter('pending', { priceState: 'pending', unitPrice: '' }),
-  ])
-  assert.equal(block.pending, true)
-  assert.deepEqual(block.amounts, ['Pendiente'])
-  assert.match(block.details[0], /\$ 100,00$/)
-  assert.match(block.details[1], /Pendiente$/)
-})
-
-test('guards group subtotals that exceed the safe integer range', () => {
-  const block = onlyGroup([
-    adapter('large-a', { unitPrice: '90071992547409,91' }),
-    adapter('large-b', { unitPrice: '0,01' }),
-  ])
-  assert.equal(block.pending, true)
-  assert.deepEqual(block.amounts, ['Pendiente'])
+  ])).rows)
+  assert.equal(result[0].item.lineTotalCents, 10000)
+  assert.equal(result[1].item.lineTotalCents, null)
+  assert.equal(result[0].item.errors.length, 0)
+  assert.ok(result[1].item.errors.length > 0)
 })
 
 test('formats valid quantity boundaries and fractions without losing their final thousandth', () => {
@@ -118,37 +119,30 @@ test('formats valid quantity boundaries and fractions without losing their final
     ['0,001', '0,001 unidades'], ['1', '1 unidad'], ['123456789,125', '123.456.789,125 unidades'],
     ['9007199254740,991', '9.007.199.254.740,991 unidades'],
   ]) {
-    const block = onlyGroup([adapter('quantity', { quantity, priceState: 'included' })])
-    assert.equal(block.details[0], `${expected} × 6,5″ · Incluido`)
+    const result = presentQuotationRow(calculateRow(adapter('quantity', { quantity, priceState: 'included' })))
+    assert.equal(result.quantity, `${expected} × 6,5″`)
   }
 })
 
-test('preserves legacy adapter rows and ignores absent, invalid or misplaced metadata', () => {
-  const rows = [
+test('preserves legacy adapter text and never infers a size from absent, invalid or misplaced metadata', () => {
+  for (const row of [
     adapter('legacy', { concept: 'Aros antiguos de 6,5 pulgadas', adapterVariant: undefined }),
     adapter('invalid', { adapterVariant: { productKey: 'invalid', size: 'unknown', presentation: 'unit' } }),
     adapter('wrong-category', { audioCategory: 'cables' }),
-  ]
-  const result = present(rows)
-  assert.ok(result.every((item) => item.kind === 'row'))
-  assert.deepEqual(result.map((item) => item.kind === 'row' ? item.item.row.id : ''), [
-    'wrong-category', 'legacy', 'invalid',
-  ])
+  ]) {
+    assert.equal(adapterVariantQuantity(row), undefined)
+    assert.equal(presentQuotationRow(calculateRow(row)).concept, row.concept)
+    assert.equal(presentQuotationRow(calculateRow(row)).quantity, '')
+  }
 })
 
-test('keeps repeated equipment independent and canonical ordering stable around adapter groups', () => {
-  const result = present([
-    adapter('labor', { audioCategory: 'labor', adapterVariant: undefined }),
-    adapter('small'),
-    adapter('bass-a', { section: 'equipment', audioCategory: 'subwoofer', adapterVariant: undefined }),
-    adapter('legacy', { adapterVariant: undefined }),
-    adapter('large', { adapterVariant: { productKey: 'large', size: '8', presentation: 'unit' } }),
-    adapter('bass-b', { section: 'equipment', audioCategory: 'subwoofer', adapterVariant: undefined }),
-  ])
-  assert.deepEqual(result.map((item) => item.kind === 'row' ? item.item.row.id : 'group'), [
-    'bass-a', 'bass-b', 'group', 'legacy', 'labor',
-  ])
-  const group = result[2]
-  assert.equal(group.kind, 'adapters')
-  if (group.kind === 'adapters') assert.deepEqual(group.items.map(({ row }) => row.id), ['small', 'large'])
+test('ordinary quantity summaries and pending adapter quantities remain explicit without altering drafts', () => {
+  const manual = adapter('manual', { adapterVariant: undefined, quantity: '2' })
+  assert.equal(presentQuotationRow(calculateRow(manual)).quantity, 'Cantidad: 2')
+  const pending = adapter('pending', { concept: '', quantity: '' })
+  const snapshot = structuredClone(pending)
+  const result = presentQuotationRow(calculateRow(pending))
+  assert.equal(result.concept, 'Concepto pendiente')
+  assert.equal(result.quantity, 'Cantidad pendiente unidades × 6,5″')
+  assert.deepEqual(pending, snapshot)
 })

@@ -5,9 +5,9 @@ import { calculateQuotation } from '../src/features/quotation/calculation.ts'
 import { createQuotation, createRow, duplicateQuotation } from '../src/features/quotation/model.ts'
 import type { Quotation, QuotationRow } from '../src/features/quotation/model.ts'
 import { parseWorkspace, serializeWorkspace } from '../src/features/quotation/persistence.ts'
-import { buildQuotationPresentation } from '../src/features/quotation/presentation.ts'
 import {
-  getQuotationBlocks, moveQuotationBlock, moveQuotationRow, readQuotationBlockOrder,
+  getQuotationBlocks, hasCustomQuotationOrder, moveQuotationBlock, moveQuotationRow,
+  readQuotationBlockOrder, readQuotationRowOrder, restoreQuotationOrder,
 } from '../src/features/quotation/quotation-order.ts'
 import {
   CURRENT_QUOTATION_STORAGE_KEY, loadCurrentQuotation, saveCurrentQuotation,
@@ -33,7 +33,7 @@ function quote(): Quotation {
 }
 
 function ids(quotation: Quotation): string[] {
-  return orderQuotationRows(quotation.rows, quotation.blockOrder).map((entry) => entry.id)
+  return orderQuotationRows(quotation.rows, quotation.blockOrder, quotation.rowOrder).map((entry) => entry.id)
 }
 
 test('legacy quotations retain canonical grouped display order without changing their source rows', () => {
@@ -67,10 +67,10 @@ test('category and free-row blocks move within their section while preserving al
   assert.deepEqual(after.totals, before.totals)
   assert.deepEqual(after.discount, before.discount)
   assert.deepEqual(quotation, original)
-  assert.deepEqual(buildQuotationPresentation(after.rows, moved.blockOrder).map((item) => item.kind === 'row' ? item.item.row.id : 'adapters'), ids(moved))
+  assert.deepEqual(after.rows.map((item) => item.row.id), ids(moved))
 })
 
-test('category rows reorder independently without moving unrelated source rows or metadata', () => {
+test('row moves save a visual order without moving source rows or metadata', () => {
   const quotation = quote()
   quotation.rows[0]!.currencyConversionOrigin = {
     version: 1, sourceCurrency: 'ARS', sourceUnitPrice: '10000', exchangeRate: '1000',
@@ -78,16 +78,15 @@ test('category rows reorder independently without moving unrelated source rows o
   }
   const moved = moveQuotationRow(quotation, 'front', 'rear')
   assert.deepEqual(ids(moved), ['bass', 'front', 'rear', 'custom-a', 'custom-b', 'cables', 'work'])
-  assert.equal(moved.rows[0], quotation.rows[4])
-  assert.equal(moved.rows[4], quotation.rows[0])
-  for (const index of [1, 2, 3, 5, 6]) assert.equal(moved.rows[index], quotation.rows[index])
-  assert.equal(moved.rows[4]!.currencyConversionOrigin, quotation.rows[0]!.currencyConversionOrigin)
+  assert.equal(moved.rows, quotation.rows)
+  assert.equal(moved.rows[0]!.currencyConversionOrigin, quotation.rows[0]!.currencyConversionOrigin)
+  assert.deepEqual(moved.rowOrder, ['bass', 'front', 'rear', 'custom-a', 'custom-b', 'cables', 'work'])
   assert.equal(moved.blockOrder, undefined)
 })
 
-test('invalid targets, identical positions and cross-section or cross-category moves are no-ops', () => {
+test('invalid targets, identical positions and cross-section moves are no-ops', () => {
   const quotation = quote()
-  for (const [active, over] of [['front', 'front'], ['front', 'missing'], ['front', 'bass'], ['front', 'work'], ['custom-a', 'custom-b']]) {
+  for (const [active, over] of [['front', 'front'], ['front', 'missing'], ['front', 'work']]) {
     assert.equal(moveQuotationRow(quotation, active, over), quotation)
   }
   for (const [active, over] of [['category:speakers', 'category:speakers'], ['row:missing', 'category:speakers'], ['category:speakers', 'category:labor']]) {
@@ -157,19 +156,18 @@ test('inactive category slots and other-section custom order survive movement an
   assert.equal(quotation.rows.at(-1)!.harnessSelection!.enabled, false)
 })
 
-test('variant rows move inside their shared adapter block while legacy generic adapters stay independent', () => {
+test('variant rows can move freely past generic adapters and other accessory categories', () => {
   const variant = { productKey: 'synthetic-ring', size: '6,5', presentation: 'unit' as const }
   const quotation = { ...quote(), rows: [
     row('small', { section: 'extras', audioCategory: 'adapters', adapterVariant: variant }),
     row('legacy', { section: 'extras', audioCategory: 'adapters' }),
     row('large', { section: 'extras', audioCategory: 'adapters', adapterVariant: { ...variant, size: '8' } }),
+    row('labor', { section: 'extras', audioCategory: 'labor' }),
   ] }
   const moved = moveQuotationRow(quotation, 'large', 'small')
-  const presented = buildQuotationPresentation(calculateQuotation(moved).rows)
-  assert.equal(presented[0]!.kind, 'adapters')
-  if (presented[0]!.kind === 'adapters') assert.deepEqual(presented[0].items.map((item) => item.row.id), ['large', 'small'])
-  assert.equal(moveQuotationRow(quotation, 'small', 'legacy'), quotation)
-  assert.equal(moveQuotationRow(quotation, 'legacy', 'large'), quotation)
+  assert.deepEqual(ids(moved), ['large', 'small', 'legacy', 'labor'])
+  assert.deepEqual(ids(moveQuotationRow(quotation, 'small', 'legacy')), ['legacy', 'small', 'large', 'labor'])
+  assert.deepEqual(ids(moveQuotationRow(quotation, 'labor', 'large')), ['small', 'legacy', 'labor', 'large'])
   assert.equal(moved.rows[1], quotation.rows[1])
 })
 
@@ -223,7 +221,7 @@ test('validation issue numbers follow the saved block order and the reordered ca
   assert.match(calculateQuotation(moved).issues[0]!, /^Fila 2:/)
 })
 
-test('adapter validation numbers follow the grouped visual order even with interleaved legacy rows', () => {
+test('adapter validation numbers follow independent rows even with interleaved legacy rows', () => {
   const variant = { productKey: 'synthetic-ring', size: '6,5', presentation: 'unit' as const }
   const quotation = { ...quote(), rows: [
     row('small', { section: 'extras', audioCategory: 'adapters', adapterVariant: variant }),
@@ -231,7 +229,120 @@ test('adapter validation numbers follow the grouped visual order even with inter
     row('pending', { section: 'extras', audioCategory: 'adapters', adapterVariant: { ...variant, size: '8' }, unitPrice: '', priceState: 'pending' }),
   ] }
   const calculation = calculateQuotation(quotation)
-  assert.deepEqual(calculation.rows.map((item) => item.row.id), ['small', 'pending', 'legacy'])
-  assert.match(calculation.issues[0]!, /^Fila 2:/)
+  assert.deepEqual(calculation.rows.map((item) => item.row.id), ['small', 'legacy', 'pending'])
+  assert.match(calculation.issues[0]!, /^Fila 3:/)
   assert.deepEqual(quotation.rows.map((entry) => entry.id), ['small', 'legacy', 'pending'])
+})
+
+test('rows cross subcategories and free concepts within a parent while retaining prices and discounts', () => {
+  const quotation = quote()
+  quotation.discount = { percentage: '12,5', rowIds: ['rear', 'bass'] }
+  quotation.rows[0]!.provenance = {
+    catalogItemId: 'synthetic-rear', originalUnitPrice: '10', originalCurrency: 'USD', priceBasis: 'manual',
+  }
+  const snapshot = structuredClone(quotation)
+  const before = calculateQuotation(quotation)
+  let moved = moveQuotationRow(quotation, 'front', 'bass')
+  moved = moveQuotationRow(moved, 'custom-b', 'rear')
+  assert.deepEqual(ids(moved), ['front', 'bass', 'custom-b', 'rear', 'custom-a', 'cables', 'work'])
+  assert.equal(moved.rows, quotation.rows)
+  assert.equal(moved.discount, quotation.discount)
+  const after = calculateQuotation(moved)
+  assert.deepEqual(after.nativeTotals, before.nativeTotals)
+  assert.deepEqual(after.discountedNativeTotals, before.discountedNativeTotals)
+  assert.deepEqual(after.totals, before.totals)
+  assert.deepEqual(after.discount, before.discount)
+  assert.deepEqual(quotation, snapshot)
+})
+
+test('custom row order takes precedence over legacy blocks and preserves the other parent', () => {
+  const quotation = { ...quote(), blockOrder: ['category:labor', 'category:cables'] }
+  const moved = moveQuotationRow(quotation, 'front', 'bass')
+  assert.deepEqual(ids(moved), ['front', 'bass', 'rear', 'custom-a', 'custom-b', 'work', 'cables'])
+  assert.deepEqual(ids(moveQuotationRow(moved, 'cables', 'work')), [
+    'front', 'bass', 'rear', 'custom-a', 'custom-b', 'cables', 'work',
+  ])
+})
+
+test('new rows append in source order and subcategory edits do not move existing rows', () => {
+  const moved = moveQuotationRow(quote(), 'front', 'bass')
+  const added = { ...moved, rows: [
+    ...moved.rows.map((entry) => entry.id === 'rear' ? { ...entry, audioCategory: 'amplifier-dsp' as const } : entry),
+    row('new-speaker', { audioCategory: 'speakers' }),
+    row('new-extra', { section: 'extras' }),
+    row('new-dsp', { audioCategory: 'amplifier-dsp' }),
+  ] }
+  assert.deepEqual(ids(added), [
+    'front', 'bass', 'rear', 'custom-a', 'custom-b', 'new-speaker', 'new-dsp', 'cables', 'work', 'new-extra',
+  ])
+})
+
+test('row moves retain an inactive bypass slot and prune deleted references', () => {
+  const quotation = { ...quote(), rows: [
+    row('cables', { section: 'extras', audioCategory: 'cables' }),
+    row('harness', { section: 'extras', audioCategory: 'harness', concept: 'Ficha bypass estéreo', harnessSelection: { enabled: false } }),
+    row('work', { section: 'extras', audioCategory: 'labor' }),
+  ], rowOrder: ['deleted', 'cables', 'harness', 'work'] }
+  const moved = moveQuotationRow(quotation, 'work', 'cables')
+  assert.deepEqual(moved.rowOrder, ['work', 'harness', 'cables'])
+  assert.deepEqual(calculateQuotation(moved).rows.map((item) => item.row.id), ['work', 'cables'])
+  const enabled = { ...moved, rows: moved.rows.map((entry) => entry.id === 'harness'
+    ? { ...entry, harnessSelection: { enabled: true } } : entry) }
+  assert.deepEqual(calculateQuotation(enabled).rows.map((item) => item.row.id), ['work', 'harness', 'cables'])
+})
+
+test('restoring removes both ordering layers and retains stable source order and all quotation fields', () => {
+  const original = quote()
+  original.discount = { percentage: '10', rowIds: ['rear'] }
+  const moved = moveQuotationRow(moveQuotationBlock(original, 'extras', 'category:labor', 'category:cables'), 'front', 'bass')
+  assert.equal(hasCustomQuotationOrder(moved), true)
+  const restored = restoreQuotationOrder(moved)
+  assert.deepEqual(restored, original)
+  assert.equal(restored.rows, original.rows)
+  assert.equal(restored.discount, original.discount)
+  assert.equal(restored.rowOrder, undefined)
+  assert.equal(restored.blockOrder, undefined)
+  assert.equal(hasCustomQuotationOrder(restored), false)
+  assert.equal(restoreQuotationOrder(restored), restored)
+  const same = { ...restored, rowOrder: ids(restored) }
+  assert.equal(hasCustomQuotationOrder(same), false)
+  assert.equal(restoreQuotationOrder(same), same)
+})
+
+test('row order metadata is bounded and sanitized without rejecting recovered rows', () => {
+  for (const value of [undefined, {}, 'front', Array(1001).fill('front')]) {
+    assert.equal(readQuotationRowOrder(value), undefined)
+  }
+  const quotation = quote()
+  const rowOrder = ['front', 'category:speakers', 'bad key', null, 'front', 'deleted', 'bass']
+  assert.deepEqual(readQuotationRowOrder(rowOrder), ['front', 'deleted', 'bass'])
+  const stored = JSON.stringify({ version: 1, activeQuotationId: quotation.id, quotations: [{ ...quotation, rowOrder }], catalog: [] })
+  const restored = parseWorkspace(stored).quotations[0]!
+  assert.deepEqual(restored.rowOrder, ['front', 'deleted', 'bass'])
+  assert.deepEqual(restored.rows, quotation.rows)
+  assert.deepEqual(ids(restored), ['front', 'bass', 'rear', 'custom-a', 'custom-b', 'work', 'cables'])
+})
+
+test('empty and wholly obsolete row orders fall back safely to the existing default or legacy layout', () => {
+  const quotation = quote()
+  assert.deepEqual(readQuotationRowOrder([]), [])
+  assert.deepEqual(readQuotationRowOrder(['bad key', null]), [])
+  for (const rowOrder of [[], ['deleted']]) {
+    const empty = { ...quotation, rowOrder }
+    assert.deepEqual(ids(empty), ids(quotation))
+    assert.equal(hasCustomQuotationOrder(empty), false)
+    const legacy = { ...empty, blockOrder: ['category:labor', 'category:cables'] }
+    assert.deepEqual(ids(legacy), ['bass', 'rear', 'front', 'custom-a', 'custom-b', 'work', 'cables'])
+  }
+})
+
+test('duplication remaps every custom row-order ID and discards stale references', () => {
+  const quotation = moveQuotationRow(quote(), 'front', 'bass')
+  quotation.rowOrder!.push('deleted')
+  const copy = duplicateQuotation(quotation)
+  assert.notEqual(copy.rowOrder, quotation.rowOrder)
+  assert.equal(copy.rowOrder!.length, quotation.rows.length)
+  assert.deepEqual(ids(copy).map((id) => copy.rows.find((entry) => entry.id === id)!.concept),
+    ids(quotation).map((id) => quotation.rows.find((entry) => entry.id === id)!.concept))
+  assert.ok(copy.rowOrder!.every((id) => copy.rows.some((entry) => entry.id === id)))
 })

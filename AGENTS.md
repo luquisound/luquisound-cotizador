@@ -108,8 +108,8 @@ inventory management, invoicing, and a general backend remain outside this stage
   Cables and labour accept one concept for new entries or reclassification,
   preserving all existing duplicate rows. Harness suggestions are offered once,
   without blocking another manually classified harness. Installation omits
-  standalone category headings; declared adapter variants share a product
-  heading and retain independently editable rows, amounts and provenance.
+  standalone category headings. Each adapter variant has its own product name,
+  size, quantity, amount and independently editable row and provenance.
   Accumulate new adapters only with an explicit matching identity, size,
   presentation and commercial snapshot, preserving native rounded amounts.
   Keep adapters with currency-conversion references separate so restoring their
@@ -143,6 +143,14 @@ inventory management, invoicing, and a general backend remain outside this stage
   accessible names, visible keyboard focus, and sufficient contrast.
   Add controls use their full row width and a minimum 48-pixel touch target
   without overlapping adjacent editing controls.
+- Each quotation item can move freely within its equipment or extras section,
+  independently of its audio category. Keep only the two parent headings;
+  never regroup separated rows or adapter variants. Persist visual row order
+  separately from source rows, retaining compatible legacy block-order recovery.
+  Below the contact footer, offer one combined restore/undo control with separate
+  accessible actions. Restore uses canonical category order with stable source
+  order within each category. Undo restores the preceding layout only and expires
+  on another move, row addition/removal, reclassification or visibility change.
 - The shared "Editar precio" modal offers an ARS/USD selector using the open
   quotation's saved rate and existing exact conversion helper. At the same saved rate,
   retain its conversion reference across currency and bypass-selection changes; a manual price edit

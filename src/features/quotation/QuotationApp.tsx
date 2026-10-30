@@ -25,7 +25,9 @@ import { canSelectCatalogItem } from './catalog-stock'
 import { inspectQuotationAvailability } from './quotation-availability'
 import { useCatalogClock } from './useCatalogClock'
 import { createHarnessPresetRow, isHarnessPresetRow } from './harness-preset'
-import { moveQuotationBlock, moveQuotationRow } from './quotation-order'
+import { hasCustomQuotationOrder, moveQuotationRow, restoreQuotationOrder } from './quotation-order'
+import { canUndoQuotationOrder, rememberQuotationOrder, undoQuotationOrder } from './order-history'
+import type { QuotationOrderUndo } from './order-history'
 
 function initialData() {
   try {
@@ -45,6 +47,7 @@ type RowEditingState = { kind: 'new'; row: QuotationRow } | { kind: 'existing'; 
 export default function QuotationApp() {
   const [initial] = useState(initialData)
   const [quotation, setQuotation] = useState(initial.current.quotation)
+  const [orderUndo, setOrderUndo] = useState<QuotationOrderUndo | null>(null)
   const [catalog, setCatalog] = useState(initial.catalog.catalog)
   const quotationRef = useRef(initial.current.quotation)
   const catalogRef = useRef(initial.catalog.catalog)
@@ -68,6 +71,7 @@ export default function QuotationApp() {
   const [rateRefreshRequest, setRateRefreshRequest] = useState<{ id: string; token: string } | null>(null)
   const bulkButton = useRef<HTMLButtonElement>(null)
   const newQuotationButton = useRef<HTMLButtonElement>(null)
+  const orderControls = useRef<HTMLDivElement>(null)
   const rowEditorTrigger = useRef<HTMLElement | null>(null)
   const discountTrigger = useRef<HTMLElement | null>(null)
   const generation = useRef(0)
@@ -85,6 +89,8 @@ export default function QuotationApp() {
   const rateLoading = quotation.exchangeRateMode !== 'frozen' && rateState?.id === quotation.id && rateState.loading
   const rateError = quotation.exchangeRateMode !== 'frozen' && rateState?.id === quotation.id ? rateState.error : null
   const displayedRate = parseExchangeRate(quotation.exchangeRate ?? '')
+  const canRestoreOrder = hasCustomQuotationOrder(quotation)
+  const canUndoOrder = canUndoQuotationOrder(quotation, orderUndo)
 
   function persistCatalog(next: CatalogItem[]) {
     const storage = window.localStorage
@@ -185,21 +191,40 @@ export default function QuotationApp() {
     setPreparing(false)
     setMessage('')
     const updated = { ...next, updatedAt: new Date().toISOString() }
+    setOrderUndo((previous) => canUndoQuotationOrder(updated, previous) ? previous : null)
     quotationRef.current = updated
     setQuotation(updated)
     return true
-  }
-
-  function reorderBlock(section: RowSection, activeId: string, overId: string) {
-    const current = quotationRef.current
-    const next = moveQuotationBlock(current, section, activeId, overId)
-    if (next !== current) updateQuotation(next)
   }
 
   function reorderRow(activeId: string, overId: string) {
     const current = quotationRef.current
     const next = moveQuotationRow(current, activeId, overId)
     if (next !== current) updateQuotation(next)
+  }
+
+  function focusOrderAction(action: 'restore' | 'undo') {
+    window.requestAnimationFrame(() => {
+      orderControls.current?.querySelector<HTMLButtonElement>(`[data-order-action="${action}"]`)?.focus()
+    })
+  }
+
+  function restoreOrder() {
+    const current = quotationRef.current
+    const next = restoreQuotationOrder(current)
+    if (next === current || !updateQuotation(next)) return
+    setOrderUndo(rememberQuotationOrder(current))
+    setMessage('Se restauró el orden predeterminado. La flecha permite deshacerlo.')
+    focusOrderAction('undo')
+  }
+
+  function undoRestoredOrder() {
+    const current = quotationRef.current
+    const next = undoQuotationOrder(current, orderUndo)
+    if (next === current || !updateQuotation(next)) return
+    setOrderUndo(null)
+    setMessage('Se recuperó el orden anterior.')
+    focusOrderAction('restore')
   }
 
   const applyDollarQuote = useEffectEvent((id: string, quote: BlueDollarQuote): boolean => {
@@ -505,7 +530,6 @@ export default function QuotationApp() {
             onAddRow={addRow}
             onEditHarnessPreset={editHarnessPreset}
             onEditDiscount={openDiscount}
-            onMoveBlock={reorderBlock}
             onMoveRow={reorderRow}
             notices={<>
               {recoveryError && <p className="notice error" role="alert">{recoveryError}</p>}
@@ -525,6 +549,12 @@ export default function QuotationApp() {
         </div>
         <nav className="workspace-options" aria-label="Opciones del presupuesto">
           <button ref={bulkButton} className="button secondary" type="button" onClick={() => setDialog('bulk')}>Pegar códigos o nombres</button>
+          <div ref={orderControls} className="quotation-order-control" role="group" aria-label="Restaurar y deshacer el orden del presupuesto">
+            <button className="button secondary" type="button" data-order-action="restore" disabled={!canRestoreOrder} onClick={restoreOrder}>Restaurar orden predeterminado</button>
+            <button className="button secondary quotation-order-undo" type="button" data-order-action="undo" disabled={!canUndoOrder} onClick={undoRestoredOrder} aria-label="Deshacer restauración del orden" title="Deshacer restauración del orden">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M9 5 4 10l5 5" /><path d="M4 10h10a5 5 0 0 1 0 10" /></svg>
+            </button>
+          </div>
           <button ref={newQuotationButton} className="button secondary" type="button" onClick={startNewQuotation}>Nuevo presupuesto</button>
         </nav>
         <p className="current-quotation-note">El presupuesto en curso se recupera al recargar.</p>

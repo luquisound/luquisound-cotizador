@@ -14,10 +14,8 @@ import type { Quotation, QuotationRow, RowSection } from './model.ts'
 import { exchangeRateDescription } from './exchange-quote'
 import { getCurrencyLabel } from './currency-display.ts'
 import { QUOTATION_GRAPHIC } from './graphic.ts'
-import { adapterVariantAmount, adapterVariantDescription, buildQuotationPresentation } from './presentation.ts'
-import type { AdapterPresentationBlock, QuotationPresentationItem } from './presentation.ts'
+import { presentQuotationRow } from './presentation.ts'
 import { HARNESS_PRESET_CONCEPT, isHarnessPresetRow } from './harness-preset.ts'
-import { getQuotationBlocks } from './quotation-order.ts'
 import { SortableList } from './SortableList.tsx'
 import './preview.css'
 import './exchange-ui.css'
@@ -35,7 +33,6 @@ export interface QuotationPreviewProps {
   onAddRow: (section: RowSection, audioCategory?: AudioCategory) => void
   onEditHarnessPreset: () => void
   onEditDiscount: () => void
-  onMoveBlock: (section: RowSection, activeId: string, overId: string) => void
   onMoveRow: (activeId: string, overId: string) => void
   notices: ReactNode
   exchangeDetails: ReactNode
@@ -43,7 +40,7 @@ export interface QuotationPreviewProps {
 
 interface PreviewRowProps {
   row: QuotationRow
-  calculated: CalculatedRow | undefined
+  calculated: CalculatedRow
   onEdit: () => void
   onEditPrice: () => void
 }
@@ -54,28 +51,26 @@ const sections: { section: RowSection; label: string; accessibleLabel: string }[
 ]
 
 function PreviewRow({ row, calculated, onEdit, onEditPrice }: PreviewRowProps) {
-  const quantity = parseQuantity(row.quantity)
-  const quantityLabel = quantity.ok && quantity.thousandths === 1000
-    ? ''
-    : `Cantidad: ${row.quantity.trim() || 'pendiente'}`
-  const hasErrors = !calculated || calculated.errors.length > 0
+  const presentation = presentQuotationRow(calculated)
+  const hasErrors = calculated.errors.length > 0
   const amount = hasErrors || calculated.lineTotalCents === null
     ? 'Pendiente'
     : row.priceState === 'included'
       ? 'Incluido'
       : formatMoney(calculated.lineTotalCents, row.currency)
-  const concept = row.concept.trim() || 'Concepto pendiente'
+  const concept = presentation.concept
+  const accessibleConcept = [concept, presentation.quantity].filter(Boolean).join(' · ')
 
   return (
     <div
       className={`quotation-row${hasErrors ? ' quotation-row-pending' : ''}`}
     >
-      <button type="button" className="quotation-row-description" data-row-id={row.id} onClick={onEdit} aria-label={`Editar ${concept}. ${amount}`} title="Tocá para editar el concepto, la cantidad y sus datos">
+      <button type="button" className="quotation-row-description" data-row-id={row.id} onClick={onEdit} aria-label={`Editar ${accessibleConcept}. ${amount}`} title="Tocá para editar el concepto, la cantidad y sus datos">
         <span className="quotation-row-concept">{concept}</span>
-        {row.detail.trim() && <span className="quotation-row-detail">{row.detail.trim()}</span>}
-        {quantityLabel && <span className="quotation-row-quantity">{quantityLabel}</span>}
+        {presentation.detail && <span className="quotation-row-detail">{presentation.detail}</span>}
+        {presentation.quantity && <span className="quotation-row-quantity">{presentation.quantity}</span>}
       </button>
-      <button type="button" className={`quotation-row-price${hasErrors ? ' quotation-price-pending' : ''}`} data-row-price-id={row.id} onClick={onEditPrice} aria-label={`Editar precio unitario de ${concept}. Importe de la fila: ${amount}`} title="Tocá para editar sólo el precio unitario">
+      <button type="button" className={`quotation-row-price${hasErrors ? ' quotation-price-pending' : ''}`} data-row-price-id={row.id} onClick={onEditPrice} aria-label={`Editar precio unitario de ${accessibleConcept}. Importe de la fila: ${amount}`} title="Tocá para editar sólo el precio unitario">
         {amount}
       </button>
     </div>
@@ -126,93 +121,6 @@ function PreviewHarnessPreset({
   )
 }
 
-function PreviewAdapterGroup({
-  block, onEditRow, onEditPrice, onMoveRow,
-}: {
-  block: AdapterPresentationBlock
-  onEditRow: (rowId: string) => void
-  onEditPrice: (rowId: string) => void
-  onMoveRow: (activeId: string, overId: string) => void
-}) {
-  return (
-    <div className="quotation-adapter-group">
-      <div className="quotation-adapter-heading">
-        <h3 className="quotation-row-concept">{block.title}</h3>
-        <span className={`quotation-row-price${block.pending ? ' quotation-price-pending' : ''}`}>
-          {block.amounts.map((amount) => <span key={amount}>{amount}</span>)}
-        </span>
-      </div>
-      <SortableList
-        label="Orden de las variantes de aros adaptadores"
-        className="quotation-adapter-variants quotation-sortable-rows"
-        onMove={onMoveRow}
-        items={block.items.map((item, index) => ({
-          id: item.row.id,
-          label: adapterVariantDescription(item),
-          content: <div className="quotation-adapter-variant-row">
-            <button
-              type="button"
-              className="quotation-adapter-variant"
-              data-row-id={item.row.id}
-              onClick={() => onEditRow(item.row.id)}
-              aria-label={`Editar aros adaptadores: ${block.details[index]}`}
-              title="Tocá para editar esta variante"
-            >
-              {adapterVariantDescription(item)}
-            </button>
-            <button
-              type="button"
-              className={`quotation-row-price quotation-adapter-price${item.errors.length ? ' quotation-price-pending' : ''}`}
-              data-row-price-id={item.row.id}
-              onClick={() => onEditPrice(item.row.id)}
-              aria-label={`Editar precio unitario de aros adaptadores: ${block.details[index]}`}
-              title="Tocá para editar sólo el precio unitario de esta variante"
-            >
-              {adapterVariantAmount(item)}
-            </button>
-          </div>,
-        }))}
-      />
-    </div>
-  )
-}
-
-function PreviewItems({
-  items, onEditRow, onEditPrice, onMoveRow, harnessPresetId, onEditHarnessPreset,
-}: {
-  items: QuotationPresentationItem[]
-  onEditRow: (rowId: string) => void
-  onEditPrice: (rowId: string) => void
-  onMoveRow: (activeId: string, overId: string) => void
-  harnessPresetId?: string
-  onEditHarnessPreset?: () => void
-}) {
-  return (
-    <SortableList
-      label="Orden de los ítems de la categoría"
-      className="quotation-sortable-rows"
-      onMove={onMoveRow}
-      items={items.map((item) => ({
-        id: item.kind === 'row' ? item.item.row.id : `adapters:${item.items[0].row.id}`,
-        label: item.kind === 'row' ? item.item.row.concept.trim() || 'Concepto pendiente' : item.title,
-        disabled: item.kind === 'adapters',
-        content: item.kind === 'adapters' ? (
-          <PreviewAdapterGroup block={item} onEditRow={onEditRow} onEditPrice={onEditPrice} onMoveRow={onMoveRow} />
-        ) : item.item.row.id === harnessPresetId && onEditHarnessPreset ? (
-          <PreviewHarnessPreset row={item.item.row} onEditPrice={onEditHarnessPreset} />
-        ) : (
-          <PreviewRow
-            row={item.item.row}
-            calculated={item.item}
-            onEdit={() => onEditRow(item.item.row.id)}
-            onEditPrice={() => onEditPrice(item.item.row.id)}
-          />
-        ),
-      }))}
-    />
-  )
-}
-
 function WhatsAppIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
@@ -240,7 +148,6 @@ export function QuotationPreview({
   onAddRow,
   onEditHarnessPreset,
   onEditDiscount,
-  onMoveBlock,
   onMoveRow,
   notices,
   exchangeDetails,
@@ -291,46 +198,35 @@ export function QuotationPreview({
           {notices}
           {sections.map(({ section, label, accessibleLabel }) => {
             const sectionRows = calculation.rows.filter(({ row }) => row.section === section)
-            const byId = new Map(sectionRows.map((item) => [item.row.id, item]))
-            const blocks = getQuotationBlocks(quotation, section)
+            const occupiedCategories = new Set(sectionRows.map(({ row }) => row.audioCategory))
             return (
               <section className="quotation-section" key={section} aria-label={label}>
                 <h2 className="quotation-section-title">{label}</h2>
                 <SortableList
-                  label={`Orden de categorías y conceptos en ${accessibleLabel}`}
-                  className="quotation-sortable-blocks"
-                  onMove={(activeId, overId) => onMoveBlock(section, activeId, overId)}
-                  items={blocks.map((block) => ({
-                    id: block.id,
-                    label: block.label,
-                    content: <div className="quotation-audio-category" data-audio-category={block.category}>
-                      {section === 'equipment' && block.category && (
-                        <h3 className="quotation-category-label">{block.label}</h3>
-                      )}
-                      <PreviewItems
-                        items={buildQuotationPresentation(block.rows.map((row) => byId.get(row.id)!), quotation.blockOrder)}
-                        onEditRow={onEditRow}
-                        onEditPrice={onEditPrice}
-                        onMoveRow={onMoveRow}
-                        harnessPresetId={harnessPreset?.id}
-                        onEditHarnessPreset={onEditHarnessPreset}
-                      />
-                      {block.category && hasRepeatCategoryAction(block.category) && (
-                        <button
-                          type="button"
-                          className="quotation-category-add"
-                          data-audio-category={block.category}
-                          onClick={() => onAddRow(section, block.category)}
-                          aria-label={`Agregar ${block.label}`}
-                        >
-                          <span aria-hidden="true">+</span> {block.label}
-                        </button>
-                      )}
-                    </div>,
-                  }))}
+                  label={`Orden de los ítems en ${accessibleLabel}`}
+                  className="quotation-sortable-rows"
+                  onMove={onMoveRow}
+                  items={sectionRows.map((item) => {
+                    const presentation = presentQuotationRow(item)
+                    return {
+                      id: item.row.id,
+                      label: [presentation.concept, presentation.quantity].filter(Boolean).join(' · '),
+                      content: item.row.id === harnessPreset?.id ? (
+                        <PreviewHarnessPreset row={item.row} onEditPrice={onEditHarnessPreset} />
+                      ) : (
+                        <PreviewRow
+                          row={item.row}
+                          calculated={item}
+                          onEdit={() => onEditRow(item.row.id)}
+                          onEditPrice={() => onEditPrice(item.row.id)}
+                        />
+                      ),
+                    }
+                  })}
                 />
                 {getAudioCategories(section).filter((category) => (
-                  !blocks.some((block) => block.category === category.id)
+                  !occupiedCategories.has(category.id)
+                  || hasRepeatCategoryAction(category.id)
                   || (category.id === 'harness' && harnessPreset?.harnessSelection?.enabled === false)
                 )).map((category) => category.id === 'harness' ? (
                   <PreviewHarnessPreset key={category.id} row={harnessPreset} onEditPrice={onEditHarnessPreset} />
@@ -338,7 +234,7 @@ export function QuotationPreview({
                   <button
                     key={category.id}
                     type="button"
-                    className="quotation-empty-row"
+                    className={occupiedCategories.has(category.id) ? 'quotation-category-add' : 'quotation-empty-row'}
                     data-audio-category={category.id}
                     onClick={() => onAddRow(section, category.id)}
                     aria-label={`Agregar ${category.label}`}

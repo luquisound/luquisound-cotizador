@@ -8,7 +8,7 @@ import { exchangeRateDescription } from '../src/features/quotation/exchange-quot
 import type { CatalogItem, Quotation } from '../src/features/quotation/model.ts'
 import { QUOTATION_GRAPHIC } from '../src/features/quotation/graphic.ts'
 import { rowFromCatalog } from '../src/features/quotation/row-provenance.ts'
-import { moveQuotationBlock, moveQuotationRow } from '../src/features/quotation/quotation-order.ts'
+import { moveQuotationRow } from '../src/features/quotation/quotation-order.ts'
 import { parseWorkspace, serializeWorkspace } from '../src/features/quotation/persistence.ts'
 
 const measure = (text: string): number => Array.from(text).length
@@ -476,7 +476,7 @@ test('exports complete 500-character product names with separate legible prices 
   assert.deepEqual(quotation, before)
 })
 
-test('exports the recovered custom block and row order without drag controls', () => {
+test('exports the recovered free row order across subcategories without drag controls', () => {
   const quotation = exportableQuotation()
   const sample = quotation.rows[0]!
   quotation.rows = [
@@ -487,10 +487,10 @@ test('exports the recovered custom block and row order without drag controls', (
     { ...sample, id: 'wire', section: 'extras', audioCategory: 'cables', concept: 'Synthetic wire' },
     { ...sample, id: 'work', section: 'extras', audioCategory: 'labor', concept: 'Synthetic work' },
   ]
-  let moved = moveQuotationBlock(quotation, 'equipment', 'category:speakers', 'category:subwoofer')
+  let moved = moveQuotationRow(quotation, 'front', 'bass')
   moved = moveQuotationRow(moved, 'rear', 'front')
-  moved = moveQuotationBlock(moved, 'equipment', 'row:custom', 'category:subwoofer')
-  moved = moveQuotationBlock(moved, 'extras', 'category:labor', 'category:cables')
+  moved = moveQuotationRow(moved, 'custom', 'bass')
+  moved = moveQuotationRow(moved, 'work', 'wire')
   const restored = parseWorkspace(serializeWorkspace({ version: 1, activeQuotationId: moved.id, quotations: [moved], catalog: [] })).quotations[0]!
   const before = structuredClone(restored)
   const result = renderWithRecordedCanvas(restored)
@@ -541,6 +541,55 @@ test('exports categorized concepts in display order without empty suggestions or
     'Agregar otro',
   ]
   assert.ok(!result.texts.some(({ text }) => labels.includes(text)))
+  assert.deepEqual(quotation, snapshot)
+})
+
+test('exports separated adapter variants and manual accessories in their recovered exact row order', () => {
+  const quotation = exportableQuotation()
+  const sample = quotation.rows[0]
+  quotation.rows = [
+    {
+      ...sample, id: 'small', section: 'extras', audioCategory: 'adapters', concept: 'Aro pequeño',
+      quantity: '2', unitPrice: '0,01',
+      adapterVariant: { productKey: 'small', size: '6,5', presentation: 'pair' },
+    },
+    {
+      ...sample, id: 'large', section: 'extras', audioCategory: 'adapters', concept: 'Aro grande',
+      quantity: '3', unitPrice: '5', currency: 'USD',
+      adapterVariant: { productKey: 'large', size: '8', presentation: 'set' },
+    },
+    { ...sample, id: 'wire', section: 'extras', audioCategory: 'cables', concept: 'Cable sintético' },
+    { ...sample, id: 'manual', section: 'extras', concept: 'Concepto manual' },
+  ]
+  quotation.rowOrder = ['large', 'wire', 'manual', 'small']
+  const restored = parseWorkspace(serializeWorkspace({
+    version: 1, activeQuotationId: quotation.id, quotations: [quotation], catalog: [],
+  })).quotations[0]!
+  const snapshot = structuredClone(restored)
+  const result = renderWithRecordedCanvas(restored)
+  const names = ['Aro grande', 'Cable sintético', 'Concepto manual', 'Aro pequeño']
+  assert.deepEqual(result.texts.filter(({ text }) => names.includes(text)).map(({ text }) => text), names)
+  assert.equal(result.texts.filter(({ text }) => text === '3 juegos × 8″').length, 1)
+  assert.equal(result.texts.filter(({ text }) => text === '2 pares × 6,5″').length, 1)
+  assert.ok(result.texts.some(({ text, align }) => text === 'usd 15,00' && align === 'right'))
+  assert.ok(result.texts.some(({ text, align }) => text === '$ 0,02' && align === 'right'))
+  assert.deepEqual(restored, snapshot)
+})
+
+test('exports older saved category ordering without adding row metadata or grouping independent adapters', () => {
+  const quotation = exportableQuotation()
+  const sample = quotation.rows[0]
+  quotation.rows = [
+    { ...sample, id: 'wire', section: 'extras', audioCategory: 'cables', concept: 'Cable sintético' },
+    { ...sample, id: 'work', section: 'extras', audioCategory: 'labor', concept: 'Servicio sintético' },
+  ]
+  quotation.blockOrder = ['category:labor', 'category:cables']
+  const snapshot = structuredClone(quotation)
+  const result = renderWithRecordedCanvas(quotation)
+  assert.deepEqual(result.texts.filter(({ text }) => /^(Cable|Servicio) sintético$/.test(text)).map(({ text }) => text), [
+    'Servicio sintético', 'Cable sintético',
+  ])
+  assert.equal(quotation.rowOrder, undefined)
   assert.deepEqual(quotation, snapshot)
 })
 
@@ -706,7 +755,7 @@ test('a verified latest observation can replace expired stored stock while curre
   }
 })
 
-test('exports adapter variants under one heading with separate native currency amounts', () => {
+test('exports each adapter variant with its own title, quantity, size and native currency amount', () => {
   const quotation = exportableQuotation()
   const sample = quotation.rows[0]
   quotation.rows = [
@@ -723,10 +772,10 @@ test('exports adapter variants under one heading with separate native currency a
   ]
   const snapshot = structuredClone(quotation)
   const result = renderWithRecordedCanvas(quotation)
-  assert.equal(result.texts.filter(({ text }) => text === 'Aros adaptadores 3D').length, 1)
+  assert.equal(result.texts.filter(({ text }) => text === 'Aros adaptadores 3D').length, 2)
   const text = result.texts.map(({ text: entry }) => entry).join(' ')
-  assert.ok(text.includes('2 pares × 6,5″ · $ 200,00'))
-  assert.ok(text.includes('2 unidades × 8″ · usd 10,00'))
+  assert.ok(text.includes('2 pares × 6,5″'))
+  assert.ok(text.includes('2 unidades × 8″'))
   const amounts = result.texts.filter(({ align }) => align === 'right').map(({ text: entry }) => entry)
   assert.ok(amounts.includes('$ 200,00'))
   assert.ok(amounts.includes('usd 10,00'))
@@ -747,11 +796,12 @@ test('exports the same exact quantity text for ordinary rows and adapters while 
     }]
     const text = renderWithRecordedCanvas(quotation).texts.map(({ text }) => text).join(' ')
     assert.equal(text.includes(`${label} unidades · Sin cargo`), quantity !== '1')
-    assert.ok(text.includes(`${label} ${quantity === '1' ? 'unidad' : 'unidades'} × 6,5″ · Incluido`))
+    assert.ok(text.includes(`${label} ${quantity === '1' ? 'unidad' : 'unidades'} × 6,5″`))
+    assert.ok(text.includes('Incluido'))
   }
 })
 
-test('exports every long adapter description below the heading and above totals without clipping', () => {
+test('exports long independent adapter descriptions, quantities and amounts without clipping', () => {
   const quotation = exportableQuotation()
   const sample = quotation.rows[0]
   quotation.rows = [
@@ -773,15 +823,19 @@ test('exports every long adapter description below the heading and above totals 
   assert.ok(text.includes('Final de la variante'))
   assert.ok(text.includes('1 juego × 6,5″'))
   assert.ok(text.includes('1 par × 8″'))
-  const heading = result.texts.find(({ text: entry }) => entry === 'Aros adaptadores 3D')
+  const section = result.texts.find(({ text: entry }) => entry === 'INSTALACIÓN Y ACCESORIOS')
+  const secondHeading = result.texts.find(({ text: entry }) => entry === 'Aros adaptadores 3D')
   const totalLabel = result.texts.find(({ text: entry }) => entry === 'TOTAL')
-  assert.ok(heading && totalLabel)
-  const detailLines = result.texts.filter(({ y, align }) => y > heading.y && y < totalLabel.y && align === 'left')
+  assert.ok(section && secondHeading && totalLabel)
+  const detailLines = result.texts.filter(({ y, align }) => y > section.y && y < totalLabel.y && align === 'left')
   assert.ok(detailLines.length > 10)
   assert.ok(detailLines.every(({ x, y, width }) => x + width <= 1016 && y + 32 < totalLabel.y))
-  const groupAmounts = result.texts.filter(({ y, align }) => y >= heading.y && y <= heading.y + 46 && align === 'right')
-  assert.equal(groupAmounts.length, 2)
-  assert.ok(detailLines.every(({ y }) => y > Math.max(...groupAmounts.map((amount) => amount.y)) + 38))
+  const amounts = result.texts.filter(({ y, align }) => y > section.y && y < totalLabel.y && align === 'right')
+  assert.equal(amounts.length, 2)
+  assert.ok(amounts[0].y < secondHeading.y)
+  assert.ok(amounts[1].y >= secondHeading.y)
+  const firstQuantity = result.texts.find(({ text: entry }) => entry === '1 juego × 6,5″')
+  assert.ok(firstQuantity && firstQuantity.y < secondHeading.y)
 })
 
 test('keeps legacy adapters, repeated equipment, included and explicit zero variants distinct in PNG', () => {
@@ -809,12 +863,13 @@ test('keeps legacy adapters, repeated equipment, included and explicit zero vari
   const text = result.texts.map(({ text: entry }) => entry).join(' ')
   assert.ok(text.includes('Subwoofer sintético A') && text.includes('Subwoofer sintético B'))
   assert.ok(text.includes('Aros anteriores de 6,5 pulgadas Texto conservado'))
-  assert.ok(text.includes('1 unidad × 6,5″ · Incluido'))
-  assert.ok(text.includes('1 unidad × 8″ · $ 0,00'))
+  assert.ok(text.includes('1 unidad × 6,5″'))
+  assert.ok(text.includes('1 unidad × 8″'))
+  assert.ok(result.texts.some(({ text: entry, align }) => entry === 'Incluido' && align === 'right'))
   assert.ok(result.texts.some(({ text: entry, align }) => entry === '$ 0,00' && align === 'right'))
 })
 
-test('blocks PNG generation when one explicitly grouped adapter remains pending', async () => {
+test('blocks PNG generation when an independent adapter remains pending', async () => {
   const quotation = exportableQuotation()
   quotation.rows = [
     {
@@ -826,7 +881,7 @@ test('blocks PNG generation when one explicitly grouped adapter remains pending'
   await assert.rejects(createQuotationFile(quotation), /campos pendientes/)
 })
 
-test('keeps grouped adapter provenance private while preserving availability guards and the customer warning', async () => {
+test('keeps independent adapter provenance private while preserving availability guards and the customer warning', async () => {
   const quotation = provisionalQuotation()
   quotation.rows[0] = {
     ...quotation.rows[0], section: 'extras', audioCategory: 'adapters',
@@ -835,7 +890,8 @@ test('keeps grouped adapter provenance private while preserving availability gua
   }
   const result = renderWithRecordedCanvas(quotation)
   const text = result.texts.map(({ text: entry }) => entry).join(' ')
-  assert.ok(text.includes('1 par × 6,5″ · $ 2.400,00'))
+  assert.ok(text.includes('1 par × 6,5″'))
+  assert.ok(result.texts.some(({ text: entry, align }) => entry === '$ 2.400,00' && align === 'right'))
   assert.equal(result.texts.filter(({ text: entry }) => entry === 'Disponibilidad a confirmar.').length, 1)
   assert.doesNotMatch(text, /PRIVATE-|ffff|private-item|Stock|Histórico/)
   quotation.rows[0].provenance!.stock!.quantity = 0

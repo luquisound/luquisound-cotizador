@@ -92,7 +92,7 @@ export function hasRepeatCategoryAction(category: AudioCategory): boolean {
   return !isSingleRowCategory(category) && category !== 'harness'
 }
 
-function rowOrder(row: QuotationRow): number {
+function rowCategoryOrder(row: QuotationRow): number {
   const sectionStart = row.section === 'equipment' ? 0 : AUDIO_CATEGORIES.length + 1
   const category = readAudioCategory(row.audioCategory, row.section)
   const categoryIndex = AUDIO_CATEGORIES.findIndex((definition) => definition.id === category)
@@ -104,33 +104,32 @@ export function quotationRowBlockId(row: QuotationRow): string {
   return category ? `category:${category}` : `row:${row.id}`
 }
 
-function groupAdapterRows(rows: QuotationRow[]): QuotationRow[] {
-  const variants = rows.filter((row) => readAdapterVariant(row.adapterVariant, row.section, row.audioCategory))
-  if (variants.length < 2) return rows
-  const ids = new Set(variants.map((row) => row.id))
-  const result: QuotationRow[] = []
-  let grouped = false
-  for (const row of rows) {
-    if (!ids.has(row.id)) result.push(row)
-    else if (!grouped) {
-      result.push(...variants)
-      grouped = true
+export function orderQuotationRows(
+  rows: readonly QuotationRow[], blockOrder?: readonly string[], rowOrder?: readonly string[],
+): QuotationRow[] {
+  if (rowOrder?.length) {
+    const existing = new Set(rows.map((row) => row.id))
+    const ranks = new Map<string, number>()
+    for (const id of rowOrder) if (existing.has(id) && !ranks.has(id)) ranks.set(id, ranks.size)
+    if (ranks.size) {
+      // Unseen rows append in source order, independently of their category.
+      for (const row of rows) if (!ranks.has(row.id)) ranks.set(row.id, ranks.size)
+      return [...rows].sort((left, right) => {
+        if (left.section !== right.section) return left.section === 'equipment' ? -1 : 1
+        return ranks.get(left.id)! - ranks.get(right.id)!
+      })
     }
   }
-  return result
-}
-
-export function orderQuotationRows(rows: readonly QuotationRow[], blockOrder?: readonly string[]): QuotationRow[] {
-  const ordered = [...rows].sort((left, right) => rowOrder(left) - rowOrder(right))
-  if (!blockOrder?.length) return groupAdapterRows(ordered)
+  const ordered = [...rows].sort((left, right) => rowCategoryOrder(left) - rowCategoryOrder(right))
+  if (!blockOrder?.length) return ordered
   const ranks = new Map<string, number>()
   for (const id of blockOrder) if (!ranks.has(id)) ranks.set(id, ranks.size)
   for (const row of ordered) {
     const id = quotationRowBlockId(row)
     if (!ranks.has(id)) ranks.set(id, ranks.size)
   }
-  return groupAdapterRows(ordered.sort((left, right) => {
+  return ordered.sort((left, right) => {
     if (left.section !== right.section) return left.section === 'equipment' ? -1 : 1
     return ranks.get(quotationRowBlockId(left))! - ranks.get(quotationRowBlockId(right))!
-  }))
+  })
 }

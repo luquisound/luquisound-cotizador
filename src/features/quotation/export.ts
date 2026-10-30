@@ -5,7 +5,7 @@ import { BODY_FONT, HEADING_FONT, loadQuotationFonts } from './typography.ts'
 import { exchangeRateDescription } from './exchange-quote.ts'
 import { QUOTATION_GRAPHIC } from './graphic.ts'
 import { inspectQuotationAvailability } from './quotation-availability.ts'
-import { buildQuotationPresentation, formatQuantityThousandths } from './presentation.ts'
+import { adapterVariantQuantity, buildQuotationPresentation, formatQuantityThousandths } from './presentation.ts'
 import type { QuotationPresentationItem } from './presentation.ts'
 
 const WIDTH = 1080
@@ -30,7 +30,6 @@ interface RowLayout {
   quantityLines: string[]
   amountLines: string[]
   headingHeight: number
-  amountAtTop: boolean
   height: number
 }
 
@@ -124,30 +123,23 @@ function layoutRow(
   context: CanvasRenderingContext2D, item: QuotationPresentationItem,
   conceptWidth: number, amountWidth: number,
 ): RowLayout {
-  const result = item.kind === 'row' ? item.item : undefined
-  const concept = item.kind === 'adapters' ? item.title : item.item.row.concept.trim()
-  const details = item.kind === 'adapters' ? item.details
-    : item.item.row.detail.trim() ? [item.item.row.detail.trim()] : []
-  const amounts = item.kind === 'adapters' ? item.amounts : [amountLabel(item.item)]
+  const result = item.item
+  const { concept, detail } = item
   setFont(context, 36, BODY_FONT)
   const conceptLines = measureLines(context, concept, conceptWidth)
   setFont(context, 26, BODY_FONT)
-  const detailLines = details.flatMap((detail) => measureLines(
-    context, detail, item.kind === 'adapters' ? CONTENT_WIDTH : conceptWidth,
-  ))
+  const detailLines = detail ? measureLines(context, detail, conceptWidth) : []
   setFont(context, 24, BODY_FONT)
-  const quantity = result ? quantityLabel(result.row) : ''
+  const quantity = adapterVariantQuantity(result.row) ?? quantityLabel(result.row)
   const quantityLines = quantity ? measureLines(context, quantity, conceptWidth) : []
   setFont(context, 38, BODY_FONT)
-  const amountLines = amounts.flatMap((amount) => measureLines(context, amount, amountWidth))
-  const amountAtTop = item.kind === 'adapters'
-  const headingHeight = amountAtTop
-    ? Math.max(conceptLines.length * 44, amountLines.length * 46) : conceptLines.length * 44
+  const amountLines = measureLines(context, amountLabel(result), amountWidth)
+  const headingHeight = conceptLines.length * 44
   const textHeight = headingHeight
     + (detailLines.length ? 8 + detailLines.length * 32 : 0)
     + (quantityLines.length ? 8 + quantityLines.length * 30 : 0)
   return {
-    conceptLines, detailLines, quantityLines, amountLines, headingHeight, amountAtTop,
+    conceptLines, detailLines, quantityLines, amountLines, headingHeight,
     height: Math.max(88, 22 + Math.max(textHeight, amountLines.length * 46) + 22),
   }
 }
@@ -218,20 +210,17 @@ export function renderQuotationCanvas(
     ? measureLines(context, quotation.subtitle.trim(), CONTENT_WIDTH) : []
   const subtitleY = 174 + titleLines.length * 92 + 12
   const headerHeight = Math.max(348, subtitleY + subtitleLines.length * 38 + 28)
-  const presentation = buildQuotationPresentation(calculation.rows, quotation.blockOrder)
+  const presentation = buildQuotationPresentation(calculation.rows)
   setFont(context, 38, BODY_FONT)
-  const amountLabels = presentation.flatMap((item) => (
-    item.kind === 'adapters' ? item.amounts : [amountLabel(item.item)]
-  ))
+  const amountLabels = presentation.map((item) => amountLabel(item.item))
   const amountWidth = Math.min(450, Math.max(260, ...amountLabels.map(
     (amount) => Math.ceil(context.measureText(amount).width),
   )))
   const conceptWidth = CONTENT_WIDTH - amountWidth - 36
   const sections: SectionLayout[] = (['equipment', 'extras'] as const).map((section) => ({
     section,
-    rows: presentation.filter((item) => (
-      (item.kind === 'adapters' ? item.items[0].row : item.item.row).section === section
-    )).map((item) => layoutRow(context, item, conceptWidth, amountWidth)),
+    rows: presentation.filter((item) => item.item.row.section === section)
+      .map((item) => layoutRow(context, item, conceptWidth, amountWidth)),
   })).filter((section) => section.rows.length > 0)
   setFont(context, 30, BODY_FONT)
   const noteLines = quotation.notes.trim()
@@ -318,7 +307,7 @@ export function renderQuotationCanvas(
       context.fillStyle = BLACK
       context.textAlign = 'right'
       setFont(context, 38, BODY_FONT)
-      const amountY = row.amountAtTop ? rowY : y + (row.height - row.amountLines.length * 46) / 2
+      const amountY = y + (row.height - row.amountLines.length * 46) / 2
       drawLines(context, row.amountLines, WIDTH - MARGIN, amountY, 46)
       context.textAlign = 'left'
       y += row.height

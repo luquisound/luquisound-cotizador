@@ -1,4 +1,3 @@
-import { readAdapterVariant } from './adapters.ts'
 import { AUDIO_CATEGORIES, orderQuotationRows, quotationRowBlockId, readAudioCategory } from './audio-categories.ts'
 import type { AudioCategory } from './audio-categories.ts'
 import { isEmptyRow } from './calculation.ts'
@@ -13,7 +12,7 @@ export interface QuotationBlock {
 
 export function getQuotationBlocks(quotation: Quotation, section: RowSection): QuotationBlock[] {
   const blocks = new Map<string, QuotationBlock>()
-  for (const row of orderQuotationRows(quotation.rows, quotation.blockOrder)) {
+  for (const row of orderQuotationRows(quotation.rows, quotation.blockOrder, quotation.rowOrder)) {
     if (row.section !== section || isEmptyRow(row)) continue
     const id = quotationRowBlockId(row)
     const existing = blocks.get(id)
@@ -66,21 +65,36 @@ export function moveQuotationRow(quotation: Quotation, activeRowId: string, over
   const active = quotation.rows.find((row) => row.id === activeRowId)
   const over = quotation.rows.find((row) => row.id === overRowId)
   if (!active || !over || isEmptyRow(active) || isEmptyRow(over)) return quotation
-  const category = readAudioCategory(active.audioCategory, active.section)
-  if (!category || active.section !== over.section
-    || category !== readAudioCategory(over.audioCategory, over.section)) return quotation
-  const isVariant = (row: QuotationRow): boolean => (
-    readAdapterVariant(row.adapterVariant, row.section, row.audioCategory) !== undefined
-  )
-  if (category === 'adapters' && isVariant(active) !== isVariant(over)) return quotation
-  const members = quotation.rows.filter((row) => (
-    row.section === active.section && readAudioCategory(row.audioCategory, row.section) === category
-    && !isEmptyRow(row) && (category !== 'adapters' || isVariant(row) === isVariant(active))
-  ))
+  if (active.section !== over.section) return quotation
+  const ordered = orderQuotationRows(quotation.rows, quotation.blockOrder, quotation.rowOrder)
+  const members = ordered.filter((row) => row.section === active.section && !isEmptyRow(row))
   const moved = moveItem(members, members.indexOf(active), members.indexOf(over))
   const ids = new Set(members.map((row) => row.id))
   let index = 0
-  return { ...quotation, rows: quotation.rows.map((row) => ids.has(row.id) ? moved[index++]! : row) }
+  // Hidden rows keep their slots so reactivating a bypass restores its position.
+  return { ...quotation, rowOrder: ordered.map((row) => ids.has(row.id) ? moved[index++]!.id : row.id) }
+}
+
+export function hasCustomQuotationOrder(quotation: Quotation): boolean {
+  const current = orderQuotationRows(quotation.rows, quotation.blockOrder, quotation.rowOrder)
+    .filter((row) => !isEmptyRow(row))
+  const standard = orderQuotationRows(quotation.rows).filter((row) => !isEmptyRow(row))
+  return current.some((row, index) => row.id !== standard[index]?.id)
+}
+
+export function restoreQuotationOrder(quotation: Quotation): Quotation {
+  if (!hasCustomQuotationOrder(quotation)) return quotation
+  const { rowOrder: _rowOrder, blockOrder: _blockOrder, ...restored } = quotation
+  return restored
+}
+
+/** Invalid optional layout metadata must not make the quotation unreadable. */
+export function readQuotationRowOrder(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length > 1000) return undefined
+  const valid = value.filter((id): id is string => (
+    typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id)
+  ))
+  return [...new Set(valid)]
 }
 
 /** Invalid optional layout metadata must not make the quotation unreadable. */
