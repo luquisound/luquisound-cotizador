@@ -3,6 +3,7 @@ import type { MouseEvent, ReactNode } from 'react'
 import { DragDropProvider, DragOverlay, useDragDropManager } from '@dnd-kit/react'
 import { isSortable, useSortable } from '@dnd-kit/react/sortable'
 import { Accessibility, KeyboardSensor, PointerActivationConstraints, PointerSensor } from '@dnd-kit/dom'
+import { isKeyboardEvent } from '@dnd-kit/dom/utilities'
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/dom'
 import './sortable.css'
 
@@ -138,9 +139,9 @@ export function SortableList({ items, onMove, label, className = '', disabled = 
       onDragEnd={(event) => {
         suppressClickUntil.current = Date.now() + 350
         const { source, target } = event.operation
-        if (isSortable(source) && source.group === group) {
+        if (isKeyboardEvent(event.operation.activatorEvent) && isSortable(source) && source.group === group) {
           const sourceElement = source.element
-          // Feedback restores the source asynchronously; focus it after cleanup.
+          // Restore keyboard focus after feedback cleanup without focusing pointer drops.
           window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
             if (sourceElement instanceof HTMLElement && sourceElement.isConnected) {
               sourceElement.focus({ preventScroll: true })
