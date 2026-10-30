@@ -102,19 +102,18 @@ Quantity is preserved for variable-quantity rows; cables and labour use one.
 For a product with a nonblank SKU, individual and bulk selection copy only the
 approved commercial title into the row and start with an empty detail. Model,
 variant, size and unit/pair/set presentation that identify the sale must remain
-in the approved title. For Instaler selections, remove standalone occurrences of
-that same SKU from the copied title, including code-only parentheses or brackets.
-Matching ignores letter case but preserves accents, punctuation and code identity;
-never remove a substring from a longer model or code. Keep the original title if
-removal would leave no descriptive text. The source catalogue and private SKU
-remain unchanged and searchable. Supplier specifications remain catalogue/private source
-information; they are not automatically customer text. Users may add a detail
-explicitly afterward. Entries without a SKU retain their maintained detail.
+in the approved title. Copy the complete approved title unchanged, including any
+SKU or other code already in it. Do not append a missing code, move a code to the
+detail, or infer which part of the title is a model. The source catalogue and
+private SKU remain unchanged and searchable. Supplier specifications remain
+catalogue/private source information; they are not automatically customer text.
+Users may add a detail explicitly afterward. Entries without a SKU retain their
+maintained detail.
 The row editor's catalogue suggestions and bulk-review candidates use the same
-cleaned title, displaying the separate SKU for identification. Search still uses
-the original catalogue data; typing a code alone never selects or cleans a row.
-Only explicit selection copies the prepared title into a quotation. Reading,
-recovery, compatible imports and refresh never shorten or clear
+complete title, displaying the separate SKU for identification. Search still uses
+the original catalogue data; typing a code alone never selects or changes a row.
+Only explicit selection copies the approved title into a quotation. Reading,
+recovery, compatible imports, refresh and rendering/export never rewrite
 their existing concept or detail.
 
 The full row editor uses a bottom sheet on narrow screens and a centered dialog

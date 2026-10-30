@@ -226,20 +226,27 @@ function exportableQuotation(): Quotation {
 }
 
 test('new coded selections export their complete commercial title while saved and explicit details remain visible', () => {
+  const source = { document: 'PRIVATE-SOURCE-ONLY.xlsx', date: null }
   const item: CatalogItem = {
-    id: 'synthetic-title', section: 'equipment', sku: 'SYN-RX65',
-    concept: 'Synthetic RX-65 MK-II 6.5-inch (pair)', detail: 'SUPPLIER SPECIFICATIONS OMITTED',
-    unitPrice: '123,45', currency: 'ARS',
+    id: 'synthetic-title', section: 'equipment', supplier: 'Instaler', sku: 'SYN-RX65',
+    concept: 'Synthetic RX-65 MK-II 6.5-inch (pair) [SYN-RX65]', detail: 'SUPPLIER SPECIFICATIONS OMITTED',
+    unitPrice: '123,45', currency: 'ARS', source, availabilityPolicy: 'historical-positive',
+    stock: { quantity: 1, checkedAt: null, validUntil: null, observation: 'historical', source },
   }
   const selected = rowFromCatalog(item, 'equipment')
-  const oldRow = { ...selected, id: 'synthetic-saved', detail: 'Previously saved customer detail' }
+  const oldRow = {
+    ...selected, id: 'synthetic-saved', concept: 'Previously edited commercial title',
+    detail: 'Previously saved customer detail',
+  }
   const manualRow = { ...selected, id: 'synthetic-manual', detail: 'Explicit installation instructions' }
   const quotation = { ...exportableQuotation(), rows: [selected, oldRow, manualRow] }
   const before = structuredClone(quotation)
   const rendered = renderWithRecordedCanvas(quotation)
   const text = rendered.texts.map((entry) => entry.text).join(' ')
   assert.ok(text.includes(item.concept))
+  assert.ok(text.includes(oldRow.concept))
   assert.ok(!text.includes(item.detail))
+  assert.ok(!text.includes(source.document))
   assert.ok(text.includes(oldRow.detail))
   assert.ok(text.includes(manualRow.detail))
   assert.deepEqual(quotation, before)

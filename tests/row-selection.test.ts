@@ -97,24 +97,29 @@ test('catalogue entries without a nonblank SKU keep their explicitly maintained 
   }
 })
 
-test('Instaler selection removes only the separate source code while preserving product and commercial fields', () => {
+test('Instaler selection preserves codes, models and names without inventing missing code text', () => {
   const draft = row({ section: 'equipment', audioCategory: 'speakers', concept: 'Existing title (SYN-A)' })
-  const selectedItem = item({
-    supplier: 'Instaler', sku: 'SYN-A', concept: 'Synthetic RX-65 MK-II 6.5-inch (pair)(SYN-A)',
-  })
-  const before = structuredClone({ draft, selectedItem })
-  const selected = selectCatalogForRow(draft, selectedItem, 'ARS', now)
-  assert.equal(selected.concept, 'Synthetic RX-65 MK-II 6.5-inch (pair)')
-  assert.equal(selected.detail, '')
-  assert.equal(selected.id, draft.id)
-  assert.equal(selected.quantity, draft.quantity)
-  assert.equal(selected.audioCategory, draft.audioCategory)
-  assert.equal(selected.unitPrice, '12,50')
-  assert.equal(selected.currency, 'USD')
-  assert.equal(selected.provenance?.sku, 'SYN-A')
-  assert.equal(selected.provenance?.supplier, 'Instaler')
-  assert.deepEqual(selected.provenance?.source, source)
-  assert.deepEqual({ draft, selectedItem }, before)
+  for (const [sku, concept] of [
+    ['SYN-A', 'Synthetic RX-65 MK-II 6.5-inch (pair)(SYN-A)'],
+    ['SYN-A', 'SYN-A Synthetic RX-65 [SYN-A] (pair)'],
+    ['RX-65', 'Synthetic RX-65 6.5-inch (pair)'],
+    ['SYN-A', 'Synthetic RX-65 MK-II 6.5-inch (pair)'],
+  ]) {
+    const selectedItem = item({ supplier: 'Instaler', sku, concept })
+    const before = structuredClone({ draft, selectedItem })
+    const selected = selectCatalogForRow(draft, selectedItem, 'ARS', now)
+    assert.equal(selected.concept, concept)
+    assert.equal(selected.detail, '')
+    assert.equal(selected.id, draft.id)
+    assert.equal(selected.quantity, draft.quantity)
+    assert.equal(selected.audioCategory, draft.audioCategory)
+    assert.equal(selected.unitPrice, '12,50')
+    assert.equal(selected.currency, 'USD')
+    assert.equal(selected.provenance?.sku, sku)
+    assert.equal(selected.provenance?.supplier, 'Instaler')
+    assert.deepEqual(selected.provenance?.source, source)
+    assert.deepEqual({ draft, selectedItem }, before)
+  }
 })
 
 test('catalogue selection preserves quantities for equipment, adapters, harnesses and unclassified concepts', () => {

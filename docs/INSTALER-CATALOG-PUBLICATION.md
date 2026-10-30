@@ -54,10 +54,11 @@ in each approved title. A copied technical paragraph alone does not require
 rejecting a source title approved under its exact SKU/text correspondence. Price,
 stock, duplicate and changed-source guards still apply independently.
 
-New selections with a nonblank SKU copy that complete title and start with an
-empty row detail, through the same individual/bulk selection boundary. The
-catalogue description remains available privately, and users can add quotation
-details explicitly. No reading, refresh, recovery or export shortens existing
+New selections with a nonblank SKU copy that complete title unchanged, including
+any code already in it, and start with an empty row detail through the same
+individual/bulk selection boundary. Do not append a missing code or move a code
+to the detail. The catalogue description remains available privately, and users
+can add quotation details explicitly. No reading, refresh, recovery or export shortens existing
 quotation text or clears saved/manual details. Presentation is kept in the title
 because generic catalogue unit/presentation metadata is not a separate PNG field.
 

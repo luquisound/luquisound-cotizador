@@ -216,18 +216,17 @@ policy, original amount and currency, and `priceBasis` (`manual`, `list`,
 trace and distinguish a manual price/currency/included-state override. A matching
 current catalogue can update availability checks without changing row amounts.
 An ineligible row is preserved but blocks final image delivery. Historical usage
-adds a generic availability-to-confirm line to the PNG, with no source details,
-SKU or stock quantity. See [source boundaries](CATALOG-SOURCE-ROADMAP.md).
+adds a generic availability-to-confirm line to the PNG without appending source
+details, SKU or stock quantity. See [source boundaries](CATALOG-SOURCE-ROADMAP.md).
 
 For a catalogue item with a nonblank SKU, new individual and bulk selections copy
 the complete approved title and start with an empty `detail`. The title must
 retain model, variant and commercial unit/pair/set presentation; selection never
-truncates it or guesses those fields. For Instaler, the copied title omits complete
-standalone occurrences of the same source SKU and code-only parentheses/brackets.
-The comparison ignores case without removing accents or guessing code variants;
-longer model/code strings remain intact. An otherwise empty title keeps its source
-text. Original catalogue titles, SKU search and private provenance stay unchanged.
-Quotation search suggestions and bulk-review candidates display that same prepared
+truncates it or guesses those fields. Copy the approved title unchanged, including
+any SKU or other code already in it. Do not append a missing code or move it to
+the detail. Original catalogue titles, SKU search and private provenance stay
+unchanged.
+Quotation search suggestions and bulk-review candidates display that same complete
 title alongside the separate SKU; catalogue maintenance retains the original text.
 The catalogue's own description is retained.
 Entries without a SKU keep their maintained detail, and users can explicitly add

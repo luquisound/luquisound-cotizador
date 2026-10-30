@@ -144,7 +144,10 @@ test('persistence and duplication retain frozen rate and complete private proven
 })
 
 test('an explicit detail added after a coded selection survives recovery and duplication without changing its source', () => {
-  const item = { ...historical(), detail: 'Supplier technical specifications retained in the catalogue' }
+  const item = {
+    ...historical(), supplier: 'Instaler', concept: 'Synthetic RX-65 6.5-inch (pair) [SKU-1]',
+    detail: 'Supplier technical specifications retained in the catalogue',
+  }
   const before = structuredClone(item)
   const selected = rowFromCatalog(item, 'equipment', 'USD', 'speakers', now)
   assert.equal(selected.detail, '')

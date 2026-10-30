@@ -276,7 +276,14 @@ test('reviewed commercial titles resolve copied specifications for new selection
     ...rowFromCatalog(product(initialCatalog, 'SYN-A'), 'equipment', 'ARS', 'speakers', NOW),
     concept: sourceText, detail: 'Previously saved customer detail',
   }
-  const quotation = { ...createQuotation(), rows: [historicalRow], exchangeRate: '1.400', exchangeRateMode: 'frozen' as const }
+  const previouslyShortenedRow = {
+    ...historicalRow, id: crypto.randomUUID(), concept: 'Synthetic RX-65 MK-II 6.5-inch (pair)',
+    detail: 'Previously saved customer installation detail',
+  }
+  const quotation = {
+    ...createQuotation(), rows: [historicalRow, previouslyShortenedRow],
+    exchangeRate: '1.400', exchangeRateMode: 'frozen' as const,
+  }
   const quotationBytes = JSON.stringify(quotation)
   const library = saveQuotationToLibrary(createQuotationLibrary(), quotation, 'Previously saved title')
   const libraryBytes = serializeQuotationLibrary(library)
@@ -286,7 +293,7 @@ test('reviewed commercial titles resolve copied specifications for new selection
   const recoveryBytes = adapter.values.get(CURRENT_QUOTATION_STORAGE_KEY)
   const writesBefore = adapter.writes.length
 
-  const title = 'Synthetic RX-65 MK-II 6.5-inch (pair)'
+  const title = 'Synthetic RX-65 MK-II 6.5-inch (pair) (SYN-A)'
   const nextPolicy: InstalerCatalogPolicy = { ...oldPolicy, names: [
     { sku: 'SYN-A', sourceText, name: title },
     { sku: 'SYN-B', sourceText: contradictoryText, name: 'Synthetic vehicle tweeter' },

@@ -104,7 +104,7 @@ test('bulk selections by name keep independent catalogue details when the SKU is
   }
 })
 
-test('bulk Instaler code selection cleans the copied title without changing searchable source data', (context) => {
+test('bulk Instaler code selections retain distinct approved titles and searchable source data', (context) => {
   context.mock.method(Date, 'now', () => Date.parse('2026-10-17T10:05:00.000Z'))
   const source = {
     document: 'synthetic-catalog.xlsx', kind: 'snapshot' as const, date: null,
@@ -117,16 +117,23 @@ test('bulk Instaler code selection cleans the copied title without changing sear
       validUntil: '2026-10-17T10:15:00.000Z', source,
     },
   })
-  const catalog = [selectedItem]
-  const { preview, decisions } = prepare('syn-a', catalog)
+  const catalog = [selectedItem, {
+    ...selectedItem, id: 'synthetic-b', sku: 'SYN-B', concept: 'Synthetic RX-65 MK-II (pair) [SYN-B]',
+  }]
+  const { preview, decisions } = prepare('syn-a\nsyn-b', catalog)
   const before = structuredClone({ catalog, preview, decisions })
   decisions[0].quantity = '2'
-  const [row] = applyBulkEntry(preview, decisions, catalog, options)
-  assert.equal(row.concept, 'Synthetic RX-65 MK-II (pair)')
+  const [row, other] = applyBulkEntry(preview, decisions, catalog, options)
+  assert.equal(row.concept, selectedItem.concept)
+  assert.equal(other.concept, catalog[1].concept)
+  assert.notEqual(row.concept, other.concept)
+  assert.equal(row.detail, '')
+  assert.equal(other.detail, '')
   assert.equal(row.quantity, '2')
   assert.equal(row.unitPrice, selectedItem.unitPrice)
   assert.equal(row.currency, selectedItem.currency)
   assert.equal(row.provenance?.sku, 'SYN-A')
+  assert.equal(other.provenance?.sku, 'SYN-B')
   assert.deepEqual(catalog, before.catalog)
   assert.deepEqual(preview, before.preview)
 })
