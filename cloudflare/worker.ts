@@ -100,6 +100,10 @@ export function createCloudflareWorker(dependencies: WorkerDependencies = {}) {
         }
         const url = new URL(request.url)
         if (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) {
+          if (url.protocol === 'http:' && (request.method === 'GET' || request.method === 'HEAD')) {
+            url.protocol = 'https:'
+            return privateResponse(new Response(null, { status: 308, headers: { Location: url.href } }))
+          }
           return privateResponse(jsonError(403, 'https-required'))
         }
         if (url.pathname === '/logout') {

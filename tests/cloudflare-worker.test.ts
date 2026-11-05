@@ -113,8 +113,42 @@ test('Cloudflare production defaults fail closed and static/API routing cannot b
   const denied = await state.worker.fetch(new Request(`${ORIGIN}/api/quotation-board`, { headers: { Cookie: cookies[0]!.slice(0, -1) + '!' } }), state.env)
   assert.equal(denied.status, 401)
   const plaintext = await state.worker.fetch(new Request('http://remote.example/', { headers: { Cookie: cookies[0]! } }), state.env)
-  assert.equal(plaintext.status, 403)
+  assert.equal(plaintext.status, 308)
+  assert.equal(plaintext.headers.get('Location'), 'https://remote.example/')
   assert.equal(state.assetReads, 2)
+})
+
+test('Cloudflare redirects HTTP navigation to HTTPS before any assets, APIs or database work', async () => {
+  const state = setup({ prepare() { throw new Error('HTTP database read') }, batch() { throw new Error('HTTP database batch') } })
+  for (const method of ['GET', 'HEAD']) {
+    for (const path of ['/', '/login?next=%2F', '/assets/app.js?version=1', '/api/catalog?source=example']) {
+      const response = await state.worker.fetch(new Request(`http://synthetic-worker.example${path}`, { method }), state.env)
+      assert.equal(response.status, 308)
+      assert.equal(response.headers.get('Location'), `${ORIGIN}${path}`)
+      assert.equal(response.headers.get('Set-Cookie'), null)
+      assert.equal(response.headers.get('Cache-Control'), 'private, no-store')
+      assert.equal(await response.text(), '')
+    }
+  }
+  assert.equal(state.assetReads + state.rateReads + state.catalogueReads, 0)
+})
+
+test('Cloudflare rejects plaintext mutations without replaying them and preserves local HTTP development', async () => {
+  const state = setup()
+  for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+    const response = await state.worker.fetch(new Request('http://synthetic-worker.example/login', {
+      method, body: 'synthetic request',
+    }), state.env)
+    assert.equal(response.status, 403)
+    assert.equal(response.headers.get('Location'), null)
+    assert.equal(response.headers.get('Set-Cookie'), null)
+  }
+  for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+    const response = await state.worker.fetch(new Request(`http://${host}:8787/login`), state.env)
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('Location'), null)
+  }
+  assert.equal(state.assetReads + state.rateReads + state.catalogueReads, 0)
 })
 
 test('two signed password sessions share D1 saves, replacement conflicts, copies and exact retries through the existing client', async (context) => {

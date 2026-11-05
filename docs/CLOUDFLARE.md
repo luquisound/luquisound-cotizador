@@ -507,6 +507,21 @@ The canonical Cloudflare login still returned 200 and anonymous board access
 catalogue, supplier code, browser recovery and deployment configuration files
 were checked unchanged against the pre-cleanup source archive.
 
+### HTTP navigation redirect
+
+The November 4, 2026 domain integration changes remote HTTP GET/HEAD requests
+from a 403 response to a permanent 308 redirect to the same HTTPS URL, preserving
+the path and query. Plaintext mutations remain rejected, and local development
+hosts may still use HTTP. This does not change authentication or private data
+access.
+
+The prepared Worker bundle differed from the prior live bundle only by this
+redirect. The content-only Cloudflare API update retained the existing static
+assets, bindings, secrets, database and compatibility settings. Version
+`d0d21704-2208-40b0-b5b0-368d081da002` serves the correction. Live checks confirmed
+HTTP GET/HEAD 308, plaintext login POST 403, HTTPS login 200 and anonymous board
+401. Focused Worker tests, typecheck, lint and production build passed.
+
 Automatic command review rejected deleting the task-owned temporary deployment
 copy and two temporary inspection files outside the repository. The owner removed
 all three manually; subsequent read-only checks confirmed their absence and the
