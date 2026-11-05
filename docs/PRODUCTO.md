@@ -6,8 +6,18 @@ Provide a mobile-first, editable graphic quotation for the Luquisound workshop.
 The quotation template is the primary interface: tap its title or a row to edit
 it using touch-friendly controls. Lucas's target device is an iPhone; Android is
 also part of hands-on acceptance.
-Fixed budgets and reusable templates remain in Figma. This app edits one current
-custom quotation with browser-local recovery of its current state.
+The app edits one current quotation with browser-local recovery. A private shared
+board is implemented for explicitly saving and reopening templates or partial
+quotations across the two intended users' devices. The selected host uses
+Cloudflare Workers Free and D1 Free, with a shared user-chosen password whose
+browser-derived credential is checked on the server and a remembered browser
+session for 30 days. Google and Cloudflare
+Zero Trust are not dependencies. The canonical custom-domain Worker is operational
+with verified password/session protection and the shared board enabled. The
+earlier generated-password transition revoked the PIN and sessions without
+changing saved quotations. Chosen-password deployment acceptance is recorded
+separately in the host runbook. Physical-device acceptance remains separate.
+Existing Figma budgets are not imported automatically.
 
 ## V1 scope
 
@@ -31,6 +41,8 @@ custom quotation with browser-local recovery of its current state.
   shown separately in the preview and customer image.
 - Recovery of the current quotation and a separate persistent catalogue cache,
   preserving existing local products and approved prices.
+- Opt-in private shared-board saving/opening with an internal name, optional
+  category, explicit replacement or save-as-new, and conflict detection.
 - PNG image with only the graphic quotation, plus browser file sharing or download.
 
 Without the configured common catalogue service, a new browser starts empty.
@@ -563,35 +575,53 @@ without it remain undiscounted and reading data never activates a discount.
 "Nuevo presupuesto" starts without a discount. Catalogue storage and previously
 stored quotation-library bytes remain independent.
 
-## Local persistence and privacy
+## Current recovery, shared board and privacy
 
 The editor has one current quotation. Its recovery snapshot uses localStorage
-key `luquisound.current-quotation.v1`; the persistent catalogue and approved
-prices use `luquisound.catalog.v1`. These stores are independent and belong to
-the current browser and origin. Previously stored
+key `luquisound.current-quotation.v1`, atomically including validated board source
+context and the exact pending save command when present. The persistent catalogue
+and approved prices use `luquisound.catalog.v1`. These stores are independent and
+belong to the current browser and origin. Previously stored
 `luquisound.quotation-library.v1` bytes are left untouched by the current app.
 A read-only server endpoint supplies the private
 common catalogue on startup and after the daily 08:00-09:00 Buenos Aires source
 window, with a 09:00 daily app cycle while visible and online. There is no refresh
-button or hourly catalogue polling. There is no quotation upload, analytics, or
-synchronization of locally approved prices.
+button or hourly catalogue polling. An independently enabled, session-protected
+Cloudflare API stores explicit shared-board quotation snapshots in D1. The new
+host reads the existing private Blob catalogue and preserves its validation and
+availability rules; supplier observation/publication remains on the independent
+Apps Script/Vercel pipeline.
+The app does not add analytics or synchronize locally approved catalogue prices.
 
 The header contains the brand and editable quotation details. Below the template
-and contact footer, always-visible buttons open "Pegar codigos o nombres"
-and "Nuevo presupuesto", including when the quotation is empty. The combined
-restore/undo order control sits between those actions.
-Each action opens its existing secondary workflow.
+and contact footer, always-visible buttons open "Guardar en tablero", "Tablero",
+"Pegar codigos o nombres" and "Nuevo presupuesto", including when the quotation
+is empty. The combined restore/undo order control remains available there.
+Shared save/open actions preserve the current editor and its contextual guards.
 The personal catalogue manager is not mounted. Its add, edit, delete, source
 import and backup import/export controls, including the alternative
 "Revisar catalogo" storage-error action, are unavailable. Existing local products,
 prices and cache remain available for selection without deletion or migration.
 "Nuevo presupuesto" replaces only the
-current quotation, confirming before content or an unreadable recovery record is
-replaced. It preserves the catalogue, approved prices and legacy workspace key.
-There is no named quotation saving, opening, duplication, quotation-history
-import/export, backend quotation history or automatic archive of every edit.
-Downloading or sharing a PNG leaves the quotation open. Reusable templates and
-fixed budgets are managed in Figma.
+current quotation, offering save/continue/cancel before unsaved work or an
+unreadable recovery record is replaced. It preserves the catalogue, approved
+prices and legacy workspace key. The shared board supports named complete or
+partial snapshots, optional categories, opening, replacement and save-as-new.
+Names may repeat and never select the replacement target. Saving as new retains
+the original and links subsequent saves to the new entry. There is no automatic
+shared archive of every edit or quotation-history import/export UI. Downloading
+or sharing a PNG leaves the quotation open.
+
+Reloading recovers the working quotation, board identity/revision/epoch and any
+exact unresolved save command together, without automatically issuing a POST.
+An explicit retry retains the operation ID and submitted quotation; the server
+confirms a previously committed result or reports a conflict before another
+version can be submitted. Errors and cancellation preserve the working copy.
+Confirmed shared saves and opened snapshots keep their saved dollar frozen;
+the existing explicit dollar-update action can resume automatic lookup. Board
+saving does not require PNG readiness or approve current supplier availability.
+See [QUOTATION-BOARD.md](QUOTATION-BOARD.md) for the implemented protocol and
+server password/session activation gates.
 
 Automatic loading combines the common catalogue with the latest local state by
 supplier and SKU. It updates common metadata and historical references while
@@ -605,7 +635,8 @@ limits, and network failures leave local data unchanged until the next daily cyc
 unreadable catalogue store is never overwritten by the common catalogue.
 See `SHARED-CATALOG.md` for activation.
 
-An untouched blank proposal remains in memory. Default headings, currency, and
+Without board context or a pending save, an untouched blank proposal remains in
+memory. Default headings, currency, and
 placeholder rows and an automatically attached rate do not create recoverable
 content. Partial concepts with pending prices are meaningful, and recovery keeps
 the current quotation and row identities. Replacing the current quotation does
@@ -616,9 +647,14 @@ validated legacy `luquisound.workspace.v1`. It does not reopen old quotations.
 The legacy key is never rewritten or deleted.
 Invalid legacy data is not used as a catalogue source.
 
-This is individual browser storage, not shared or access-controlled cloud storage.
-Browser clearing, private mode, device loss, or origin changes can remove access.
-The app does not encrypt local data. Backups can contain private business data
+Current recovery and catalogue caches are individual browser storage; they are
+not the shared board. Browser clearing, private mode, device loss, or origin
+changes can remove access to those local records. Moving to the new host does
+not automatically migrate recovery, pending commands or catalogue caches from
+the old origin; preserve its data. The app does not encrypt local data. Shared
+snapshots require the private API and verified server-signed session protection,
+including HTML, assets, API paths and alternate/preview URLs.
+Backups can contain private business data
 and must be stored privately; no backup belongs in the public repository.
 
 Compatible catalogue backup helpers preserve approved prices, currencies, item
@@ -646,7 +682,13 @@ Hourly automatic-mode exchange-rate updates remain active. Limits are 1000 rows
 in the current quotation and 2000
 catalogue entries. The legacy parser still validates up to 500 quotations in an
 old backup before extracting a catalogue. Quotations from that file are not
-restored in the current app.
+restored in the current app. The private board allows 100 entries and 100
+categories and 5 MiB of active board data. The Cloudflare D1 adapter limits each
+serialized quotation entry to 256 KiB and its save-request envelope to 260 KiB.
+The most recent 50 prior entry snapshots are retained globally, not 50
+full-board versions. Capacity failures preserve the working quotation; there is
+no active-entry eviction. See [CLOUDFLARE.md](CLOUDFLARE.md) for Free-plan limits
+and operator export/recovery boundaries.
 Canvas export is limited to 16 million pixels with an explicit error
 rather than truncation when exceeded.
 
@@ -660,14 +702,16 @@ do not change the current quotation's row prices or currencies. A catalogue
 refresh can still invalidate a protected product's availability and block image
 delivery until that row is reviewed.
 
-## Quotation history boundary
+## Shared-board and legacy-library boundaries
 
 The former browser-local named quotation library is not mounted in the current
 app. Its save, open, duplicate, delete, backup and import workflows are not
 available. Existing `luquisound.quotation-library.v1` bytes are not read,
 rewritten or deleted by normal app use; removing the UI does not migrate or erase
 previously stored quotations. Current-quotation recovery, compatible frozen-rate
-metadata and catalogue storage remain independent.
+metadata and catalogue storage remain independent. The new private shared board
+does not read, upload or migrate that old library. It uses its own server API and
+dedicated private store; saved board entries remain separate from local recovery.
 
 A quotation connection to Sheets or Drive is future work and is not implemented.
 No quotation is uploaded or synchronized through those services. The existing
@@ -676,7 +720,34 @@ supplier-observation use of Drive does not provide quotation history.
 The repository remains public even when deployment access is restricted. Never
 commit supplier lists, discounts, internal costs, customers, real quotations, or
 secrets. Deployment protection and access for intended users must be checked
-separately; the application does not add a frontend PIN or claim one is security.
+separately. The selected login checks the shared password on the server, never through
+a frontend comparison. Only the login form/submission is public; app assets and
+APIs require a valid signed session. The cookie is HttpOnly/Secure/SameSite=Strict,
+has Path=/ and lasts 30 days. Five login attempts per 15 minutes per HMAC-derived
+IP bucket, with 128 bounded buckets and a global 50-attempt limit per 15 minutes,
+are enforced in D1 before password verification. D1 failure blocks login, while valid
+session checks need no D1 query. Full signer/password rotation revokes all sessions;
+logout clears the current browser cookie only and retains local quotations.
+The shared credential gives both users the same permissions, without per-person
+identity attribution. The chosen password supports 11 to 128 Unicode code points and is
+checked exactly, including case, without trimming or normalization. Control
+characters and unpaired surrogates are rejected. Native browser
+WebCrypto derives 32 bytes using PBKDF2-SHA256 with 600,000 iterations and a fresh
+random 16-byte public salt. Only the canonical base64url derived credential is
+submitted over HTTPS. The Worker checks its HMAC after D1 throttling rather than
+running the slow derivation within the Free CPU budget. The derived credential is
+password-equivalent; no raw-password or old-verifier fallback exists. Real
+passwords, derived credentials, signer keys and session tokens stay outside
+source, logs and chat. See [CLOUDFLARE.md](CLOUDFLARE.md) for private preparation
+and atomic code/secret deployment.
+
+## Quotation-board delivery
+
+The normal editor uses the private shared board for category sections, search,
+opening, partial saves and explicit replace/save-as-new choices. The earlier
+in-memory design prototype has been retired. Vite alone does not run the board
+API. See [QUOTATION-BOARD.md](QUOTATION-BOARD.md) for the implemented contract,
+operational status and remaining device acceptance.
 
 ## Private catalogue selection
 
@@ -794,15 +865,25 @@ compatible backup helpers, legacy
 catalogue extraction, manual discount selection/rounding/recovery, untouched
 legacy-library bytes and frozen recovery rates,
 concurrent-tab conflicts, corrupt storage, failed saves, reviewed bulk matching, stock expiry,
-manual row trace, and share cancellation.
+manual row trace, and share cancellation. Shared-board checks cover complete and
+partial snapshots, source rebinding after save-as-new, atomic current-context and
+pending-command recovery, explicit lost-response retry, concurrent edits,
+server password/session gates, login limits, capacity failures, bounded D1 entry
+snapshots and private operator export/recovery. A provider-level restore does not replace epoch-safe
+application recovery.
 Browser emulation is useful evidence but does not replace physical Android and
 iPhone checks for PNG saving, Web Share, WhatsApp, and deployment access.
 
-Remaining acceptance includes any separately authorized source publication and
-deployment, private backup retention, live source access and freshness policy,
-and physical-device checks. Local implementation does not establish activation
-of external services.
-Shared quotation storage, synchronized manual prices, accounts, CRM, inventory,
-invoicing, AI, and automatic commercial rules remain outside V1.
+Earlier live PIN/session, private catalogue/exchange-rate reads and cross-session
+save/open/replace/copy/conflict checks passed on the Workers Free/D1 host.
+The later password transition also passed live native-form login, old PIN and
+old-session rejection, and preservation of the existing board and catalogue.
+Remaining acceptance includes user/Lucas shared-board access confirmation on
+their actual devices, bounded backup retention, live source
+access/freshness and physical-device checks. Local implementation does not
+establish activation of external services. Shared-board category rename/delete
+and entry deletion are not implemented in this block. Synchronized manual
+catalogue prices, continuous coediting, accounts, CRM, inventory, invoicing, AI,
+and automatic commercial rules remain outside V1.
 Publishing requires the final authorized review; local checks
 do not establish remote publication or production deployment.

@@ -1,0 +1,9 @@
+.shared-board-workspace { padding-bottom: 0; }
+.shared-board-current { display: grid; gap: 4px; margin: 20px 16px 0; text-align: center; overflow-wrap: anywhere; }
+.shared-board-current strong { font-weight: 400; }
+.shared-board-current span { color: #66665f; font-size: 13px; }
+.shared-board-action-error { margin: 16px; color: #a02c18; line-height: 1.5; }
+.shared-board-leave-form > p { margin: 0; line-height: 1.5; }
+.shared-board-leave-actions { display: grid; gap: 8px; }
+.shared-board-leave-actions .button { min-height: 48px; }
+html:has(.board-save-dialog[open]) { overflow: hidden; }

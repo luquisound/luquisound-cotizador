@@ -3,7 +3,7 @@ import test from 'node:test'
 import { setImmediate } from 'node:timers/promises'
 import {
   createExchangeRateHandler, type ExchangeRateCache,
-} from '../api/exchange-rate.ts'
+} from '../src/server/exchange-rate-handler.ts'
 import {
   EXCHANGE_QUOTE_CACHE_TTL_MS, EXCHANGE_QUOTE_MAX_BYTES, type BlueDollarQuote,
 } from '../src/features/quotation/exchange-quote.ts'
@@ -63,7 +63,7 @@ test('a cache miss reads only the fixed blue URL and stores the validated sale r
       assert.equal(input, 'https://dolarapi.com/v1/dolares/blue')
       assert.equal(options?.method, 'GET')
       assert.deepEqual(options?.headers, { Accept: 'application/json' })
-      assert.equal(options?.redirect, 'error')
+      assert.equal(options?.redirect, 'manual')
       assert.equal(options?.cache, 'no-store')
       assert.ok(options?.signal instanceof AbortSignal)
       assert.equal(options.signal.aborted, false)
@@ -281,8 +281,17 @@ test('redirects, unsuccessful statuses, HTML and missing JSON content types retu
   Object.defineProperty(redirected, 'redirected', { value: true })
   responses.push(redirected)
   for (const upstream of responses) {
-    const handler = createExchangeRateHandler({ cache: memoryCache(), now: () => NOW, fetcher: async () => upstream })
+    const cache = memoryCache()
+    let fetches = 0
+    let redirectMode: RequestRedirect | undefined
+    const handler = createExchangeRateHandler({
+      cache, now: () => NOW,
+      fetcher: async (_input, options) => { fetches++; redirectMode = options?.redirect; return upstream },
+    })
     const response = await handler(request())
+    assert.equal(redirectMode, 'manual')
+    assert.equal(fetches, 1)
+    assert.equal(cache.writes.length, 0)
     assert.equal(response.status, 502)
     assertPrivate(response)
     assert.equal(response.headers.get('location'), null)

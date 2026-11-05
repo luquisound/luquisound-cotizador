@@ -12,18 +12,37 @@ The current V1 includes an editable graphic quotation template, manual rows,
 previously stored personal products, a private common catalogue loaded through a
 read-only endpoint, reviewed bulk entry, calculations, an optional manual sale
 discount on selected equipment, recovery of one current
-quotation, and deterministic PNG download or file
-sharing. Fixed budgets and templates remain in Figma. Named quotation saving,
-opening, duplication and history import/export are not part of the current UI.
-Previously stored quotation-library bytes remain untouched. A quotation
+quotation, and deterministic PNG download or file sharing. An opt-in private
+shared board is implemented for explicit named saves, opening, replacement and
+save-as-new with optional categories. The selected host is Cloudflare Workers
+Free with D1 Free and a shared user-chosen password. Browser WebCrypto derives a
+credential with PBKDF2-SHA256 before server-side verification.
+The selected login creates a server-signed, remembered browser session for 30 days;
+it does not depend on Google or Cloudflare Zero Trust. The canonical host at
+`cotizador.luquisound.com` is operational with verified password/session protection
+and shared-board gates enabled. The earlier PIN and its sessions were revoked
+by the reviewed full-secret rotation. Physical-device acceptance remains separate.
+Read `docs/CLOUDFLARE.md` before host/storage work. Only the separately
+approved domain cost is authorized; do not add paid resources, add-ons or plan
+upgrades. Workers/D1 and the existing Vercel Hobby/Blob Free quota blocks do not
+resolve commercial-plan eligibility under Vercel's terms.
+Existing Figma budgets are not imported automatically. The former browser-local
+quotation library and its history import/export UI remain unmounted; previously
+stored quotation-library bytes remain untouched. A quotation
 connection to Sheets or Drive is future work and is not implemented.
 Read-only common catalogue, DolarAPI blue-sale lookup, private daily Instaler
-observation and a separately enabled conditional catalogue publisher are the
-authorized server-side features. The publisher consumes existing validated
-observations and private correspondences; it adds no supplier access or schedule.
+observation, a separately enabled conditional catalogue publisher and the
+private quotation board are the implemented server-side features. The Cloudflare
+host also serves protected assets and ports catalogue reads/exchange-rate lookup;
+the independent Apps Script/Vercel supplier pipeline remains unchanged. The old
+Vercel/Blob board adapter and unused Access verifier have been retired from source.
+External activation still requires explicit authorization. The publisher consumes
+existing validated observations and private correspondences; it adds no supplier
+access or schedule.
 See `docs/INSTALER-CATALOG-PUBLICATION.md` for its publication and recovery contract;
-quotation and manual-price synchronization, accounts, Supabase, AI, CRM,
-inventory management, invoicing, and a general backend remain outside this stage.
+continuous quotation coediting, manual-price synchronization, accounts, Supabase,
+AI, CRM, inventory management, invoicing, and a general backend remain outside
+this stage.
 
 ## Technical conventions
 
@@ -48,11 +67,15 @@ inventory management, invoicing, and a general backend remain outside this stage
   whitespace, a global historical-source banner or a general pending-data
   disclaimer. Retain contextual validation and image-delivery guards. Keep private
   source metadata and stock rules in their existing internal workflows. Place bulk
-  entry and New in always-visible buttons
+  entry, Save to board, Board and New in always-visible buttons
   below the template and contact footer, including when the quotation is empty.
   Do not mount the former personal catalogue manager, its import/backup controls,
-  or the saved-quotation library. Preserve existing local catalogue products,
+  or the former browser-local saved-quotation library. The new private shared
+  board remains separate, with explicit replacement/save-as-new actions and an
+  editable optional category. Preserve existing local catalogue products,
   approved prices and the shared-catalogue cache without deletion or migration.
+  A host/origin change does not migrate existing browser recovery or catalogue
+  data automatically; preserve the prior origin and its stored bytes.
 - Keep the full modal for equipment and custom rows focused on "Producto", unit
   price (service price for cables and labour) with its ARS or USD label, and
   "Agregar" or "Guardar". Combine SKU, brand
@@ -239,7 +262,9 @@ inventory management, invoicing, and a general backend remain outside this stage
   or client bundle, including when deployment access is restricted.
 - Keep the current quotation recovery and persistent catalogue separate. New
   replaces only the current quotation after confirmation when it has meaningful
-  content or an unreadable recovery record. Compare stored bytes before writes,
+  content or an unreadable recovery record. Recover board source context and the
+  exact pending save command atomically with that quotation; never POST a pending
+  command automatically after reload. Compare stored bytes before writes,
   and preserve unreadable bytes and pending in-memory changes on failure.
   The former named quotation library is not mounted; do not read, rewrite or
   delete its `luquisound.quotation-library.v1` bytes as part of normal app use.
@@ -272,6 +297,28 @@ inventory management, invoicing, and a general backend remain outside this stage
   remains valid within its stated scope.
 - `vercel.json` prepares the Vite build. Do not link, import, or deploy a Vercel
   project without authorization; linking or importing can trigger deployment.
+- `wrangler.jsonc` prepares the separate Cloudflare Worker and D1 bindings.
+  Local Wrangler checks/migrations do not authorize creating cloud resources,
+  setting remote secrets, applying remote migrations or deploying. Keep server
+  session verification before app assets/APIs, only the login form/submission
+  public, disabled workers.dev/preview routes and no paid upgrade. The shared
+  chosen password supports 11 to 128 Unicode code points, checked exactly without
+  trimming or normalization. Reject control characters and unpaired surrogates.
+  Native browser WebCrypto derives 32 bytes with PBKDF2-SHA256,
+  600,000 iterations and a fresh random 16-byte public salt. Submit only its
+  canonical base64url credential over HTTPS; it is password-equivalent and must
+  not be logged or persisted. The server verifies its HMAC after bounded D1
+  attempt limits; it never accepts a raw password or a legacy verifier fallback.
+  a frontend password comparison is not authentication. Passwords, signer keys,
+  session tokens and credentials stay out of chat, logs, source and versioned
+  configuration. Rotate
+  the full private auth secret to revoke all sessions; logout clears only the
+  current browser cookie. Cloudflare Access is not a dependency of the selected
+  password host. The historical
+  `COTIZADOR_PIN_AUTH_SECRET` name and login-limit table names remain internal
+  compatibility identifiers; the password secret uses schema version 3 with a
+  fresh signer key, public salt and password signature. Preparing a private file
+  does not change remote access; deploy matching code and secret atomically.
 
 ## Verification and handoff
 

@@ -122,7 +122,7 @@ test('only the configured private Blob receives the server credential and cache 
     assert.equal(new Headers(init?.headers).get('authorization'), `Bearer ${CONFIG.token}`)
     assert.equal(new Headers(init?.headers).get('cookie'), null)
     assert.equal(new Headers(init?.headers).get('accept'), 'application/json')
-    assert.equal(init?.redirect, 'error')
+    assert.equal(init?.redirect, 'manual')
     assert.equal(init?.cache, 'no-store')
     assert.ok(init?.signal instanceof AbortSignal)
     assert.equal(init.signal.aborted, false)
@@ -356,7 +356,7 @@ test('opted-in recovery validates the last valid catalogue after each active sou
       assert.equal(new Headers(options?.headers).get('accept'), 'application/json')
       assert.equal(new Headers(options?.headers).get('cookie'), null)
       assert.equal(options?.cache, 'no-store')
-      assert.equal(options?.redirect, 'error')
+      assert.equal(options?.redirect, 'manual')
       assert.ok(options?.signal instanceof AbortSignal)
       return urls.length === 1 ? failActive(input, options) : fetchDocument()(input, options)
     }

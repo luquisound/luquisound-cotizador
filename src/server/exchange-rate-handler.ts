@@ -1,8 +1,7 @@
-import { getCache } from '@vercel/functions'
 import {
   EXCHANGE_QUOTE_CACHE_TTL_MS, EXCHANGE_QUOTE_MAX_BYTES,
   parseBlueDollarQuote, parseDolarApiQuote, type BlueDollarQuote,
-} from '../src/features/quotation/exchange-quote.ts'
+} from '../features/quotation/exchange-quote.ts'
 
 export interface ExchangeRateCache {
   get(key: string): Promise<unknown>
@@ -91,7 +90,7 @@ export function createExchangeRateHandler(dependencies: ExchangeRateDependencies
       const upstream = await fetcher(SOURCE_URL, {
         method: 'GET',
         headers: { Accept: 'application/json' },
-        redirect: 'error',
+        redirect: 'manual',
         cache: 'no-store',
         signal: AbortSignal.timeout(8000),
       })
@@ -128,9 +127,3 @@ export function createExchangeRateHandler(dependencies: ExchangeRateDependencies
       : jsonResponse(UNAVAILABLE_MESSAGE, result.status)
   }
 }
-
-const handler = createExchangeRateHandler({
-  cache: getCache({ namespace: 'luquisound-cotizador-fx-v1' }),
-})
-
-export default { fetch: handler }

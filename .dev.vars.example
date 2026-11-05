@@ -1,0 +1,17 @@
+# Cloudflare local server settings. Copy privately to ignored .dev.vars.
+# Server-only JSON auth secret, prepared privately; never add a real password/key here.
+# Shape: version=3, random signer key, public salt, HMAC passwordSignature.
+# Browser PBKDF2-SHA256 uses 600000 iterations; see docs/CLOUDFLARE.md.
+# Missing/invalid configuration fails closed; no frontend or asset bypass exists.
+COTIZADOR_PIN_AUTH_SECRET=
+# Historical variable name retained; password/session protection uses schema version 3.
+# Activation requires verified password/session protection plus the migrated D1 binding.
+QUOTATION_BOARD_MODE=disabled
+QUOTATION_BOARD_ACCESS_REVIEWED=false
+# QUOTATION_BOARD_DB and ASSETS are Wrangler bindings, not string environment values.
+# Google and Cloudflare Zero Trust/Access configuration are not required.
+# Optional read-only private catalogue access; no supplier/board Blob writes here.
+CATALOG_BLOB_URL=
+BLOB_READ_WRITE_TOKEN=
+# Used only for the existing catalogue's reviewed last-valid recovery behavior.
+INSTALER_CATALOG_MODE=disabled

@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { calculateQuotation, isEmptyRow } from './calculation'
 import { createQuotation, hasQuotationContent, type CatalogItem, type Quotation, type QuotationRow, type RowSection } from './model'
 import { isDirectExtraRow, isSingleRowCategory, type AudioCategory } from './audio-categories'
@@ -28,6 +28,16 @@ import { createHarnessPresetRow, isHarnessPresetRow } from './harness-preset'
 import { hasCustomQuotationOrder, moveQuotationRow, restoreQuotationOrder } from './quotation-order'
 import { canUndoQuotationOrder, rememberQuotationOrder, undoQuotationOrder } from './order-history'
 import type { QuotationOrderUndo } from './order-history'
+import { Dialog } from './QuotationDialog'
+import { BoardClientError } from '../quotation-board/board-client'
+import { cloneBoardQuotation, quotationBaseline } from '../quotation-board/board-contract'
+import { useSharedBoard } from '../quotation-board/useSharedBoard'
+import type { BoardSaveRequest } from '../quotation-board/board-types'
+import type { BoardSaveCommand, BoardWorkingContext } from '../quotation-board/shared-board-types'
+import './shared-board.css'
+
+const BoardScreen = lazy(() => import('../quotation-board/BoardScreen').then((module) => ({ default: module.BoardScreen })))
+const SaveQuotationDialog = lazy(() => import('../quotation-board/SaveQuotationDialog').then((module) => ({ default: module.SaveQuotationDialog })))
 
 function initialData() {
   try {
@@ -37,12 +47,20 @@ function initialData() {
   } catch {
     return {
       catalog: { catalog: [] as CatalogItem[], error: 'El almacenamiento del catálogo no está disponible.', stored: false, raw: null },
-      current: { quotation: createQuotation(), error: 'No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.', raw: null },
+      current: { quotation: createQuotation(), error: 'No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.', raw: null, boardContext: undefined, boardPendingSave: undefined },
     }
   }
 }
 
 type RowEditingState = { kind: 'new'; row: QuotationRow } | { kind: 'existing'; rowId: string }
+type BoardDestination = { kind: 'open'; entryId: string } | { kind: 'new' }
+interface BoardSaveAttempt { signature: string; command: BoardSaveCommand; baseline: string; uncertain: boolean }
+
+function hasUnsavedBoardChanges(quotation: Quotation, context: BoardWorkingContext | null): boolean {
+  if (!context) return hasQuotationContent(quotation)
+  try { return quotationBaseline(quotation) !== context.baseline }
+  catch { return true }
+}
 
 export default function QuotationApp() {
   const [initial] = useState(initialData)
@@ -75,6 +93,37 @@ export default function QuotationApp() {
   const rowEditorTrigger = useRef<HTMLElement | null>(null)
   const discountTrigger = useRef<HTMLElement | null>(null)
   const generation = useRef(0)
+  const [boardOpen, setBoardOpen] = useState(() => window.location.hash === '#tablero')
+  const [boardVisited, setBoardVisited] = useState(boardOpen)
+  const boardOpenRef = useRef(boardOpen)
+  const [boardContext, setBoardContext] = useState<BoardWorkingContext | null>(initial.current.boardContext ?? null)
+  const boardContextRef = useRef(boardContext)
+  const [boardSaveOpen, setBoardSaveOpen] = useState(false)
+  const [boardSaving, setBoardSaving] = useState(false)
+  const boardSavingRef = useRef(false)
+  const [boardPreparing, setBoardPreparing] = useState(false)
+  const [boardActionError, setBoardActionError] = useState('')
+  const [boardSaveError, setBoardSaveError] = useState('')
+  const [boardConflict, setBoardConflict] = useState(false)
+  const [boardOpeningId, setBoardOpeningId] = useState<string | null>(null)
+  const [boardDestination, setBoardDestination] = useState<BoardDestination | null>(null)
+  const afterBoardSave = useRef<BoardDestination | null>(null)
+  const boardLoadToken = useRef(0)
+  const boardSavePreparation = useRef(0)
+  const boardScroll = useRef(0)
+  const boardButton = useRef<HTMLButtonElement>(null)
+  const boardSaveButton = useRef<HTMLButtonElement>(null)
+  const [initialAttempt] = useState<BoardSaveAttempt | null>(() => initial.current.boardPendingSave ? {
+    signature: '', command: initial.current.boardPendingSave,
+    baseline: quotationBaseline(initial.current.boardPendingSave.quotation), uncertain: true,
+  } : null)
+  const boardAttempt = useRef<BoardSaveAttempt | null>(initialAttempt)
+  const [boardPendingDraft, setBoardPendingDraft] = useState<BoardSaveCommand | null>(initialAttempt?.command ?? null)
+  const boardRetryPending = boardPendingDraft !== null
+  const board = useSharedBoard({ enabled: boardOpen || boardSaveOpen })
+  const boardDirty = useMemo(() => hasUnsavedBoardChanges(quotation, boardContext), [quotation, boardContext])
+  const boardSourceAvailable = !boardConflict && boardContext !== null && board.list?.epoch === boardContext.epoch
+    && board.list.entries.some((entry) => entry.id === boardContext.entryId && entry.revision === boardContext.revision)
   const calculation = calculateQuotation(quotation)
   const availabilityNow = useCatalogClock(catalog, quotation.rows)
   const availability = inspectQuotationAvailability(quotation, catalog, availabilityNow)
@@ -110,6 +159,8 @@ export default function QuotationApp() {
     const result = saveCurrentQuotation(storage, next, {
       expectedRaw: overwriteInvalid ? storage.getItem(CURRENT_QUOTATION_STORAGE_KEY) : currentStorageRaw.current,
       overwriteInvalid,
+      boardContext: boardContextRef.current,
+      boardPendingSave: boardAttempt.current?.command ?? null,
     })
     if (result.ok) currentStorageRaw.current = result.raw
     if (result.conflict) {
@@ -120,14 +171,24 @@ export default function QuotationApp() {
   }
 
   function startNewQuotation() {
-    if ((hasQuotationContent(quotationRef.current) || recoveryError) && !window.confirm(
-      '¿Comenzar un presupuesto nuevo? Se reemplazará el presupuesto en curso de este navegador. Descargá la imagen del actual antes de continuar. El catálogo y sus precios se conservan.',
-    )) {
+    if (hasUnsavedBoardChanges(quotationRef.current, boardContextRef.current) || recoveryError) {
+      setBoardDestination({ kind: 'new' })
+      return
+    }
+    if (hasQuotationContent(quotationRef.current) && !window.confirm('¿Comenzar un presupuesto nuevo? El actual se conserva en el tablero.')) {
       window.requestAnimationFrame(() => newQuotationButton.current?.focus())
       return
     }
+    completeNewQuotation()
+  }
+
+  function completeNewQuotation() {
     const next = createQuotation()
     if (!updateQuotation(next)) return
+    updateBoardContext(null)
+    if (!boardAttempt.current?.uncertain) boardAttempt.current = null
+    setBoardDestination(null)
+    navigateBoard(false)
     recoveryWriteAllowed.current = true
     setRecoveryEnabled(true)
     try {
@@ -137,6 +198,208 @@ export default function QuotationApp() {
     }
     window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.quotation-heading-edit')?.focus())
   }
+
+  function updateBoardContext(context: BoardWorkingContext | null) {
+    boardContextRef.current = context
+    setBoardContext(context)
+  }
+
+  function persistBoardSession() {
+    if (!recoveryWriteAllowed.current) return
+    try { setRecoveryError(persistCurrent(quotationRef.current).error) }
+    catch { setRecoveryError('El tablero se guardó, pero no se pudo actualizar la recuperación de este navegador.') }
+  }
+
+  function navigateBoard(open: boolean) {
+    boardLoadToken.current += 1
+    boardSavePreparation.current += 1
+    setBoardPreparing(false)
+    setBoardOpeningId(null)
+    if (boardOpenRef.current) boardScroll.current = window.scrollY
+    boardOpenRef.current = open
+    setBoardOpen(open)
+    if (open) setBoardVisited(true)
+    const url = new URL(window.location.href)
+    const hash = open ? '#tablero' : '#quotation'
+    if (url.hash !== hash) { url.hash = hash; window.history.pushState(null, '', url) }
+    window.requestAnimationFrame(() => {
+      window.scrollTo(0, open ? boardScroll.current : 0)
+      document.querySelector<HTMLElement>(open ? '.quotation-board h1' : '.quotation-heading-edit')?.focus({ preventScroll: true })
+    })
+  }
+
+  async function executeBoardDestination(destination: BoardDestination) {
+    if (destination.kind === 'new') { completeNewQuotation(); return }
+    const ticket = ++boardLoadToken.current
+    const previousQuotation = quotationRef.current
+    setBoardOpeningId(destination.entryId)
+    setBoardActionError('')
+    try {
+      if (!await board.refresh()) throw new Error('No se pudo actualizar el tablero. Volvé a intentarlo.')
+      const result = await board.loadEntry(destination.entryId)
+      if (ticket !== boardLoadToken.current) return
+      if (quotationRef.current !== previousQuotation) {
+        setBoardDestination(destination)
+        return
+      }
+      const next = prepareFixedServiceQuotation(cloneBoardQuotation(result.entry.quotation))
+      const context: BoardWorkingContext = {
+        entryId: result.entry.id, revision: result.entry.revision, epoch: result.epoch,
+        name: result.entry.name, categoryId: result.entry.categoryId, baseline: quotationBaseline(next),
+      }
+      if (!updateQuotation(next)) return
+      updateBoardContext(context)
+      if (!boardAttempt.current?.uncertain) boardAttempt.current = null
+      setOrderUndo(null)
+      setBoardDestination(null)
+      persistBoardSession()
+      navigateBoard(false)
+    } catch (cause: unknown) {
+      if (ticket === boardLoadToken.current) setBoardActionError(cause instanceof Error ? cause.message : 'No se pudo abrir el presupuesto. Tu trabajo se conserva.')
+    } finally {
+      if (ticket === boardLoadToken.current) setBoardOpeningId(null)
+    }
+  }
+
+  function requestBoardDestination(destination: BoardDestination) {
+    if (hasUnsavedBoardChanges(quotationRef.current, boardContextRef.current) || recoveryError) setBoardDestination(destination)
+    else void executeBoardDestination(destination)
+  }
+
+  async function openBoardSave(destination: BoardDestination | null = null) {
+    if (boardSavingRef.current || boardPreparing) return
+    const ticket = ++boardSavePreparation.current
+    const quotationId = quotationRef.current.id
+    setBoardPreparing(true)
+    setBoardActionError('')
+    const list = await board.refresh()
+    if (ticket !== boardSavePreparation.current || quotationRef.current.id !== quotationId) return
+    setBoardPreparing(false)
+    if (!list && !boardAttempt.current?.uncertain) { setBoardActionError('No se pudo cargar el tablero para guardar. Revisá tu conexión o acceso y volvé a intentarlo.'); return }
+    afterBoardSave.current = destination
+    setBoardDestination(null)
+    setBoardSaveError('')
+    setBoardConflict(false)
+    setBoardSaveOpen(true)
+  }
+
+  function closeBoardSave() {
+    if (boardSavingRef.current) return
+    setBoardSaveOpen(false)
+    setBoardSaveError('')
+    afterBoardSave.current = null
+    window.requestAnimationFrame(() => boardSaveButton.current?.focus())
+  }
+
+  async function saveToBoard(request: BoardSaveRequest) {
+    if (boardSavingRef.current) return
+    if (boardAttempt.current?.uncertain) { await performBoardSave(boardAttempt.current); return }
+    if (!board.list) return
+    const submitted = structuredClone(quotationRef.current)
+    const source = boardContextRef.current
+    try {
+      if (request.mode === 'replace' && (!source || !boardSourceAvailable)) throw new Error('La ficha cambió. Guardá como nuevo para conservar esta versión.')
+      const baseline = quotationBaseline(submitted)
+      const signature = JSON.stringify({ request, baseline, source: request.mode === 'replace' ? source : null })
+      if (boardAttempt.current?.signature !== signature) {
+        boardAttempt.current = {
+          signature, baseline, uncertain: false,
+          command: {
+            type: 'save', operationId: crypto.randomUUID(), epoch: request.mode === 'replace' ? source!.epoch : board.list.epoch,
+            mode: request.mode, entryId: request.mode === 'replace' ? source!.entryId : crypto.randomUUID(),
+            expectedRevision: request.mode === 'replace' ? source!.revision : null,
+            name: request.name, categoryId: request.categoryId,
+            ...(request.newCategoryName !== undefined ? { newCategoryName: request.newCategoryName } : {}), quotation: submitted,
+          },
+        }
+      }
+      persistBoardSession()
+      await performBoardSave(boardAttempt.current)
+    } catch (cause: unknown) {
+      setBoardSaveError(cause instanceof Error ? cause.message : 'No se pudo guardar. El presupuesto se conserva.')
+    }
+  }
+
+  async function performBoardSave(attempt: BoardSaveAttempt) {
+    if (boardSavingRef.current) return
+    try {
+      boardSavingRef.current = true
+      setBoardSaving(true)
+      setBoardSaveError('')
+      const result = await board.save(attempt.command)
+      boardAttempt.current = null
+      setBoardPendingDraft(null)
+      if (quotationRef.current.id === attempt.command.quotation.id) {
+        const current = quotationRef.current
+        if (current.exchangeRateMode !== 'frozen') updateQuotation({ ...current, exchangeRateMode: 'frozen' })
+        const context: BoardWorkingContext = {
+          entryId: result.entry.id, revision: result.entry.revision, epoch: result.epoch,
+          name: result.entry.name, categoryId: result.entry.categoryId, baseline: attempt.baseline,
+        }
+        updateBoardContext(context)
+      }
+      persistBoardSession()
+      setBoardSaveOpen(false)
+      setMessage(attempt.command.mode === 'replace' ? 'Presupuesto actualizado en el tablero compartido.' : 'Presupuesto guardado en el tablero compartido.')
+      const destination = afterBoardSave.current
+      afterBoardSave.current = null
+      if (destination) {
+        if (hasUnsavedBoardChanges(quotationRef.current, boardContextRef.current)) setBoardDestination(destination)
+        else await executeBoardDestination(destination)
+      }
+    } catch (cause: unknown) {
+      if (cause instanceof BoardClientError && cause.code === 'conflict') setBoardConflict(true)
+      if (cause instanceof BoardClientError && cause.mayHaveCommitted) {
+        attempt.uncertain = true
+        setBoardPendingDraft(attempt.command)
+      } else {
+        boardAttempt.current = null
+        setBoardPendingDraft(null)
+      }
+      persistBoardSession()
+      setBoardSaveError(cause instanceof Error ? cause.message : 'No se pudo guardar. El presupuesto se conserva.')
+    } finally {
+      boardSavingRef.current = false
+      setBoardSaving(false)
+    }
+  }
+
+  function cancelBoardDestination() {
+    boardSavePreparation.current += 1
+    setBoardPreparing(false)
+    setBoardDestination(null)
+    window.requestAnimationFrame(() => {
+      const target = boardOpenRef.current ? document.querySelector<HTMLElement>('.quotation-board h1') : newQuotationButton.current
+      target?.focus({ preventScroll: true })
+    })
+  }
+
+  useEffect(() => {
+    function onNavigation() {
+      boardLoadToken.current += 1
+      boardSavePreparation.current += 1
+      setBoardPreparing(false)
+      setBoardOpeningId(null)
+      const open = window.location.hash === '#tablero'
+      boardOpenRef.current = open
+      setBoardOpen(open)
+      if (open) setBoardVisited(true)
+      setDialog(null)
+      setRowEditing(null)
+      setPriceEditing(null)
+      setBoardDestination(null)
+      if (!boardSavingRef.current) {
+        setBoardSaveOpen(false)
+        afterBoardSave.current = null
+      }
+    }
+    window.addEventListener('popstate', onNavigation)
+    window.addEventListener('hashchange', onNavigation)
+    return () => {
+      window.removeEventListener('popstate', onNavigation)
+      window.removeEventListener('hashchange', onNavigation)
+    }
+  }, [])
 
   function closeBulk() {
     setDialog(null)
@@ -317,7 +580,7 @@ export default function QuotationApp() {
       catch { setRecoveryError('No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.') }
     }, 250)
     return () => window.clearTimeout(timer)
-  }, [quotation, recoveryEnabled])
+  }, [quotation, recoveryEnabled, boardContext])
 
   useEffect(() => {
     function handleStorage(event: StorageEvent) {
@@ -518,7 +781,8 @@ export default function QuotationApp() {
   }
 
   return (
-    <div className="quotation-workspace">
+    <div className={`quotation-workspace${boardOpen ? ' shared-board-workspace' : ''}`}>
+      <div hidden={boardOpen}>
       <a className="skip-link" href="#quotation">Ir al presupuesto</a>
       <main className="workspace-main">
         <div id="quotation">
@@ -548,6 +812,8 @@ export default function QuotationApp() {
           />
         </div>
         <nav className="workspace-options" aria-label="Opciones del presupuesto">
+          <button ref={boardSaveButton} className="button primary" type="button" data-board-save-trigger disabled={boardPreparing || boardSaving} onClick={() => { void openBoardSave() }}>{boardPreparing ? 'Abriendo guardado…' : boardRetryPending ? 'Reintentar guardado' : 'Guardar en tablero'}</button>
+          <button ref={boardButton} className="button secondary" type="button" onClick={() => { setBoardActionError(''); navigateBoard(true) }}>Tablero</button>
           <button ref={bulkButton} className="button secondary" type="button" onClick={() => setDialog('bulk')}>Pegar códigos o nombres</button>
           <div ref={orderControls} className="quotation-order-control" role="group" aria-label="Restaurar y deshacer el orden del presupuesto">
             <button className="button secondary" type="button" data-order-action="restore" disabled={!canRestoreOrder} onClick={restoreOrder}>Restaurar orden predeterminado</button>
@@ -556,7 +822,11 @@ export default function QuotationApp() {
             </button>
           </div>
           <button ref={newQuotationButton} className="button secondary" type="button" onClick={startNewQuotation}>Nuevo presupuesto</button>
+          {globalThis.location?.hostname === 'cotizador.luquisound.com' && <form method="post" action="/logout"><button className="button secondary" type="submit">Cerrar sesión</button></form>}
         </nav>
+        {boardActionError && <p className="shared-board-action-error" role="alert">{boardActionError}</p>}
+        {boardRetryPending && <p className="shared-board-action-error" role="status">Hay un guardado pendiente de confirmación. Reintentá esa operación antes de guardar otra versión.</p>}
+        {boardContext && <p className="shared-board-current"><strong>{boardContext.name}</strong><span>{boardDirty ? 'Cambios sin guardar en el tablero' : 'Sin cambios pendientes en esta versión'}</span></p>}
         <p className="current-quotation-note">El presupuesto en curso se recupera al recargar.</p>
       </main>
       <footer className="export-bar">
@@ -573,6 +843,46 @@ export default function QuotationApp() {
       }} />}
       {editingRow && <RowEditor key={editingRow.id} row={editingRow} quotation={quotation} catalog={catalog} isNew={rowEditing?.kind === 'new'} directConcept={isDirectExtraRow(editingRow) ? editingRow.concept : undefined} onClose={() => closeRowEditor()} onSave={saveRow} onRemove={removeRow} onEditExisting={(rowId) => setRowEditing({ kind: 'existing', rowId })} />}
       {priceEditingRow && <RowPriceEditor key={priceEditingRow.id} row={priceEditingRow} quotation={quotation} onClose={closePriceEditor} onSave={savePrice} />}
+      </div>
+      <div hidden={!boardOpen}>
+        {boardVisited && <Suspense fallback={<p className="board-service-notice" role="status">Abriendo tablero…</p>}><BoardScreen
+          categories={board.list?.categories ?? []}
+          entries={(board.list?.entries ?? []).map((entry) => ({
+            ...entry, quotation: board.entries.get(entry.id)?.revision === entry.revision ? board.entries.get(entry.id)?.quotation : undefined,
+          }))}
+          activeEntryId={boardContext?.epoch === board.list?.epoch ? boardContext?.entryId ?? null : null}
+          loading={board.loading} error={boardActionError || board.error} openingEntryId={boardOpeningId}
+          onOpen={(entryId) => requestBoardDestination({ kind: 'open', entryId })}
+          onBack={() => navigateBoard(false)} onNew={startNewQuotation}
+          onLoadPreview={board.loadEntry} previewErrors={board.previewErrors}
+          onRefresh={() => { setBoardActionError(''); void board.refresh() }}
+        /></Suspense>}
+      </div>
+      {boardSaveOpen && <Suspense fallback={<p className="shared-board-action-error" role="status">Abriendo formulario de guardado…</p>}><SaveQuotationDialog
+        key={boardPendingDraft?.operationId ?? 'new-save'}
+        quotation={quotation} categories={board.list?.categories ?? []} source={boardContext}
+        saving={boardSaving} error={boardSaveError} canReplace={boardSourceAvailable}
+        pendingSave={boardRetryPending} initialDraft={boardPendingDraft ?? undefined}
+        onRetryPending={() => { if (boardAttempt.current) void performBoardSave(boardAttempt.current) }}
+        onClose={closeBoardSave} onSave={(request) => { void saveToBoard(request) }}
+      /></Suspense>}
+      {boardDestination && <Dialog title="Tenés cambios sin guardar" onClose={cancelBoardDestination}>
+        <div className="form-stack shared-board-leave-form">
+          <p>{recoveryError
+            ? 'La recuperación de este navegador necesita revisión. Podés guardar el presupuesto en el tablero antes de continuar. Continuar sin guardar reemplaza el trabajo abierto.'
+            : `Guardá el presupuesto en el tablero antes de ${boardDestination.kind === 'open' ? 'abrir otro' : 'empezar uno nuevo'}.`}</p>
+          {boardActionError && <p className="field-errors" role="alert">{boardActionError}</p>}
+          <div className="shared-board-leave-actions">
+            <button className="button primary" type="button" disabled={boardPreparing} onClick={() => { void openBoardSave(boardDestination) }}>{boardPreparing ? 'Abriendo guardado…' : `Guardar y ${boardDestination.kind === 'open' ? 'abrir' : 'continuar'}`}</button>
+            <button className="button secondary" type="button" onClick={() => {
+              const destination = boardDestination
+              cancelBoardDestination()
+              void executeBoardDestination(destination)
+            }}>{boardDestination.kind === 'open' ? 'Abrir sin guardar' : 'Continuar sin guardar'}</button>
+            <button className="button secondary" type="button" onClick={cancelBoardDestination}>Cancelar</button>
+          </div>
+        </div>
+      </Dialog>}
     </div>
   )
 }

@@ -2,6 +2,8 @@ import { createQuotation, hasQuotationContent } from './model.ts'
 import type { CatalogItem, Quotation, Workspace } from './model.ts'
 import { parseWorkspace, serializeWorkspace, STORAGE_KEY } from './persistence.ts'
 import type { StorageAdapter, WorkspaceSaveResult } from './persistence.ts'
+import { readBoardSaveCommand, readBoardWorkingContext } from '../quotation-board/board-contract.ts'
+import type { BoardSaveCommand, BoardWorkingContext } from '../quotation-board/shared-board-types.ts'
 
 export const CATALOG_STORAGE_KEY = 'luquisound.catalog.v1'
 export const CURRENT_QUOTATION_STORAGE_KEY = 'luquisound.current-quotation.v1'
@@ -17,11 +19,15 @@ export interface CurrentQuotationLoadResult {
   quotation: Quotation
   error: string | null
   raw: string | null
+  boardContext?: BoardWorkingContext
+  boardPendingSave?: BoardSaveCommand
 }
 
 export interface WorkingSaveOptions {
   overwriteInvalid?: boolean
   expectedRaw?: string | null
+  boardContext?: BoardWorkingContext | null
+  boardPendingSave?: BoardSaveCommand | null
 }
 
 export interface WorkingSaveResult extends WorkspaceSaveResult {
@@ -52,6 +58,24 @@ function parseCurrentWorkspace(text: string): Workspace {
   return workspace
 }
 
+function readCurrentBoardState(
+  text: string, workspace: Workspace,
+): { boardContext?: BoardWorkingContext; boardPendingSave?: BoardSaveCommand } {
+  const value: unknown = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text)
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error(CURRENT_READ_ERROR)
+  const record = value as Record<string, unknown>
+  const hasContext = Object.hasOwn(record, 'boardContext')
+  const hasPending = Object.hasOwn(record, 'boardPendingSave')
+  if ((hasContext || hasPending) && workspace.quotations.length !== 1) throw new Error(CURRENT_READ_ERROR)
+  const boardContext = hasContext ? readBoardWorkingContext(record.boardContext) : undefined
+  const boardPendingSave = hasPending ? readBoardSaveCommand(record.boardPendingSave) : undefined
+  return { ...(boardContext ? { boardContext } : {}), ...(boardPendingSave ? { boardPendingSave } : {}) }
+}
+
+function validateCurrentValue(text: string): void {
+  readCurrentBoardState(text, parseCurrentWorkspace(text))
+}
+
 export function loadCatalog(storage: StorageAdapter): CatalogLoadResult {
   let raw: string | null = null
   try {
@@ -68,8 +92,14 @@ export function loadCurrentQuotation(storage: StorageAdapter): CurrentQuotationL
   let raw: string | null = null
   try {
     raw = storage.getItem(CURRENT_QUOTATION_STORAGE_KEY)
-    const quotation = raw === null ? undefined : parseCurrentWorkspace(raw).quotations[0]
-    return { quotation: quotation ?? createQuotation(), error: null, raw }
+    const workspace = raw === null ? undefined : parseCurrentWorkspace(raw)
+    const quotation = workspace?.quotations[0] ?? createQuotation()
+    let boardState: { boardContext?: BoardWorkingContext; boardPendingSave?: BoardSaveCommand } = {}
+    if (raw !== null && workspace) {
+      try { boardState = readCurrentBoardState(raw, workspace) }
+      catch { return { quotation, error: CURRENT_READ_ERROR, raw } }
+    }
+    return { quotation, error: null, raw, ...boardState }
   } catch {
     return { quotation: createQuotation(), error: CURRENT_READ_ERROR, raw }
   }
@@ -119,16 +149,26 @@ export function saveCurrentQuotation(
 ): WorkingSaveResult {
   let text: string
   try {
+    const boardContext = options.boardContext == null ? undefined : readBoardWorkingContext(options.boardContext)
+    const boardPendingSave = options.boardPendingSave == null ? undefined : readBoardSaveCommand(options.boardPendingSave)
     const workspace: Workspace = {
       version: 1, activeQuotationId: quotation.id, quotations: [quotation], catalog: [],
     }
     // Validate even blank input before replacing a recoverable quotation.
     text = serializeWorkspace(workspace)
-    if (!hasQuotationContent(quotation)) text = serializeWorkspace(catalogWorkspace([]))
+    if (!hasQuotationContent(quotation) && !boardContext && !boardPendingSave) text = serializeWorkspace(catalogWorkspace([]))
+    if (boardContext || boardPendingSave) {
+      text = JSON.stringify({
+        ...parseCurrentWorkspace(text), ...(boardContext ? { boardContext } : {}),
+        ...(boardPendingSave ? { boardPendingSave } : {}),
+      }, null, 2)
+      // Check the combined envelope against the existing recovery size limit.
+      validateCurrentValue(text)
+    }
   } catch {
     return { ok: false, error: 'El presupuesto en curso excede el tamaño o el formato permitido para recuperarlo.', raw: null, conflict: false }
   }
-  return saveWorkingValue(storage, CURRENT_QUOTATION_STORAGE_KEY, text, options, parseCurrentWorkspace, CURRENT_READ_ERROR,
+  return saveWorkingValue(storage, CURRENT_QUOTATION_STORAGE_KEY, text, options, validateCurrentValue, CURRENT_READ_ERROR,
     'No se podrá recuperar este presupuesto al recargar. Podés seguir editándolo y compartirlo.',
     'Otra pestaña cambió el presupuesto en curso. Su guardado se pausó para evitar sobrescribirlo. Conservá el presupuesto antes de reemplazar los datos de recuperación.')
 }

@@ -5,12 +5,26 @@ strict TypeScript and Tailwind CSS. V1 includes editable manual concepts, a priv
 common catalogue, previously stored personal products, ARS/USD calculations, an
 optional manual sale discount on selected equipment, free item reordering within
 each section with a combined restore/undo control,
-recovery of one current quotation and deterministic PNG sharing.
-Fixed budgets and reusable templates remain in Figma.
+recovery of one current quotation and deterministic PNG sharing. The source also
+implements an opt-in private shared quotation board for the two intended users,
+adapted to Cloudflare Workers Free and D1 Free for two users. The selected sign-in
+uses a shared user-chosen password, browser-side PBKDF2 derivation, server-side
+verification of the derived credential and a remembered browser session for
+30 days. Google and Cloudflare Zero Trust are not
+required. The shared board is operational at
+[cotizador.luquisound.com](https://cotizador.luquisound.com); physical-device
+acceptance remains separate. Existing fixed
+budgets in Figma are not imported automatically. The earlier generated-password
+transition passed live sign-in and old PIN/session rejection without changing
+saved quotations. The later user-chosen password rotation is operational, with
+native browser sign-in, remembered session and unchanged board data verified;
+see the host runbook for evidence and acceptance limits.
 
-The app opens on the quotation. Reviewed bulk entry and
+The app opens on the quotation. Save to board, Board, reviewed bulk entry and
 New have always-visible buttons below the template and contact
-footer, including when the quotation is empty. Product behavior,
+footer, including when the quotation is empty. Shared saving supports complete
+or partial quotations, optional categories, and explicit replace/save-as-new
+choices. Product behavior,
 pricing rules and graphic requirements belong in [PRODUCTO.md](docs/PRODUCTO.md).
 
 ## Local setup
@@ -35,6 +49,12 @@ Keep the computer running and reachable. Check narrow screens and touch controls
 browser emulation and Android checks do not establish physical iPhone acceptance.
 Server configuration is documented separately; a browser-only local session does
 not establish that the protected catalogue or exchange-rate endpoints work.
+
+The editor uses the configured private board API. Vite alone does not enable
+that service. The earlier in-memory design prototype has been retired. See
+[the board runbook](docs/QUOTATION-BOARD.md) for the implemented contract,
+access gates and operational status. [CLOUDFLARE.md](docs/CLOUDFLARE.md) covers the
+selected Free-plan host, required account/access settings and local Worker checks.
 
 ## Checks and production preview
 
@@ -75,9 +95,11 @@ and reader parity tests. The automated receiver uses the separate Node reader in
 | --- | --- |
 | `src/main.tsx`, `src/app/` | Application entry and composition |
 | `src/features/quotation/` | Quotation UI, calculations, catalogue, storage and export |
-| `src/server/` | Instaler extraction, observation, candidate and conditional publication |
+| `src/features/quotation-board/` | Shared-board UI, contracts, client and recovery |
+| `src/server/` | Private board storage/recovery and Instaler extraction, observation and publication |
+| `cloudflare/` | Protected Worker entry and local/remote-target D1 migration source |
 | `src/styles/` | Global styling |
-| `api/` | Same-origin catalogue, exchange-rate and observation endpoints |
+| `api/` | Existing protected Vercel catalogue and supplier endpoints |
 | `apps-script/instaler-observation/` | Private workshop sender source; excluded from the browser build |
 | `scripts/` | Offline supplier snapshot review and XLSX reader |
 | `public/brand/`, `public/fonts/` | Official brand assets and licensed fonts |
@@ -95,6 +117,8 @@ storage, outside the public repository and client bundle.
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Repository instructions and authorization boundaries |
 | [PRODUCTO.md](docs/PRODUCTO.md) | UI, calculation, persistence and product scope |
+| [QUOTATION-BOARD.md](docs/QUOTATION-BOARD.md) | Implemented shared board, activation gates and private recovery |
+| [CLOUDFLARE.md](docs/CLOUDFLARE.md) | Workers Free/D1 host, shared password/session protection and rollout status |
 | [CATALOG-IMPORT.md](docs/CATALOG-IMPORT.md) | Private JSON schema, identity, merge and source metadata |
 | [SHARED-CATALOG.md](docs/SHARED-CATALOG.md) | Protected endpoint, server configuration and browser loading |
 | [CATALOG-SOURCE-ROADMAP.md](docs/CATALOG-SOURCE-ROADMAP.md) | Implemented supplier components, pending acceptance and deferred scope |
@@ -133,24 +157,63 @@ Current recovery and the catalogue cache use separate browser-local stores.
 The personal catalogue manager and its file import/backup controls are not
 available. Existing local products and prices remain selectable; their data and
 the common-catalogue cache are preserved without deletion or migration.
-Named quotation saving, opening, duplication and quotation-history import/export
-are not available in the current UI. Previously stored quotation-library bytes and the legacy
-workspace key remain untouched. Browser data can be lost with a device, origin
-or storage reset. There is no cross-device quotation history or synchronized
-manual pricing. A quotation connection to Sheets or Drive is future work and
-is not implemented.
+The shared board is separate from browser recovery and the former local quotation
+library. When explicitly enabled on the protected Cloudflare host, it stores
+named quotation snapshots privately in D1 for cross-device opening, replacement
+or saving as another entry. Working source context and the exact pending save
+command recover with
+the current quotation in one local record. Reload never posts a pending save;
+an explicit retry resolves it before creating another version. Previously stored
+quotation-library bytes and the legacy workspace key remain untouched. Browser
+data can be lost with a device, origin or storage reset. Moving to a new host does
+not migrate the old origin's local recovery or catalogue cache; preserve that
+origin and its data. Manual catalogue-price synchronization, quotation-history
+import/export and a quotation connection to
+Sheets or Drive are not implemented.
 
 Supplier prices, observations, private policy, customer quotations and secrets
-must never enter source, fixtures, logs or the browser bundle. The common catalogue
-requires private Blob configuration and Vercel Authentication for All Deployments;
-protecting a deployment does not make the repository private.
+must never enter source, fixtures, logs or the browser bundle. The Cloudflare host
+requires a valid server-signed browser session before serving app assets or APIs.
+Only the password login form and its submission are public. The selected hostname is
+`cotizador.luquisound.com`;
+workers.dev and preview URLs remain disabled. The existing Vercel
+catalogue/observer/publication
+deployment keeps its own private Blob configuration and All Deployments
+protection; the Cloudflare host reads the private catalogue through its
+server-only credential and existing validation rules. Protecting either host
+does not make the repository private.
 
 Git publication, deployment and live configuration changes require explicit
 authorization. A push to a connected production branch or linking a Vercel project
 can trigger deployment. `vercel.json` uses the existing Vite build (`npm ci`,
 `npm run build`, output `dist`). DolarAPI needs no additional environment variables;
-server-only catalogue and observer settings are covered by their runbooks and
-`.env.example`.
+server-only settings are covered by their runbooks, the legacy `.env.example`
+and Cloudflare `.dev.vars.example`. Blank examples keep the board disabled and
+its authentication-review gate false; the verified canonical deployment uses
+`shared` mode and a true review gate. D1 and the private
+`COTIZADOR_PIN_AUTH_SECRET` configuration must be present before activation.
+All assets and alternate URLs remain protected or disabled. The current
+custom-domain Worker uses server password/session authentication, with D1
+created and migrations `0001` through `0003` applied. The private catalogue source
+has been configured and validated. The earlier PIN secret/private handoff were
+provisioned, and their live authentication, catalogue/exchange-rate reads and
+cross-session partial-save/open/replace/copy/conflict checks passed. The later
+password rotation and live acceptance also passed, preserving the existing board
+data and catalogue. The credential and signer JSON stay outside the repository
+and client bundle. Physical
+Android/iPhone acceptance remains pending. Workers Free and D1 Free are the selected app
+plans; quota exhaustion must block work instead of enabling a paid upgrade. The
+unused Zero Trust setup is not a dependency, and any account-owner cancellation
+is handled separately in the provider UI. The prior
+Vercel/Blob board adapter remains disabled compatibility code, not the selected
+deployment. The Apps Script/Vercel supplier pipeline remains independent.
+Existing Vercel Hobby/Blob Free quotas were also checked to block excess usage;
+this does not resolve commercial-plan eligibility under Vercel's terms. Only the
+separate domain registration/renewal cost is authorized, with no paid upgrade or
+add-on.
 
 Kits and other supplier worksheets, inventory/reservations, invoicing, CRM, AI,
-quotation synchronization and a general backend remain outside this stage.
+simultaneous document editing, manual-price synchronization and a general backend
+remain outside this stage. Category rename/delete, entry deletion and automatic
+Figma imports are not implemented. The next bounded work is user/Lucas acceptance
+on their actual devices while preserving the selected Free plans and existing data.

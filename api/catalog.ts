@@ -3,7 +3,7 @@ import { getCatalogAvailabilityPolicy } from '../src/features/quotation/catalog-
 import {
   SHARED_CATALOG_MAX_BYTES, validateSharedCatalogDocument,
 } from '../src/features/quotation/shared-catalog.ts'
-import { INSTALER_CATALOG_LAST_VALID_PATH } from '../src/server/instaler-catalog-store.ts'
+import { INSTALER_CATALOG_LAST_VALID_PATH } from '../src/server/instaler-catalog-paths.ts'
 
 export interface CatalogServerConfig {
   url?: string
@@ -82,7 +82,7 @@ async function fetchCatalog(url: URL, token: string, fetcher: typeof fetch, reco
   const upstream = await fetcher(url, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-    redirect: 'error', cache: 'no-store', signal,
+    redirect: 'manual', cache: 'no-store', signal,
   })
   if (upstream.status !== 200 || upstream.redirected
     || upstream.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {

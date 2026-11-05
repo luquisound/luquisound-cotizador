@@ -10,7 +10,10 @@
     "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "preview": "vite preview",
-    "prepare:instaler": "node --experimental-strip-types scripts/prepare-instaler-snapshot.ts"
+    "prepare:instaler": "node --experimental-strip-types scripts/prepare-instaler-snapshot.ts",
+    "dev:cloudflare": "npm run build && wrangler dev --local --persist-to .agent-tmp/cloudflare",
+    "db:cloudflare:local": "wrangler d1 migrations apply QUOTATION_BOARD_DB --local --persist-to .agent-tmp/cloudflare",
+    "check:cloudflare": "node --experimental-strip-types scripts/check-cloudflare.ts"
   },
   "engines": {
     "node": "^22.12.0"
@@ -20,7 +23,6 @@
     "@dnd-kit/dom": "0.5.1",
     "@dnd-kit/react": "0.5.1",
     "@vercel/blob": "2.8.2",
-    "@vercel/functions": "3.10.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "sax": "1.6.1",
@@ -37,6 +39,7 @@
     "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "wrangler": "4.157.0"
   }
 }

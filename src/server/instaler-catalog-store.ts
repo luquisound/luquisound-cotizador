@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto'
 import { BlobError, BlobPreconditionFailedError, get, put } from '@vercel/blob'
+import { INSTALER_CATALOG_LAST_VALID_PATH } from './instaler-catalog-paths.ts'
 import { parseCatalogImport } from '../features/quotation/catalog.ts'
 import {
   SHARED_CATALOG_MAX_BYTES, validateSharedCatalogDocument,
 } from '../features/quotation/shared-catalog.ts'
 
 export const INSTALER_CATALOG_POLICY_PATH = 'instaler-catalog/policy.json'
-export const INSTALER_CATALOG_LAST_VALID_PATH = 'instaler-catalog/last-valid.json'
+export { INSTALER_CATALOG_LAST_VALID_PATH } from './instaler-catalog-paths.ts'
 export const MAX_INSTALER_POLICY_BYTES = 1024 * 1024
 
 export interface InstalerCatalogStore {

@@ -28,8 +28,9 @@ one hour ago, or when it has no automatic reference. This includes recovering
 the current quotation after reload. A fresh recovered reference is reused
 until its fetch-hour boundary. Missing legacy `exchangeRateMode` means automatic.
 
-The current UI has no named quotation library, save/open/duplicate actions or
-quotation-history importer. Compatible current recovery data can still carry
+The private shared board supports named saving, opening and copying, with its
+saved exchange rate frozen. The former browser-local quotation library and
+quotation-history importer remain unmounted. Compatible current recovery can carry
 `exchangeRateMode: "frozen"`, row amounts, currencies, rate and source metadata
 from an earlier version. A frozen recovered current quotation stays frozen
 after reload. There is no automatic lookup for that copy, even when its saved
@@ -81,20 +82,22 @@ prices or guaranteed availability.
 
 ## Shared cache
 
-`@vercel/functions` supplies Vercel Runtime Cache without provisioning a separate
-database. A project-specific namespace and a one-hour TTL reduce upstream
+The Cloudflare Worker stores the validated reference in the existing D1 database
+through `src/server/cloudflare-exchange-cache.ts`. A one-hour TTL reduces upstream
 requests across devices. The server refreshes on the next request after expiration;
 there is no background hourly job. The browser reads this shared reference and
 cannot bypass its TTL. Cached entries from the previous three-hour policy are
 also checked against the new one-hour age limit. Responses to browsers and CDNs
 use `private, no-store`.
 
-Runtime Cache is regional and ephemeral. Concurrent requests in one instance are
-coalesced; eviction, cold misses, and different regions can still produce additional
-upstream requests. This is a cache policy, not a globally atomic rate limiter.
+D1 stores a single replaceable cache record. Concurrent requests in one Worker
+instance are coalesced; simultaneous misses in separate instances can still
+produce additional upstream requests. This is a cache policy, not a globally
+atomic rate limiter.
 Cache failures fail closed instead of falling back to repeated uncached requests.
-The rate endpoint does not alter Vercel Authentication settings; deployment
-protection must be verified separately for the target environment.
+The Worker verifies the signed browser session before the rate endpoint.
+The unused Vercel rate wrapper and its `@vercel/functions` dependency have been
+removed from source; existing Vercel functions change only on a reviewed deployment.
 
 Local Vite development and preview only serve the frontend. Full local checks use
 a temporary harness with the real handler, a fake cache, and synthetic rate data.
@@ -105,7 +108,7 @@ No private catalogue or production credentials are needed for those checks.
 - [DolarAPI blue endpoint and original DolarHoy source](https://dolarapi.com/docs/argentina/operations/get-dolar-blue)
 - [DolarAPI usage and attribution](https://dolarapi.com/docs/uso)
 - [DolarAPI informational service limitations](https://dolarapi.com/docs/legal)
-- [Vercel Runtime Cache](https://vercel.com/docs/caching/runtime-cache)
+- [Cloudflare host and D1 configuration](CLOUDFLARE.md)
 
 DolarAPI recommends retaining a copy and querying a series every three hours.
 The approved product requirement uses one hour with the shared cache; this is

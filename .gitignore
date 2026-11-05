@@ -15,6 +15,10 @@
 # Logs and local deployment state
 *.log
 /.vercel/
+/.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 
 # Operating system and editor state
 .DS_Store
