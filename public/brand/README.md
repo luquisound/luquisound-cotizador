@@ -10,6 +10,10 @@ The responsive preview and PNG renderer both load this original SVG using the
 resource configured in `src/features/quotation/graphic.ts`. Existing fixed
 quotation graphics are separate assets and retain their dark headers.
 
+The password login embeds the same SVG through `src/server/login-brand.ts`,
+without its XML declaration, so it requires no unauthenticated asset route.
+Keep that copy identical to the official SVG when updating the logo.
+
 ## Favicon
 
 The official `MONOGRAMA.svg` (source SHA-256

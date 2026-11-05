@@ -1,4 +1,7 @@
 import type { PasswordLoginParameters } from './pin-auth.ts'
+import { LOGIN_BRAND_SVG } from './login-brand.ts'
+
+const loginBrand = LOGIN_BRAND_SVG.replace('<svg ', '<svg role="img" aria-label="Luquisound" ')
 
 type PinLoginError = 'invalid' | 'rate-limit' | 'unavailable'
 
@@ -103,9 +106,9 @@ export function renderPinLoginPage(error?: PinLoginError, status?: number, param
       background: #fff;
       box-shadow: 0 8px 32px #0000000a;
     }
-    .brand { margin: 0 0 28px; font-size: 16px; font-weight: 750; letter-spacing: -.02em; }
-    h1 { margin: 0 0 12px; font-size: clamp(25px, 6vw, 30px); line-height: 1.2; letter-spacing: -.035em; overflow-wrap: anywhere; }
-    .intro { margin: 0 0 28px; color: #55554f; font-size: 15px; }
+    .brand { width: min(100%, 260px); margin: 0 0 28px; }
+    .brand svg { display: block; width: 100%; height: auto; }
+    h1 { margin: 0 0 28px; font-size: clamp(25px, 6vw, 30px); line-height: 1.2; letter-spacing: -.035em; overflow-wrap: anywhere; }
     label { display: block; margin-bottom: 8px; font-size: 15px; font-weight: 650; }
     input[type="password"] {
       display: block;
@@ -125,7 +128,6 @@ export function renderPinLoginPage(error?: PinLoginError, status?: number, param
     }
     input::placeholder { color: #74746d; font-size: 16px; letter-spacing: normal; }
     input:focus-visible, button:focus-visible { outline: 3px solid #171717; outline-offset: 3px; }
-    .help { margin: 8px 0 0; color: #62625c; font-size: 13px; }
     .error { margin: 16px 0 0; padding: 12px; border-left: 4px solid #ffda00; background: #f5f4ef; font-size: 14px; }
     [hidden] { display: none; }
     button {
@@ -150,14 +152,12 @@ export function renderPinLoginPage(error?: PinLoginError, status?: number, param
 </head>
 <body>
   <main aria-labelledby="login-title">
-    <p class="brand">Luquisound</p>
+    <div class="brand">${loginBrand}</div>
     <h1 id="login-title">Ingresá al cotizador</h1>
-    <p class="intro">Usá la contraseña compartida para abrir tus presupuestos.</p>
     <form id="login-form" action="/login" method="post">
       <label for="password">Contraseña de acceso</label>
-      <input id="password" type="password" minlength="11" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus required${ready ? '' : ' disabled'} placeholder="Ingresá tu contraseña" aria-invalid="${error === 'invalid' ? 'true' : 'false'}" aria-describedby="password-help password-error">
+      <input id="password" type="password" minlength="11" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus required${ready ? '' : ' disabled'} placeholder="Ingresá tu contraseña" aria-invalid="${error === 'invalid' ? 'true' : 'false'}" aria-describedby="password-error">
       <input id="credential" name="credential" type="hidden" value="">
-      <p id="password-help" class="help">Se distinguen mayúsculas y minúsculas. Podés pegarla o guardarla en tu gestor de contraseñas.</p>
       <div aria-live="polite" aria-atomic="true"><p id="password-error" class="error" role="alert"${message ? '' : ' hidden'}>${message}</p></div>
       <button id="login-submit" type="submit" disabled>Ingresar</button>
       <noscript><p class="error">Activá JavaScript en este navegador para ingresar.</p></noscript>
