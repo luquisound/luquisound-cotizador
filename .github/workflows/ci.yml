@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -42,3 +42,13 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Check Cloudflare bundle
+        run: npm run check:cloudflare
+
+      - name: Deploy Cloudflare Worker
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npx --no-install wrangler deploy --strict
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'

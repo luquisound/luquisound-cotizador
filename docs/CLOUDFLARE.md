@@ -105,6 +105,37 @@ The independent Vercel/Blob/Apps Script pipeline's current protection, credentia
 schedules and publication/recovery contracts must remain intact. The Worker
 catalogue read does not run a supplier update or replace that pipeline.
 
+## Automatic deployment from GitHub
+
+The CI workflow deploys the existing Worker after a push to `main`
+passes dependency installation, typecheck, lint, tests, the Vite build and the
+Worker bundle dry run. Pull requests run those checks without deploying.
+Main-branch runs are serialized without cancelling an active deployment.
+
+Activation requires an Actions repository secret named `CLOUDFLARE_API_TOKEN`
+in `luquisound/luquisound-cotizador`. Create a dedicated custom Cloudflare API
+token with `Account > Workers Scripts > Edit`, restricted through
+`Account Resources > Include > Specific account` to the existing Luquisound
+account. The current deployment retains the existing custom domain and explicit
+D1 database ID; it needs no D1, KV, R2 or zone-edit permission. A future change to
+the domain attachment requires a separate permission review. The current custom
+domain does not support restricting the token to an individual Worker resource.
+Save the token directly in GitHub Settings > Secrets and variables > Actions;
+never paste it into chat or commit it.
+Use the existing account ID from `wrangler.jsonc`. Do not store a local Wrangler
+OAuth token, the app password, session signer or catalogue credentials in Actions.
+
+The deployment uses the lockfile-installed Wrangler with `--strict`, retaining
+existing Worker secrets and the configured authentication gates, D1 binding,
+custom domain, disabled workers.dev/preview routes and Free plans. It does not
+apply D1 migrations or run supplier publication. A failed check or missing token
+blocks deployment instead of publishing an unchecked version.
+
+The workflow requires its commit on `main` and the repository secret configured.
+Verify the first successful Actions run and the canonical host before reporting
+activation. Subsequent authorized pushes to `main` update that host automatically;
+Vercel remains an independent system.
+
 ## Retire the legacy Vercel frontend
 
 The authorized project-level redirect is live for `ls-cotizador` under team
