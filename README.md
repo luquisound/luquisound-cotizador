@@ -74,7 +74,11 @@ run it before the local `preview` server.
 [GitHub Actions](.github/workflows/ci.yml) runs `npm ci`, typecheck, lint, tests and
 build on pushes to `main` and pull requests, with read-only repository permissions.
 Passing local checks does not establish publication, deployment or live acceptance.
-The workflow also deploys automatically to Cloudflare after successful checks
+The independent [CodeQL workflow](.github/workflows/codeql.yml) analyzes JavaScript
+and TypeScript on pushes, pull requests and a weekly schedule. CodeQL and
+Dependabot Alerts report security findings without gating deployments. The remote
+`main` ruleset prevents deletion and force-push while retaining direct pushes.
+The CI workflow also deploys automatically to Cloudflare after successful checks
 on pushes to `main`. Deployment requires the dedicated Actions secret
 described in [CLOUDFLARE.md](docs/CLOUDFLARE.md#automatic-deployment-from-github).
 

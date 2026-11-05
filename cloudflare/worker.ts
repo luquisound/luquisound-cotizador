@@ -28,11 +28,15 @@ function jsonError(status: number, error: string): Response {
   })
 }
 
-function privateResponse(response: Response): Response {
+function privateResponse(request: Request, response: Response): Response {
   const result = new Response(response.body, response)
   result.headers.set('Cache-Control', 'private, no-store')
   result.headers.set('CDN-Cache-Control', 'no-store')
   result.headers.set('X-Content-Type-Options', 'nosniff')
+  const url = new URL(request.url)
+  if (url.protocol === 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) {
+    result.headers.set('Strict-Transport-Security', 'max-age=604800')
+  }
   return result
 }
 
@@ -102,35 +106,35 @@ export function createCloudflareWorker(dependencies: WorkerDependencies = {}) {
         if (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) {
           if (url.protocol === 'http:' && (request.method === 'GET' || request.method === 'HEAD')) {
             url.protocol = 'https:'
-            return privateResponse(new Response(null, { status: 308, headers: { Location: url.href } }))
+            return privateResponse(request, new Response(null, { status: 308, headers: { Location: url.href } }))
           }
-          return privateResponse(jsonError(403, 'https-required'))
+          return privateResponse(request, jsonError(403, 'https-required'))
         }
         if (url.pathname === '/logout') {
-          if (request.method !== 'POST') return privateResponse(jsonError(405, 'method'))
-          if (!sameOriginPost(request, url)) return privateResponse(jsonError(403, 'origin'))
-          return privateResponse(redirectTo('/login', context.auth.logoutCookie()))
+          if (request.method !== 'POST') return privateResponse(request, jsonError(405, 'method'))
+          if (!sameOriginPost(request, url)) return privateResponse(request, jsonError(403, 'origin'))
+          return privateResponse(request, redirectTo('/login', context.auth.logoutCookie()))
         }
         if (url.pathname === '/login' && request.method === 'POST') {
-          if (!sameOriginPost(request, url)) return privateResponse(jsonError(403, 'origin'))
+          if (!sameOriginPost(request, url)) return privateResponse(request, jsonError(403, 'origin'))
           const result = await context.auth.login(await loginCredential(request), request.headers.get('cf-connecting-ip') ?? '')
-          if (result.ok) return privateResponse(redirectTo('/', result.cookie))
+          if (result.ok) return privateResponse(request, redirectTo('/', result.cookie))
           const page = renderPinLoginPage(result.status === 401 ? 'invalid' : result.status === 429 ? 'rate-limit' : 'unavailable', result.status,
             result.status === 503 ? undefined : context.auth.loginParameters())
           if (result.retryAfter !== undefined) page.headers.set('Retry-After', String(result.retryAfter))
-          return privateResponse(page)
+          return privateResponse(request, page)
         }
         // Authenticate assets and data APIs before any private data or upstream call.
         const identity = await context.auth.verifySession(request)
         if (url.pathname === '/login') {
-          if (request.method !== 'GET' && request.method !== 'HEAD') return privateResponse(jsonError(405, 'method'))
-          if (identity.ok) return privateResponse(redirectTo('/'))
-          return privateResponse(identity.status === 503 ? renderPinLoginPage('unavailable') : renderPinLoginPage(undefined, undefined, context.auth.loginParameters()))
+          if (request.method !== 'GET' && request.method !== 'HEAD') return privateResponse(request, jsonError(405, 'method'))
+          if (identity.ok) return privateResponse(request, redirectTo('/'))
+          return privateResponse(request, identity.status === 503 ? renderPinLoginPage('unavailable') : renderPinLoginPage(undefined, undefined, context.auth.loginParameters()))
         }
         if (!identity.ok) {
           const document = !url.pathname.startsWith('/api/') && request.method === 'GET'
             && (url.pathname === '/' || request.headers.get('accept')?.includes('text/html'))
-          return privateResponse(identity.status === 401 && document ? redirectTo('/login') : jsonError(identity.status, 'access'))
+          return privateResponse(request, identity.status === 401 && document ? redirectTo('/login') : jsonError(identity.status, 'access'))
         }
         let response: Response
         if (url.pathname === '/api/quotation-board') {
@@ -154,9 +158,9 @@ export function createCloudflareWorker(dependencies: WorkerDependencies = {}) {
         } else {
           response = await env.ASSETS.fetch(request)
         }
-        return privateResponse(response)
+        return privateResponse(request, response)
       } catch {
-        return privateResponse(jsonError(503, 'unavailable'))
+        return privateResponse(request, jsonError(503, 'unavailable'))
       }
     },
   }

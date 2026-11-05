@@ -136,6 +136,46 @@ Verify the first successful Actions run and the canonical host before reporting
 activation. Subsequent authorized pushes to `main` update that host automatically;
 Vercel remains an independent system.
 
+### Repository security controls
+
+The active `Protect main` ruleset prevents deletion and non-fast-forward updates
+of `refs/heads/main`. It has no bypass actors, required pull requests or required
+status checks, so normal direct pushes remain available. Dependabot Alerts are
+enabled; automated dependency updates are not enabled by this change.
+
+The independent CodeQL workflow scans JavaScript/TypeScript on pushes, pull
+requests, a weekly schedule and manual dispatch. It uses `security-extended`,
+SHA-pinned actions and job-scoped `security-events: write`. Findings are alerts,
+not deployment gates; neither Cloudflare CI nor Vercel waits for this workflow.
+The known transitive Zod advisory GHSA-mrhx-c7xc-m3w5 remains deferred by explicit
+decision, with no dependency override or lockfile change.
+
+The repository's default Actions token remains read-only and cannot approve pull
+request reviews. Secret scanning and push protection are enabled. The deployment
+token is exposed only to the existing deployment step on a push to `main`, with
+checkout credentials disabled. The connected Cloudflare OAuth session cannot
+inspect API token policies; the documented account-wide Workers edit scope is
+not proof of the actual saved token's scope and remains a review limitation.
+
+## HTTPS and DNSSEC
+
+The `luquisound.com` zone requires TLS 1.2 or newer and retains TLS 1.3. This applies
+to the landing, `www` and cotizador hostnames without a paid certificate add-on.
+The Worker sends `Strict-Transport-Security: max-age=604800` on HTTPS responses,
+including login, redirects, protected assets/APIs and errors. It does not opt
+into `includeSubDomains` or preload, and excludes HTTP and loopback development.
+The landing retains its separate HSTS policy. A later increase of the cotizador's
+seven-day duration is a separate reviewed rollout after normal-use acceptance.
+
+DNSSEC activation was requested on November 5, 2026. Cloudflare Registrar manages
+the parent DS publication. A `pending` API status is not completed validation:
+confirm the matching DS at `.com`, an active zone status and authenticated DNS
+answers through independent validating resolvers. Publication can take one to
+two days. Check resolution of the apex, `www` and cotizador before handoff.
+For rollback, remove the parent DS first and keep zone signing active until its
+TTL expires; stopping signing while a cached DS remains can cause SERVFAIL.
+See [Cloudflare DNSSEC](https://developers.cloudflare.com/dns/dnssec/).
+
 ## Retire the legacy Vercel frontend
 
 The authorized project-level redirect is live for `ls-cotizador` under team

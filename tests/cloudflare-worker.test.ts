@@ -99,6 +99,48 @@ test('Cloudflare rejects anonymous requests before any assets, catalogue, rate o
   assert.equal(state.assetReads + state.rateReads + state.catalogueReads, 0)
 })
 
+test('Cloudflare sets host-only HSTS on HTTPS login, protected assets/APIs, redirects and errors', async (context) => {
+  const database = fixtureDatabase()
+  context.after(() => database.sqlite.close())
+  const state = setup(database.binding)
+  const cases: { path: string; status: number; init?: RequestInit }[] = [
+    { path: '/login', status: 200 },
+    { path: '/login', status: 200, init: { method: 'HEAD' } },
+    { path: '/', status: 303 },
+    { path: '/api/catalog', status: 401 },
+    { path: '/logout', status: 405 },
+    { path: '/login', status: 403, init: { method: 'POST', headers: { Origin: 'https://other.example' } } },
+    { path: '/login', status: 303, init: { headers: { Cookie: cookies[0]! } } },
+    ...['/assets/app.js', '/api/quotation-board', '/api/catalog', '/api/exchange-rate'].map((path) => ({
+      path, status: 200, init: { headers: { Cookie: cookies[0]! } },
+    })),
+    { path: '/api/unknown', status: 404, init: { headers: { Cookie: cookies[0]! } } },
+    { path: '/logout', status: 303, init: { method: 'POST', headers: { Origin: ORIGIN, Cookie: cookies[0]! } } },
+  ]
+  for (const { path, status, init } of cases) {
+    const response = await state.worker.fetch(new Request(`${ORIGIN}${path}`, init), state.env)
+    assert.equal(response.status, status)
+    assert.equal(response.headers.get('Strict-Transport-Security'), 'max-age=604800')
+  }
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const response = await state.worker.fetch(new Request(`${ORIGIN}/login`, {
+      method: 'POST', headers: { Origin: ORIGIN, 'CF-Connecting-IP': '192.0.2.1', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ credential: attempt === 0 ? syntheticCredential : 'invalid' }),
+    }), state.env)
+    assert.equal(response.status, attempt === 0 ? 303 : attempt === 5 ? 429 : 401)
+    assert.equal(response.headers.get('Strict-Transport-Security'), 'max-age=604800')
+  }
+  const unconfigured = setup()
+  delete unconfigured.env.COTIZADOR_PIN_AUTH_SECRET
+  const unavailable = await unconfigured.request('/login')
+  assert.equal(unavailable.status, 503)
+  assert.equal(unavailable.headers.get('Strict-Transport-Security'), 'max-age=604800')
+  state.env.ASSETS = { async fetch() { throw new Error('Synthetic asset failure') } }
+  const failure = await state.request('/assets/app.js')
+  assert.equal(failure.status, 503)
+  assert.equal(failure.headers.get('Strict-Transport-Security'), 'max-age=604800')
+})
+
 test('Cloudflare production defaults fail closed and static/API routing cannot bypass the password session', async () => {
   const unconfigured = setup()
   delete unconfigured.env.COTIZADOR_PIN_AUTH_SECRET
@@ -127,6 +169,7 @@ test('Cloudflare redirects HTTP navigation to HTTPS before any assets, APIs or d
       assert.equal(response.headers.get('Location'), `${ORIGIN}${path}`)
       assert.equal(response.headers.get('Set-Cookie'), null)
       assert.equal(response.headers.get('Cache-Control'), 'private, no-store')
+      assert.equal(response.headers.get('Strict-Transport-Security'), null)
       assert.equal(await response.text(), '')
     }
   }
@@ -142,11 +185,15 @@ test('Cloudflare rejects plaintext mutations without replaying them and preserve
     assert.equal(response.status, 403)
     assert.equal(response.headers.get('Location'), null)
     assert.equal(response.headers.get('Set-Cookie'), null)
+    assert.equal(response.headers.get('Strict-Transport-Security'), null)
   }
   for (const host of ['localhost', '127.0.0.1', '[::1]']) {
-    const response = await state.worker.fetch(new Request(`http://${host}:8787/login`), state.env)
-    assert.equal(response.status, 200)
-    assert.equal(response.headers.get('Location'), null)
+    for (const protocol of ['http', 'https']) {
+      const response = await state.worker.fetch(new Request(`${protocol}://${host}:8787/login`), state.env)
+      assert.equal(response.status, 200)
+      assert.equal(response.headers.get('Location'), null)
+      assert.equal(response.headers.get('Strict-Transport-Security'), null)
+    }
   }
   assert.equal(state.assetReads + state.rateReads + state.catalogueReads, 0)
 })
